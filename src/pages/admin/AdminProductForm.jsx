@@ -326,11 +326,24 @@ export default function AdminProductForm({ copyMode = false }) {
   // name and photos, and marks the submission approved once the product
   // is actually saved -- see handleSave.
   const location = useLocation();
-  // Opened from the Review queue (AdminReviewList's "Review" link) --
-  // saving/approving goes back there instead of to the Products list.
-  const fromReview = new URLSearchParams(location.search).get('review') === '1';
   const [reviewStatus, setReviewStatus] = useState(null);
   const [reviewBusy, setReviewBusy] = useState(false);
+  const [doneNote, setDoneNote] = useState('');
+
+  // After a save or a review action, go back to wherever this form was
+  // opened from -- Review, Flags, Manual review, Products... -- with that
+  // list's filters and page intact (each list keeps them). It used to send
+  // everyone to the Products list. Opened in a fresh tab (Duplicates,
+  // Barcode check), there's nothing to go back to, so it stays here.
+  // React Router records each in-app entry's position in history.state.idx.
+  const goBackOrStay = (note, newId = null) => {
+    if ((window.history.state?.idx ?? 0) > 0) {
+      navigate(-1);
+      return;
+    }
+    if (newId && newId !== id) navigate(`/admin/products/${newId}/edit`, { replace: true });
+    setDoneNote(note);
+  };
   const fromSubmission = !id ? location.state?.fromSubmission : null;
   const [submissionId] = useState(fromSubmission?.submissionId || null);
 
@@ -769,8 +782,12 @@ export default function AdminProductForm({ copyMode = false }) {
       // A new row always starts 'pending' (the database forces it), so
       // approving is a separate step -- done here only after the save
       // itself succeeded.
-      if (approve) await adminSetReviewStatus([{ id: savedId, productName: finalReport.productName }], 'approved');
-      navigate(submissionId ? '/admin/submissions' : fromReview ? '/admin/review' : '/admin/products');
+      if (approve) {
+        await adminSetReviewStatus([{ id: savedId, productName: finalReport.productName }], 'approved');
+        setReviewStatus('approved');
+      }
+      if (submissionId) navigate('/admin/submissions');
+      else goBackOrStay(approve ? 'Saved and approved — it’s now shown in the app.' : 'Saved.', savedId);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -785,8 +802,8 @@ export default function AdminProductForm({ copyMode = false }) {
     setError('');
     try {
       await adminSetReviewStatus([{ id, productName: productName.trim() }], status);
-      if (fromReview) navigate('/admin/review');
-      else setReviewStatus(status);
+      setReviewStatus(status);
+      goBackOrStay({ approved: 'Approved — it’s now shown in the app.', rejected: 'Rejected — it stays out of the app.', pending: 'Moved back to review — hidden in the app until approved.' }[status]);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -970,6 +987,11 @@ export default function AdminProductForm({ copyMode = false }) {
           {error && (
             <p className="text-[13px] mb-4 p-3 rounded-[12px]" style={{ background: 'var(--v-poor-bg)', color: 'var(--v-poor)' }}>
               {error}
+            </p>
+          )}
+          {doneNote && !error && (
+            <p className="text-[13px] mb-4 p-3 rounded-[12px]" style={{ background: 'var(--v-good-bg)', color: 'var(--v-good)' }}>
+              ✓ {doneNote}
             </p>
           )}
 
