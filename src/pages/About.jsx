@@ -162,6 +162,10 @@ export default function About() {
         <strong>⚠️ {t('aboutDisclaimerLabel')}</strong> {t('aboutDisclaimerBody')}
       </div>
 
+      <button onClick={() => navigate('/privacy')} className="tap-scale w-full mb-3 text-sm font-semibold text-green-600 dark:text-green-400">
+        🔒 {t('settingsPrivacy')}
+      </button>
+
       <button
         onClick={() => navigate('/')}
         className="tap-scale w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-colors"

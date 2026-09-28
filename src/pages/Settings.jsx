@@ -87,6 +87,7 @@ export default function Settings() {
         <NavRow to="/my-intake" icon="🍽️" title={t('settingsMyIntake')} description={t('settingsMyIntakeDesc')} />
         <NavRow to="/family" icon="👪" title={t('settingsFamily')} description={t('settingsFamilyDesc')} />
         <NavRow to="/about" icon="🛡️" title={t('settingsAbout')} description={t('settingsAboutDesc')} />
+        <NavRow to="/privacy" icon="🔒" title={t('settingsPrivacy')} description={t('settingsPrivacyDesc')} />
       </div>
 
       <BackupSettings />

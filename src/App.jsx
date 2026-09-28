@@ -32,6 +32,7 @@ import CompareManage from './pages/CompareManage';
 import Family from './pages/Family';
 import About from './pages/About';
 import Settings from './pages/Settings';
+import Privacy from './pages/Privacy';
 import MyIntake from './pages/MyIntake';
 import Category from './pages/Category';
 import PopularSearches from './pages/PopularSearches';
@@ -222,6 +223,7 @@ function AppShell() {
           <Route path="/family" element={<Family />} />
           <Route path="/about" element={<About />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="/my-intake" element={<MyIntake />} />
           <Route path="/browse" element={<Navigate to="/" replace />} />
           <Route path="/category/:id" element={<Category />} />
