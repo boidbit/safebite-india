@@ -12,6 +12,17 @@
 
 export const STRINGS = {
   en: {
+    nfTitle: 'Find this product',
+    nfSubtitle: "This barcode isn't linked to a product yet — it may still be in FoodGuard under its name. Barcode",
+    nfSubtitleKnown: 'We may already have this product under its name — tap it if it’s here. Barcode',
+    nfSearchPlaceholder: 'Type the product name',
+    nfPhotoBtn: 'Photo',
+    nfReadingPhoto: 'Reading…',
+    nfPhotoUnreadable: "Couldn't read the name off that photo. Take it straight on, with the brand and name in view.",
+    nfPhotoFailed: "Couldn't read that photo right now. Type the name instead.",
+    nfTapYours: 'Tap the one you scanned:',
+    nfNoMatches: 'Nothing matching yet. Try fewer words (e.g. just the brand and product), or submit it.',
+    nfAnalyzeNew: 'None of these — analyze it',
     scanTitle: 'Scan barcode',
     scanLineUp: 'Line the barcode up inside the frame',
     scanEnterManually: 'Enter number',
@@ -597,6 +608,17 @@ export const STRINGS = {
   },
 
   hi: {
+    nfTitle: 'यह प्रोडक्ट ढूंढें',
+    nfSubtitle: 'यह बारकोड अभी किसी प्रोडक्ट से जुड़ा नहीं है — हो सकता है प्रोडक्ट FoodGuard में उसके नाम से हो। बारकोड',
+    nfSubtitleKnown: 'हो सकता है यह प्रोडक्ट हमारे पास उसके नाम से पहले से हो — मिले तो उस पर टैप करें। बारकोड',
+    nfSearchPlaceholder: 'प्रोडक्ट का नाम लिखें',
+    nfPhotoBtn: 'फ़ोटो',
+    nfReadingPhoto: 'पढ़ा जा रहा है…',
+    nfPhotoUnreadable: 'उस फ़ोटो से नाम नहीं पढ़ा जा सका। सीधे सामने से फ़ोटो लें, ब्रांड और नाम साफ़ दिखें।',
+    nfPhotoFailed: 'अभी वह फ़ोटो नहीं पढ़ी जा सकी। नाम टाइप करके ढूंढें।',
+    nfTapYours: 'जो आपने स्कैन किया, उस पर टैप करें:',
+    nfNoMatches: 'अभी कुछ मिलता-जुलता नहीं मिला। कम शब्द आज़माएं (जैसे सिर्फ़ ब्रांड और प्रोडक्ट), या इसे भेजें।',
+    nfAnalyzeNew: 'इनमें से कोई नहीं — इसे एनालाइज़ करें',
     scanTitle: 'बारकोड स्कैन करें',
     scanLineUp: 'बारकोड को फ़्रेम के अंदर रखें',
     scanEnterManually: 'नंबर डालें',

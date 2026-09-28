@@ -39,6 +39,7 @@ import News from './pages/News';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminGuard from './pages/admin/AdminGuard';
 import AdminReviewList from './pages/admin/AdminReviewList';
+import AdminBarcodeLinks from './pages/admin/AdminBarcodeLinks';
 import AdminProductList from './pages/admin/AdminProductList';
 import AdminProductForm from './pages/admin/AdminProductForm';
 import AdminFlagsList from './pages/admin/AdminFlagsList';
@@ -229,6 +230,7 @@ function AppShell() {
           <Route path="/submit-product" element={<SubmitProduct />} />
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin/review" element={<AdminGuard><AdminReviewList /></AdminGuard>} />
+          <Route path="/admin/barcode-links" element={<AdminGuard><AdminBarcodeLinks /></AdminGuard>} />
           <Route path="/admin/products" element={<AdminGuard><AdminProductList /></AdminGuard>} />
           <Route path="/admin/products/new" element={<AdminGuard><AdminProductForm /></AdminGuard>} />
           <Route path="/admin/products/:id/edit" element={<AdminGuard><AdminProductForm /></AdminGuard>} />

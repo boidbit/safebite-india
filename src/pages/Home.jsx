@@ -5,7 +5,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { extractIngredientsFromImage } from '../services/geminiService';
 import { analyzeText } from '../services/analyzeText';
 import { lookupBarcode, searchProductsByName } from '../services/openFoodFacts';
-import { getCachedReport, saveReport, barcodeKey, textKey, searchCachedProducts, getPopularSearchTerms, getRecentlyAddedProducts, getDailySpotlight, getCatalogStats, dayOfYearSeed } from '../services/productCache';
+import { getCachedReport, saveReport, barcodeKey, textKey, searchCachedProducts, getPopularSearchTerms, getRecentlyAddedProducts, getDailySpotlight, getCatalogStats, dayOfYearSeed, findProductMatches, getLinkedLookupKey, recordBarcodeLink } from '../services/productCache';
+import BarcodeNotFoundPanel from '../components/BarcodeNotFoundPanel';
 import { getTodaysTotals } from '../services/intakeLog';
 import { saveToHistory, getScoreColor } from '../utils/storage';
 import LoadingScreen from '../components/LoadingScreen';
@@ -154,6 +155,9 @@ export default function Home() {
   // whenever the barcode field changes, so the CTA doesn't linger for a
   // barcode the person has since edited or replaced.
   const [notFoundBarcode, setNotFoundBarcode] = useState('');
+  // { barcode, key, offProduct } -- a scanned barcode the catalog doesn't
+  // know; shows BarcodeNotFoundPanel so the product can be found by name.
+  const [notFound, setNotFound] = useState(null);
 
   // Shopping Mode -- "scan, quick result, ready for the next one" for a
   // real trip up and down the aisles, instead of scan -> full Result
@@ -195,7 +199,7 @@ export default function Home() {
     setReviewText('');
     setReviewProductName('');
     setError('');
-    setNotFoundBarcode('');
+    setNotFoundBarcode(''); setNotFound(null);
   };
 
   // Type-ahead search. Debounced so a fast typist doesn't fire a request
@@ -407,12 +411,42 @@ export default function Home() {
           return;
         }
 
+        // Linked by people to a product we already have (and approved by
+        // an admin) -- open that product.
+        const linkedKey = await getLinkedLookupKey(barcodeValue);
+        const linked = linkedKey ? await getCachedReport(linkedKey) : null;
+        if (linked) {
+          linked.lookupKey = linkedKey;
+          const id = saveToHistory(linked, mode);
+          if (shoppingMode) {
+            addToShoppingSession(linked, id);
+            resetForNextScan();
+            setLoading(false);
+            return;
+          }
+          await goToResult(id);
+          return;
+        }
+
         const found = await lookupBarcode(barcodeValue);
         if (!found.found) {
-          setError(t('homeErrNotFound'));
           setNotFoundBarcode(barcodeValue);
+          setNotFound({ barcode: barcodeValue, key, offProduct: null });
           setLoading(false);
           return;
+        }
+        // Open Food Facts knows it -- but it may already be in our catalog
+        // under another key (a Blinkit product has no barcode). Offer those
+        // first rather than analysing a duplicate; "analyse as new" stays
+        // one tap away.
+        if (found.productName) {
+          const likely = await findProductMatches({ productName: found.productName, brand: found.brand || '' }, { limit: 3 }).catch(() => []);
+          if (likely.length > 0 && likely[0].matchScore >= 0.6) {
+            setNotFoundBarcode(barcodeValue);
+            setNotFound({ barcode: barcodeValue, key, offProduct: found });
+            setLoading(false);
+            return;
+          }
         }
         startReview({ ...found, source: 'barcode', lookupKey: key });
         setLoading(false);
@@ -439,7 +473,7 @@ export default function Home() {
   const openBarcodeScan = () => {
     setMode('barcode');
     setError('');
-    setNotFoundBarcode('');
+    setNotFoundBarcode(''); setNotFound(null);
     if (isBarcodeScanSupported()) setShowScanner(true);
   };
   const closeScanner = () => {
@@ -452,6 +486,19 @@ export default function Home() {
     setShowScanner(false);
     setTimeout(() => barcodeInputRef.current?.focus(), 50);
   };
+  // A product picked in the not-found panel: remember the link (pending
+  // admin approval) and open it like any other saved product.
+  const pickNotFoundMatch = (match, source) => {
+    if (notFound?.barcode) recordBarcodeLink({ barcode: notFound.barcode, lookupKey: match.lookupKey, productName: match.productName, source });
+    setNotFound(null);
+    openCachedSuggestion(match);
+  };
+  const analyzeNotFoundAsNew = () => {
+    const nf = notFound;
+    setNotFound(null);
+    if (nf?.offProduct) startReview({ ...nf.offProduct, source: 'barcode', lookupKey: nf.key });
+  };
+
   const handleBarcodePhoto = async (file) => {
     if (!file) return;
     setError('');
@@ -1282,7 +1329,7 @@ export default function Home() {
             ref={barcodeInputRef}
             inputMode="numeric"
             value={barcodeInput}
-            onChange={(e) => { setBarcodeInput(e.target.value.replace(/[^0-9]/g, '')); setNotFoundBarcode(''); }}
+            onChange={(e) => { setBarcodeInput(e.target.value.replace(/[^0-9]/g, '')); setNotFoundBarcode(''); setNotFound(null); }}
             placeholder="e.g. 8901058851468"
             className="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent placeholder:text-slate-400 dark:placeholder:text-slate-500 tracking-widest"
           />
@@ -1302,7 +1349,17 @@ export default function Home() {
 
       {/* Not-found CTA -- offer to submit the product instead of a dead
           end, right under the error explaining why the lookup failed. */}
-      {mode === 'barcode' && notFoundBarcode && (
+      {mode === 'barcode' && notFound && (
+        <BarcodeNotFoundPanel
+          key={notFound.barcode}
+          barcode={notFound.barcode}
+          offProduct={notFound.offProduct}
+          onPick={pickNotFoundMatch}
+          onAnalyzeNew={notFound.offProduct?.ingredientsText ? analyzeNotFoundAsNew : undefined}
+          onSubmit={() => navigate(`/submit-product?barcode=${notFound.barcode}`)}
+        />
+      )}
+      {mode === 'barcode' && notFoundBarcode && !notFound && (
         <button
           onClick={() => navigate(`/submit-product?barcode=${notFoundBarcode}`)}
           className="tap-scale w-full mb-4 py-3 rounded-xl border-2 border-dashed border-green-300 bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 font-semibold text-sm flex items-center justify-center gap-2"

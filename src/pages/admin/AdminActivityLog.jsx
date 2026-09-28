@@ -18,6 +18,8 @@ const ACTION_LABEL = {
   approve_product: 'Approved',
   reject_product: 'Rejected',
   unreview_product: 'Moved back to review',
+  approve_barcode_link: 'Approved barcode match for',
+  reject_barcode_link: 'Rejected barcode match for',
 };
 
 export default function AdminActivityLog() {

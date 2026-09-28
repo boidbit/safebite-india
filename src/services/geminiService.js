@@ -272,6 +272,41 @@ export async function extractIngredientsFromImage(imageFile) {
   return extractJson(text, finishReason);
 }
 
+const IDENTIFY_PROMPT = `This is a photo of the FRONT of an Indian packaged food product. Identify the product exactly as printed on the pack.
+
+Return ONLY a JSON object, no other text:
+{"readable": true|false, "brand": "...", "productName": "...", "packSize": "..."}
+
+- brand: the maker's brand as printed (e.g. "Parle", "Britannia", "Haldiram's"). Empty string if not visible.
+- productName: the product's own name as printed, including its variant/flavour (e.g. "Parle-G Gluco Biscuits", "Dark Fantasy Choco Fills"). Do NOT invent words that aren't on the pack.
+- packSize: net quantity if printed (e.g. "250 g", "1 L"). Empty string if not visible.
+- readable: false if this isn't a food pack or the name can't be read.`;
+
+/**
+ * Reads the brand, product name and pack size off a front-of-pack photo --
+ * for when a scanned barcode isn't in the catalog, so the product can be
+ * found by name instead. Uses the same free text model and photo input as
+ * extractIngredientsFromImage; no image generation involved.
+ *
+ * @returns {Promise<{ readable: boolean, brand: string, productName: string, packSize: string }>}
+ */
+export async function identifyProductFromPhoto(imageFile) {
+  if (GEMINI_API_KEYS.length === 0) throw new Error('Gemini API key not found.');
+  const requestBody = {
+    contents: [{ parts: [{ text: IDENTIFY_PROMPT }, { inline_data: { mime_type: imageFile.type, data: await fileToBase64(imageFile) } }] }],
+    generationConfig: { temperature: 0.1, topK: 1, topP: 0.8, maxOutputTokens: 256, thinkingConfig: { thinkingLevel: 'low' } },
+  };
+  const { text, finishReason } = await callGemini(requestBody);
+  if (!text) throw new Error('Empty response from Gemini');
+  const out = extractJson(text, finishReason) || {};
+  return {
+    readable: out.readable !== false && Boolean(out.productName || out.brand),
+    brand: String(out.brand || '').trim(),
+    productName: String(out.productName || '').trim(),
+    packSize: String(out.packSize || '').trim(),
+  };
+}
+
 const RESEARCH_PROMPT = `You are a food safety researcher specializing in Indian FSSAI regulations and EU/EFSA standards.
 
 You will be given a list of food ingredients found on Indian packaged food labels. Research EACH one and return ONLY a valid JSON array — no markdown, no explanation.

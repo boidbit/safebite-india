@@ -2,6 +2,7 @@
 // Shared cache so repeat scans of the same product reuse a saved AI
 // report instead of paying for a fresh AI call every time.
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
+import { searchTokens, rankMatches } from './productMatch.js';
 // The keyword-only data, not categories.js -- that file also imports
 // each category's .png, which plain-Node scripts importing this module
 // (generate-reports.js, discover-off-products.js) can't load outside Vite.
@@ -45,6 +46,109 @@ export function barcodeKey(barcode) {
 
 export function textKey(ingredientsText) {
   return `text:${normalizeText(ingredientsText)}`;
+}
+
+/**
+ * Catalog products that are probably the one described by a name from
+ * elsewhere -- Open Food Facts' name for a scanned barcode, Gemini's read
+ * of a front-of-pack photo, or what someone typed. Word-based (see
+ * productMatch.js), so "Parle-G Gluco Biscuits 250 g" still finds
+ * "Parle-G Original Gluco Biscuits". Only published products.
+ */
+export async function findProductMatches({ productName, brand = '', packSize = '' }, { limit = 5 } = {}) {
+  if (!isSupabaseConfigured) return [];
+  const tokens = searchTokens(`${brand} ${productName}`);
+  if (tokens.length === 0) return [];
+  // The brand with its spaces taken out finds "KrumbKraft" from "KRUMB
+  // KRAFT" -- only used for the wide fallback below.
+  const brandJoined = String(brand || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  // Tokens are letters/digits only (nameTokens strips everything else),
+  // so they're safe to put straight into the filter -- no LIKE wildcards
+  // or PostgREST separators can get through.
+  const base = () => supabase
+    .from('product_reports')
+    .select('lookup_key, product_name, report')
+    .in('review_status', VISIBLE_REVIEW_STATUSES);
+  // First every distinctive word at once (narrow, usually the right
+  // product and its pack sizes); only if that finds too little, any of
+  // them (wide, ranked below).
+  let all = base();
+  for (const t of tokens) all = all.ilike('product_name', `%${t}%`);
+  const { data: strict } = await all.limit(40);
+  let data = strict || [];
+  if (data.length < limit) {
+    // One small query per word rather than one big OR -- a common word
+    // ("choco") would otherwise fill the whole result and crowd out the
+    // rarer one that actually identifies the product.
+    const words = [...new Set([...(brandJoined.length >= 4 ? [brandJoined] : []), ...tokens])];
+    const results = await Promise.all(words.map((t) => base().ilike('product_name', `%${t}%`).limit(25)));
+    const seen = new Set(data.map((r) => r.lookup_key));
+    for (const { data: rows } of results) {
+      for (const r of rows || []) if (!seen.has(r.lookup_key)) { seen.add(r.lookup_key); data.push(r); }
+    }
+  }
+  const candidates = data.filter((row) => row.product_name).map((row) => ({
+    lookupKey: row.lookup_key,
+    productName: row.product_name,
+    brand: row.report?.brand || null,
+    packSize: row.report?.packSize || null,
+    imageUrl: row.report?.imageUrl || null,
+    score: typeof row.report?.overallScore === 'number' ? row.report.overallScore : null,
+    isInfantFormula: row.report?.isInfantFormula === true,
+  }));
+  return rankMatches({ productName, brand, packSize }, candidates, limit);
+}
+
+// --- Barcode links (supabase/barcode_links_schema.sql) ---------------
+// A scanned barcode the catalog doesn't know, tied by a person to a
+// product we DO have (found by name or a front-of-pack photo). Saved as
+// pending; only an admin-approved link is used for lookups. Both calls are
+// best-effort -- before the table exists they just do nothing.
+
+const DEVICE_ID_KEY = 'foodguard-device-id';
+
+/** A random id for this device -- counts independent confirmations of a link. Not tied to any person. */
+export function getDeviceId() {
+  try {
+    let id = localStorage.getItem(DEVICE_ID_KEY);
+    if (!id) {
+      id = (globalThis.crypto?.randomUUID?.() || String(Math.random()).slice(2)) + '';
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return 'no-storage';
+  }
+}
+
+export async function recordBarcodeLink({ barcode, lookupKey, productName, source }) {
+  if (!isSupabaseConfigured || !barcode || !lookupKey) return;
+  try {
+    await supabase.from('barcode_links').upsert(
+      { barcode: barcode.trim(), lookup_key: lookupKey, product_name: productName || null, device_id: getDeviceId(), source: source || null },
+      { onConflict: 'barcode,lookup_key,device_id', ignoreDuplicates: true },
+    );
+  } catch {
+    // Best-effort -- the person already has their result either way.
+  }
+}
+
+/** The product an admin-approved link points this barcode at, or null. */
+export async function getLinkedLookupKey(barcode) {
+  if (!isSupabaseConfigured || !barcode) return null;
+  try {
+    const { data, error } = await supabase
+      .from('barcode_links')
+      .select('lookup_key')
+      .eq('barcode', barcode.trim())
+      .eq('status', 'approved')
+      .order('reviewed_at', { ascending: false })
+      .limit(1);
+    if (error || !data?.length) return null;
+    return data[0].lookup_key;
+  } catch {
+    return null;
+  }
 }
 
 /**
