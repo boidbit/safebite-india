@@ -11,10 +11,10 @@
 
 export const PRIVACY_POLICY_UPDATED = '2026-09-28';
 
-// Shown as the contact for privacy questions -- left empty until the owner
-// chooses which address to publish (the section then points to the app's
-// own "Report an issue" instead).
-export const PRIVACY_CONTACT_EMAIL = '';
+// Shown as the contact for privacy questions (chosen by the owner for this
+// purpose). Set to '' and the section points to the app's own "Report an
+// issue" instead.
+export const PRIVACY_CONTACT_EMAIL = 'trendyying@gmail.com';
 
 export const PRIVACY_POLICY = {
   en: {
