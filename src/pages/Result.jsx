@@ -32,6 +32,7 @@ import { canLogIntake } from '../services/intakeLog';
 import { ENERGY_RELATIVE_LIMIT_KEYS } from '../services/dailyHabitCheck';
 import { buildNutrientProjections } from '../services/nutrientProjection';
 import NutrientAddsUp from '../components/NutrientAddsUp';
+import { isNativeApp } from '../services/notifications';
 import LabelXray from '../components/LabelXray';
 import NutritionTrafficLight from '../components/NutritionTrafficLight';
 import { buildTrafficLight } from '../services/trafficLight';
@@ -852,7 +853,8 @@ export default function Result() {
                   ? t('nothingFlagged', { count: ingredients.length })
                   : t('someFlagged', { flagged: flaggedCount, total: ingredients.length })}
             </p>
-            {result.ingredientsText && (
+            {/* Web only -- not in the Android app. */}
+            {result.ingredientsText && !isNativeApp() && (
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}

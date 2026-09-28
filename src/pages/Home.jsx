@@ -33,6 +33,11 @@ import { useLanguage } from '../contexts/LanguageContext';
 // first visit shows skeletons.
 let homeSnapshot = null;
 
+// Shopping Mode is parked for now (2026-09-28) -- set back to true to bring
+// the toggle back. While false, the mode is also forced off, so a phone that
+// had it switched on doesn't keep behaving that way with no button to see.
+const SHOPPING_MODE_ENABLED = false;
+
 function SkeletonBlock({ className }) {
   return <div className={`shimmer rounded-xl ${className || ''}`} />;
 }
@@ -166,6 +171,7 @@ export default function Home() {
   // below navigates to the same /compare/result Compare.jsx already
   // renders, passing full report objects it already accepts.
   const [shoppingMode, setShoppingMode] = useState(() => {
+    if (!SHOPPING_MODE_ENABLED) return false;
     try { return localStorage.getItem('foodguard-shopping-mode') === '1'; } catch { return false; }
   });
   const [shoppingSession, setShoppingSession] = useState(() => {
@@ -733,8 +739,6 @@ export default function Home() {
             ) : stats && (
               <p className="relative mt-1 flex items-center gap-1.5 text-[12px] text-white/85">
                 <span><span className="font-bold text-white">{stats.total.toLocaleString()}</span> {t('homeStatsCheckedSuffix')}</span>
-                <span className="text-white/40" aria-hidden="true">·</span>
-                <span><span className="font-bold text-white">+{stats.addedToday.toLocaleString()}</span> {t('homeStatsTodaySuffix')}</span>
               </p>
             )}
           </div>
@@ -815,7 +819,7 @@ export default function Home() {
               ends (see resetForNextScan/addToShoppingSession): normally
               it navigates to /result/:id, in Shopping Mode it adds to
               the running list below and resets for another scan. */}
-          {searchQuery.trim().length === 0 && (
+          {SHOPPING_MODE_ENABLED && searchQuery.trim().length === 0 && (
             <div className="mb-5">
               <button
                 onClick={() => setShoppingMode((v) => !v)}
