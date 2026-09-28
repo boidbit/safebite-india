@@ -36,7 +36,7 @@
 // else this file does. Treat the first real run as reconnaissance, not
 // production seeding.
 
-import { GEMINI_API_KEYS, callGemini } from './geminiService.js';
+import { isGeminiAvailable, callGemini } from './geminiService.js';
 
 const SITEMAP_CANDIDATES = [
   'https://www.jiomart.com/sitemap.xml',
@@ -260,7 +260,7 @@ Rules:
  * rather than infer anything.
  */
 export async function extractIngredientsWithAI(productName, text) {
-  if (GEMINI_API_KEYS.length === 0) return null;
+  if (!isGeminiAvailable) return null;
 
   const shown = text.slice(0, 4000);
   if (!shown.trim()) return null;

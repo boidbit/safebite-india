@@ -19,11 +19,19 @@
 // happens to be unset at build time -- e.g. a fresh clone or a CI build
 // before the Cloudflare secret is added, same as any other page load
 // should still work without translation, not crash outright.
-const ACCOUNT_ID = import.meta.env?.VITE_CLOUDFLARE_ACCOUNT_ID || (typeof process !== 'undefined' ? process.env.VITE_CLOUDFLARE_ACCOUNT_ID : undefined);
-const API_TOKEN = import.meta.env?.VITE_CLOUDFLARE_API_TOKEN || (typeof process !== 'undefined' ? process.env.VITE_CLOUDFLARE_API_TOKEN : undefined);
-const MODEL = '@cf/ai4bharat/indictrans2-en-indic-1B';
+//
+// Like the Gemini keys (see geminiService.js), the Cloudflare token is read
+// only in Node scripts -- never built into the website/APK. There, the
+// translation goes through the ai-proxy Edge Function (aiProxy.js).
+import { callAiProxy, isAiProxyAvailable } from './aiProxy.js';
 
-export const isTranslateConfigured = Boolean(ACCOUNT_ID && API_TOKEN);
+const serverEnv = typeof process !== 'undefined' && process.env ? process.env : {};
+const ACCOUNT_ID = serverEnv.VITE_CLOUDFLARE_ACCOUNT_ID;
+const API_TOKEN = serverEnv.VITE_CLOUDFLARE_API_TOKEN;
+const MODEL = '@cf/ai4bharat/indictrans2-en-indic-1B';
+const hasDirectAccess = Boolean(ACCOUNT_ID && API_TOKEN);
+
+export const isTranslateConfigured = hasDirectAccess || isAiProxyAvailable;
 
 /**
  * Translates a batch of English strings to Hindi in ONE API call
@@ -33,6 +41,12 @@ export const isTranslateConfigured = Boolean(ACCOUNT_ID && API_TOKEN);
  */
 async function translateBatch(texts) {
   if (!isTranslateConfigured || texts.length === 0) return null;
+
+  if (!hasDirectAccess) {
+    const res = await callAiProxy({ kind: 'translate', texts });
+    const translations = res.ok && res.data?.success ? res.data.result?.translations : null;
+    return Array.isArray(translations) && translations.length === texts.length ? translations : null;
+  }
 
   try {
     const response = await fetch(

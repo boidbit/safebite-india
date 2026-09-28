@@ -51,14 +51,6 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
-          VITE_GEMINI_API_KEY_2: ${{ secrets.VITE_GEMINI_API_KEY_2 }}
-          VITE_GEMINI_API_KEY_3: ${{ secrets.VITE_GEMINI_API_KEY_3 }}
-          VITE_GEMINI_API_KEY_4: ${{ secrets.VITE_GEMINI_API_KEY_4 }}
-          VITE_GEMINI_API_KEY_5: ${{ secrets.VITE_GEMINI_API_KEY_5 }}
-          VITE_GEMINI_API_KEY_6: ${{ secrets.VITE_GEMINI_API_KEY_6 }}
-          VITE_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.VITE_CLOUDFLARE_ACCOUNT_ID }}
-          VITE_CLOUDFLARE_API_TOKEN: ${{ secrets.VITE_CLOUDFLARE_API_TOKEN }}
         # Capacitor serves the build from its own local root, not a
         # GitHub Pages subpath -- a separate build mode (see
         # vite.config.js) is what keeps this from loading blank.

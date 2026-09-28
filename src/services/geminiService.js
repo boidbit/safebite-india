@@ -1,22 +1,33 @@
 // src/services/geminiService.js
 // Handles all Gemini AI API calls for ingredient analysis
 
-// Works both in the browser (Vite injects import.meta.env at build time)
-// and in Node -- the Netlify scheduled function reuses this same service,
-// where env vars come from process.env instead.
-//
+// Works both in the browser/app -- where every call goes through the
+// ai-proxy Edge Function, since no keys are built into that code -- and in
+// Node scripts, which call Gemini directly with the keys from .env.
+import { callAiProxy, isAiProxyAvailable } from './aiProxy.js';
+
 // Six keys (six separate free-tier quotas, 500 requests/day each) so
 // this pipeline work and real user scans don't all compete for one shared
 // pool. _2 through _6 are optional -- everything still works with just the
 // first key configured.
+//
+// The keys are read ONLY from process.env -- i.e. only in Node scripts on
+// our own machines. Never from import.meta.env: Vite would build them into
+// the website/APK JavaScript, where anyone can copy them (they were, until
+// 2026-09-28). The browser/app has no keys and goes through the ai-proxy
+// Edge Function instead (aiProxy.js).
+const serverEnv = typeof process !== 'undefined' && process.env ? process.env : {};
 export const GEMINI_API_KEYS = [
-  import.meta.env?.VITE_GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY,
-  import.meta.env?.VITE_GEMINI_API_KEY_2 || process.env.VITE_GEMINI_API_KEY_2,
-  import.meta.env?.VITE_GEMINI_API_KEY_3 || process.env.VITE_GEMINI_API_KEY_3,
-  import.meta.env?.VITE_GEMINI_API_KEY_4 || process.env.VITE_GEMINI_API_KEY_4,
-  import.meta.env?.VITE_GEMINI_API_KEY_5 || process.env.VITE_GEMINI_API_KEY_5,
-  import.meta.env?.VITE_GEMINI_API_KEY_6 || process.env.VITE_GEMINI_API_KEY_6,
+  serverEnv.VITE_GEMINI_API_KEY,
+  serverEnv.VITE_GEMINI_API_KEY_2,
+  serverEnv.VITE_GEMINI_API_KEY_3,
+  serverEnv.VITE_GEMINI_API_KEY_4,
+  serverEnv.VITE_GEMINI_API_KEY_5,
+  serverEnv.VITE_GEMINI_API_KEY_6,
 ].filter(Boolean);
+
+/** Whether Gemini can be reached at all -- direct keys (Node) or the proxy (browser/app). */
+export const isGeminiAvailable = GEMINI_API_KEYS.length > 0 || isAiProxyAvailable;
 
 const DEFAULT_MODEL = 'gemini-3.1-flash-lite';
 
@@ -66,7 +77,14 @@ export function cooldownFor(message) {
  * clean-up (geminiImageService.js) passes an image model instead.
  */
 export async function callGeminiRaw(requestBody, model = DEFAULT_MODEL) {
-  if (GEMINI_API_KEYS.length === 0) throw new Error('No Gemini API key configured');
+  // Browser/app: no keys here -- the Edge Function holds them and does the
+  // same key rotation server-side.
+  if (GEMINI_API_KEYS.length === 0) {
+    if (!isAiProxyAvailable) throw new Error('No Gemini API key configured');
+    const res = await callAiProxy({ kind: 'gemini', model, body: requestBody });
+    if (res.ok) return res.data;
+    throw new Error(res.message);
+  }
   let lastMessage = 'API request failed';
   const order = orderKeys(GEMINI_API_KEYS.length, nextKey, cooldownUntil, Date.now());
   for (const [position, i] of order.entries()) {
@@ -173,8 +191,8 @@ Always write reasons in simple English that a non-expert Indian consumer can und
  * Analyze ingredients from text input
  */
 export async function analyzeIngredients(ingredientsText) {
-  if (GEMINI_API_KEYS.length === 0) {
-    throw new Error('Gemini API key not found. Please add VITE_GEMINI_API_KEY to your .env file.');
+  if (!isGeminiAvailable) {
+    throw new Error('AI is not configured.');
   }
 
   const requestBody = {
@@ -233,8 +251,8 @@ If NO nutrition table is visible in this photo at all, omit the "nutrition" key 
  * misread and the user should get a chance to fix it first.
  */
 export async function extractIngredientsFromImage(imageFile) {
-  if (GEMINI_API_KEYS.length === 0) {
-    throw new Error('Gemini API key not found. Please add VITE_GEMINI_API_KEY to your .env file.');
+  if (!isGeminiAvailable) {
+    throw new Error('AI is not configured.');
   }
 
   const base64Image = await fileToBase64(imageFile);
@@ -291,7 +309,7 @@ Return ONLY a JSON object, no other text:
  * @returns {Promise<{ readable: boolean, brand: string, productName: string, packSize: string }>}
  */
 export async function identifyProductFromPhoto(imageFile) {
-  if (GEMINI_API_KEYS.length === 0) throw new Error('Gemini API key not found.');
+  if (!isGeminiAvailable) throw new Error('AI is not configured.');
   const requestBody = {
     contents: [{ parts: [{ text: IDENTIFY_PROMPT }, { inline_data: { mime_type: imageFile.type, data: await fileToBase64(imageFile) } }] }],
     generationConfig: { temperature: 0.1, topK: 1, topP: 0.8, maxOutputTokens: 256, thinkingConfig: { thinkingLevel: 'low' } },
@@ -379,8 +397,8 @@ export function looksSelfDisqualifying(record) {
 }
 
 export async function researchIngredients(items) {
-  if (GEMINI_API_KEYS.length === 0) {
-    throw new Error('Gemini API key not found. Please add VITE_GEMINI_API_KEY to your .env file.');
+  if (!isGeminiAvailable) {
+    throw new Error('AI is not configured.');
   }
   if (!items || items.length === 0) return [];
 
@@ -520,7 +538,7 @@ false for: regular milk and milk powder, toddler/growing-up milk marketed for ch
  * of breaking the whole report over this.
  */
 export async function generateProductInsights({ productName, brand, score, verdict, harmfulNames, concerningNames, ingredientCount, ingredientNames = [] }) {
-  if (GEMINI_API_KEYS.length === 0) return null;
+  if (!isGeminiAvailable) return null;
 
   const details = `Product: ${productName}${brand ? ` (brand: ${brand})` : ''}
 Score: ${score}/100 (${verdict})
@@ -610,7 +628,7 @@ Rewrite the text with correctly balanced brackets. Follow these rules strictly:
  * Returns null on any failure so the caller parses the original text.
  */
 export async function repairLabelPunctuation(rawText) {
-  if (GEMINI_API_KEYS.length === 0) return null;
+  if (!isGeminiAvailable) return null;
 
   const requestBody = {
     contents: [{ parts: [{ text: `${LABEL_REPAIR_PROMPT}\n\nText to repair:\n${rawText}` }] }],
@@ -694,7 +712,7 @@ const APPEARANCE_CLAIM_RE =
   /\b(square|triangle|circle|dot|logo|icon|symbol|badge|stamp)\b[^.]{0,40}\b(green|brown|red|maroon|yellow|colou?r(?:ed)?)\b|\b(green|brown|red|maroon|yellow|colou?r(?:ed)?)\b[^.]{0,40}\b(square|triangle|circle|dot|logo|icon|symbol|badge|stamp)\b/i;
 
 export async function generateDailyFact(avoidTopics = []) {
-  if (GEMINI_API_KEYS.length === 0) return null;
+  if (!isGeminiAvailable) return null;
 
   const avoid = avoidTopics.length
     ? `\n\nAlready used recently -- write about a genuinely different topic, not a rephrasing of any of these:\n${avoidTopics.map((t) => `- ${t}`).join('\n')}`
@@ -783,7 +801,7 @@ Return ONLY a valid JSON array, no markdown, one entry per input item, "id" copi
  *   this as a hard failure. `summary` is '' when `relevant` is false.
  */
 export async function summarizeNewsItems(items, existingClusters = []) {
-  if (GEMINI_API_KEYS.length === 0 || items.length === 0) return [];
+  if (!isGeminiAvailable || items.length === 0) return [];
 
   const payload = items.map((item) => ({
     id: item.id,

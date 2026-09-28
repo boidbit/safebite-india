@@ -14,7 +14,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chromium } from 'playwright';
-import { GEMINI_API_KEYS, callGemini } from './geminiService.js';
+import { isGeminiAvailable, callGemini } from './geminiService.js';
 import { isBundleListing } from './bundleListing.js';
 import { optimizeAndUploadBlinkitImage } from './blinkitImageOptimizer.js';
 
@@ -281,7 +281,7 @@ const IMAGE_REQUEST_GAP_MS = 4200; // free-tier vision limit is 15 req/min
  * is the only way to recover those.
  */
 export async function extractIngredientsFromImages(productName, imageUrls) {
-  if (GEMINI_API_KEYS.length === 0 || imageUrls.length === 0) return null;
+  if (!isGeminiAvailable || imageUrls.length === 0) return null;
 
   for (const url of imageUrls.slice(0, MAX_GALLERY_IMAGES_TRIED)) {
     const buf = await fetchImageBuffer(url);
@@ -326,7 +326,7 @@ export async function extractIngredientsFromImages(productName, imageUrls) {
  * invented ingredient list is far worse here than no data.
  */
 export async function extractIngredientsWithAI(productName, attributes) {
-  if (GEMINI_API_KEYS.length === 0) return null;
+  if (!isGeminiAvailable) return null;
 
   const shown = Object.entries(attributes)
     .filter(([name]) => !NOISE_ATTRIBUTES.test(name))
