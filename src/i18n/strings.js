@@ -12,6 +12,14 @@
 
 export const STRINGS = {
   en: {
+    scanTitle: 'Scan barcode',
+    scanLineUp: 'Line the barcode up inside the frame',
+    scanEnterManually: 'Enter number',
+    scanFromGallery: 'From gallery',
+    scanReadingPhoto: 'Reading…',
+    scanErrUnsupported: "This device doesn't support camera scanning. Tap Enter number to type it instead.",
+    scanErrCameraBlocked: 'Camera access was blocked. Allow camera permission and try again, or tap Enter number.',
+    scanErrNoBarcodeInPhoto: "Couldn't find a barcode in that photo. Try a sharper, closer photo of just the barcode.",
     popularSearchesEmpty: 'Nothing scanned enough yet to show here.',
 
     newsTitle: 'News & Research',
@@ -589,6 +597,14 @@ export const STRINGS = {
   },
 
   hi: {
+    scanTitle: 'बारकोड स्कैन करें',
+    scanLineUp: 'बारकोड को फ़्रेम के अंदर रखें',
+    scanEnterManually: 'नंबर डालें',
+    scanFromGallery: 'गैलरी से',
+    scanReadingPhoto: 'पढ़ा जा रहा है…',
+    scanErrUnsupported: 'यह डिवाइस कैमरे से स्कैन नहीं कर सकता। नंबर टाइप करने के लिए "नंबर डालें" पर टैप करें।',
+    scanErrCameraBlocked: 'कैमरे की इजाज़त नहीं मिली। कैमरा परमिशन दें और फिर कोशिश करें, या "नंबर डालें" पर टैप करें।',
+    scanErrNoBarcodeInPhoto: 'उस फ़ोटो में बारकोड नहीं मिला। सिर्फ़ बारकोड की ज़्यादा साफ़, नज़दीक से ली गई फ़ोटो आज़माएं।',
     popularSearchesEmpty: 'यहां दिखाने के लिए अभी तक कुछ इतना स्कैन नहीं हुआ।',
 
     newsTitle: 'न्यूज़ और रिसर्च',

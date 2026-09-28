@@ -16,7 +16,7 @@ import ProductImage from '../components/ProductImage';
 import { CATEGORIES } from '../data/categories';
 import { getTodaysTip } from '../data/didYouKnowTips';
 import { getTodaysFact } from '../services/dailyFactRepo';
-import BarcodeScanner, { isBarcodeScanSupported } from '../components/BarcodeScanner';
+import BarcodeScanner, { isBarcodeScanSupported, readBarcodeFromImage } from '../components/BarcodeScanner';
 import { useFamily } from '../contexts/FamilyContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -430,6 +430,43 @@ export default function Home() {
     handleAnalyze(code);
   };
 
+  // "Scan Barcode" opens the camera straight away -- no in-between screen.
+  // Where live scanning isn't available (e.g. iPhone Safari), it opens the
+  // type-the-number form instead.
+  const barcodeInputRef = useRef(null);
+  const barcodePhotoRef = useRef(null);
+  const [readingBarcodePhoto, setReadingBarcodePhoto] = useState(false);
+  const openBarcodeScan = () => {
+    setMode('barcode');
+    setError('');
+    setNotFoundBarcode('');
+    if (isBarcodeScanSupported()) setShowScanner(true);
+  };
+  const closeScanner = () => {
+    setShowScanner(false);
+    // Closing the camera that "Scan Barcode" opened goes back to where the
+    // person started, not to an empty barcode form they never asked for.
+    if (!barcodeInput) setMode('search');
+  };
+  const switchToManual = () => {
+    setShowScanner(false);
+    setTimeout(() => barcodeInputRef.current?.focus(), 50);
+  };
+  const handleBarcodePhoto = async (file) => {
+    if (!file) return;
+    setError('');
+    setReadingBarcodePhoto(true);
+    try {
+      const code = await readBarcodeFromImage(file);
+      if (code) handleBarcodeDetected(code);
+      else setError(t('scanErrNoBarcodeInPhoto'));
+    } catch {
+      setError(t('scanErrNoBarcodeInPhoto'));
+    } finally {
+      setReadingBarcodePhoto(false);
+    }
+  };
+
   const handleConfirmReview = async () => {
     if (!reviewText.trim()) {
       setError(t('homeEmptyIngredientsError'));
@@ -678,7 +715,7 @@ export default function Home() {
           {searchQuery.trim().length === 0 && (
             <div className="flex gap-2 mb-4">
               <button
-                onClick={() => { setMode('barcode'); setError(''); }}
+                onClick={openBarcodeScan}
                 className="tap-scale flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-sm transition-colors"
               >
                 <BarcodeIcon />
@@ -1217,19 +1254,32 @@ export default function Home() {
       {/* Barcode Mode */}
       {mode === 'barcode' && (
         <div className="mb-4">
-          {isBarcodeScanSupported() && (
-            <button
-              onClick={() => setShowScanner(true)}
-              className="tap-scale w-full mb-3 py-3.5 rounded-xl border-2 border-dashed border-green-300 bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 font-semibold text-sm flex items-center justify-center gap-2"
-            >
-              📷 {t('homeBarcodeScanCamera')}
-            </button>
-          )}
+          <div className="flex gap-2 mb-3">
+            {isBarcodeScanSupported() && (
+              <button
+                onClick={() => setShowScanner(true)}
+                className="tap-scale flex-1 py-3.5 rounded-xl border-2 border-dashed border-green-300 bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 font-semibold text-sm flex items-center justify-center gap-2"
+              >
+                📷 {t('homeBarcodeScanCamera')}
+              </button>
+            )}
+            {'BarcodeDetector' in window && (
+              <button
+                onClick={() => barcodePhotoRef.current?.click()}
+                disabled={readingBarcodePhoto}
+                className="tap-scale flex-1 py-3.5 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                🖼️ {readingBarcodePhoto ? t('scanReadingPhoto') : t('scanFromGallery')}
+              </button>
+            )}
+            <input ref={barcodePhotoRef} type="file" accept="image/*" className="hidden" onChange={(e) => { handleBarcodePhoto(e.target.files?.[0]); e.target.value = ''; }} />
+          </div>
           <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">
             {t('homeBarcodeEnterLabel')}
           </label>
           <input
             type="text"
+            ref={barcodeInputRef}
             inputMode="numeric"
             value={barcodeInput}
             onChange={(e) => { setBarcodeInput(e.target.value.replace(/[^0-9]/g, '')); setNotFoundBarcode(''); }}
@@ -1273,7 +1323,7 @@ export default function Home() {
       )}
 
       {showScanner && (
-        <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setShowScanner(false)} />
+        <BarcodeScanner onDetected={handleBarcodeDetected} onClose={closeScanner} onManual={switchToManual} />
       )}
 
     </div>

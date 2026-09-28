@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { hasValidChecksum } from '../services/barcodeChecksum';
+import { useLanguage } from '../contexts/LanguageContext';
 
 // EAN-13/EAN-8/UPC cover essentially every Indian packaged-food barcode;
 // keeping the format list narrow avoids the detector wasting cycles
@@ -26,8 +27,32 @@ export function isBarcodeScanSupported() {
   return typeof window !== 'undefined' && 'BarcodeDetector' in window && !!navigator.mediaDevices?.getUserMedia;
 }
 
-export default function BarcodeScanner({ onDetected, onClose }) {
+/**
+ * Reads a barcode out of a photo (e.g. one picked from the gallery) with
+ * the same native detector the live camera uses -- no extra library.
+ * Returns the digits, or null when no valid barcode is found in it.
+ */
+export async function readBarcodeFromImage(file) {
+  if (typeof window === 'undefined' || !('BarcodeDetector' in window)) return null;
+  const detector = new window.BarcodeDetector({ formats: FORMATS });
+  const bitmap = await createImageBitmap(file);
+  try {
+    const codes = await detector.detect(bitmap);
+    const valid = codes.find((c) => hasValidChecksum(c.rawValue, c.format));
+    return valid ? valid.rawValue : null;
+  } finally {
+    bitmap.close?.();
+  }
+}
+
+// onManual: switch to typing the number instead. onDetected also receives
+// a barcode read from a gallery photo, so the caller treats both the same.
+export default function BarcodeScanner({ onDetected, onClose, onManual }) {
+  const { t } = useLanguage();
   const videoRef = useRef(null);
+  const fileRef = useRef(null);
+  const [readingPhoto, setReadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState('');
   const streamRef = useRef(null);
   const rafRef = useRef(null);
   const doneRef = useRef(false);
@@ -42,7 +67,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
       try {
         detector = new window.BarcodeDetector({ formats: FORMATS });
       } catch {
-        setError("This device doesn't support camera scanning. Type the number below instead.");
+        setError(t('scanErrUnsupported'));
         return;
       }
 
@@ -60,7 +85,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           await videoRef.current.play();
         }
       } catch {
-        setError('Camera access was blocked. Allow camera permission and try again, or type the number below.');
+        setError(t('scanErrCameraBlocked'));
         return;
       }
 
@@ -106,15 +131,34 @@ export default function BarcodeScanner({ onDetected, onClose }) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
-  }, [onDetected]);
+  }, [onDetected]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handlePhoto = async (file) => {
+    if (!file) return;
+    setPhotoError('');
+    setReadingPhoto(true);
+    try {
+      const code = await readBarcodeFromImage(file);
+      if (code) {
+        doneRef.current = true;
+        onDetected(code);
+      } else {
+        setPhotoError(t('scanErrNoBarcodeInPhoto'));
+      }
+    } catch {
+      setPhotoError(t('scanErrNoBarcodeInPhoto'));
+    } finally {
+      setReadingPhoto(false);
+    }
+  };
 
   return createPortal(
     <div className="fixed inset-0 z-[999] bg-black flex flex-col">
       <div className="flex-shrink-0 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3">
-        <span className="text-white text-sm font-semibold">Scan barcode</span>
+        <span className="text-white text-sm font-semibold">{t('scanTitle')}</span>
         <button
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t('ariaClose')}
           className="tap-scale w-9 h-9 rounded-full bg-white/15 text-white text-xl leading-none flex items-center justify-center backdrop-blur-sm"
         >
           ×
@@ -128,11 +172,31 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           <>
             <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" muted playsInline />
             <div className="relative w-[80%] max-w-xs aspect-[3/2] rounded-2xl border-2 border-white/80" style={{ boxShadow: '0 0 0 2000px rgba(0,0,0,0.45)' }} />
-            <p className="absolute bottom-10 left-0 right-0 text-center text-white/85 text-xs px-8">
-              Line the barcode up inside the frame
+            <p className="absolute bottom-6 left-0 right-0 text-center text-white/85 text-xs px-8">
+              {t('scanLineUp')}
             </p>
           </>
         )}
+      </div>
+
+      {/* The two other ways in, one tap each -- no separate screen to find them on. */}
+      <div className="flex-shrink-0 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+        {photoError && <p className="text-amber-300 text-xs text-center mb-2.5">{photoError}</p>}
+        <div className="flex gap-2.5">
+          {onManual && (
+            <button onClick={onManual} className="tap-scale flex-1 py-3 rounded-xl bg-white/15 text-white text-sm font-semibold backdrop-blur-sm">
+              ⌨️ {t('scanEnterManually')}
+            </button>
+          )}
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={readingPhoto}
+            className="tap-scale flex-1 py-3 rounded-xl bg-white/15 text-white text-sm font-semibold backdrop-blur-sm disabled:opacity-60"
+          >
+            🖼️ {readingPhoto ? t('scanReadingPhoto') : t('scanFromGallery')}
+          </button>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { handlePhoto(e.target.files?.[0]); e.target.value = ''; }} />
+        </div>
       </div>
     </div>,
     document.body
