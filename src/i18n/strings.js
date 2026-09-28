@@ -395,6 +395,7 @@ export const STRINGS = {
     usefulContextTitle: 'When this is actually useful',
     seasoningNote: 'Used in small amounts — this score reflects the seasoning itself, not the dish you add it to.',
     estimatedQtyNote: "This label doesn't state an exact percentage for every ingredient, so part of this score is a reasonable estimate rather than the product's exact measured composition.",
+    reviewPendingNote: "Newly added — FoodGuard's team hasn't reviewed this product yet, so it isn't listed for others. Your result is worked out the usual way.",
 
     infantFormulaTitle: 'Specialized nutrition product',
     infantFormulaBadge: 'Specialized',
@@ -952,6 +953,7 @@ export const STRINGS = {
     usefulContextTitle: 'यह असल में कब काम आता है',
     seasoningNote: 'थोड़ी मात्रा में इस्तेमाल होता है — यह स्कोर सिर्फ इस मसाले का है, जिस डिश में मिलाया जाए उसका नहीं।',
     estimatedQtyNote: 'इस लेबल पर हर सामग्री की सटीक मात्रा नहीं दी गई है, इसलिए स्कोर का कुछ हिस्सा सही अंदाज़े पर आधारित है, पक्के आंकड़ों पर नहीं।',
+    reviewPendingNote: 'नया जोड़ा गया — FoodGuard की टीम ने अभी इस प्रोडक्ट को रिव्यू नहीं किया है, इसलिए यह दूसरों को नहीं दिखता। आपका रिज़ल्ट हमेशा की तरह ही निकाला गया है।',
 
     infantFormulaTitle: 'विशेष पोषण प्रोडक्ट',
     infantFormulaBadge: 'स्पेशल',

@@ -17,6 +17,8 @@ import PhotoCropModal from './PhotoCropModal';
 import { analyzeText } from '../../services/analyzeText';
 import { buildReport } from '../../services/scoringEngine';
 import { finalizeScore } from '../../services/finalizeScore';
+import { adminSetReviewStatus } from '../../services/adminReviewRepo';
+import { StatusPill } from './AdminReviewList';
 import { extractIngredientsFromImage } from '../../services/geminiService';
 import { lookupBarcode } from '../../services/openFoodFacts';
 import { parseLabel, looksLikeNutritionPanel, findIngredientTextIssues } from '../../services/ingredientParser';
@@ -324,6 +326,11 @@ export default function AdminProductForm({ copyMode = false }) {
   // name and photos, and marks the submission approved once the product
   // is actually saved -- see handleSave.
   const location = useLocation();
+  // Opened from the Review queue (AdminReviewList's "Review" link) --
+  // saving/approving goes back there instead of to the Products list.
+  const fromReview = new URLSearchParams(location.search).get('review') === '1';
+  const [reviewStatus, setReviewStatus] = useState(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
   const fromSubmission = !id ? location.state?.fromSubmission : null;
   const [submissionId] = useState(fromSubmission?.submissionId || null);
 
@@ -376,6 +383,7 @@ export default function AdminProductForm({ copyMode = false }) {
           setExistingLookupKey(row.lookup_key || null);
         }
         setIngredientsText(row.ingredients_text || '');
+        if (!copyMode) setReviewStatus(row.review_status || null);
         if (r.imageUrl) setPhotoDataUrl(r.imageUrl);
         if (r.nutritionPanel) setNutrients(r.nutritionPanel);
         else {
@@ -709,7 +717,7 @@ export default function AdminProductForm({ copyMode = false }) {
     setReport(next);
   };
 
-  const handleSave = async () => {
+  const handleSave = async ({ approve = false } = {}) => {
     if (!report) { setError('Run "Analyze" first — there’s nothing generated to save yet.'); return; }
     if (!productName.trim()) { setError('Product name is required.'); return; }
     if (barcodeDuplicate) { setError('That barcode already belongs to another product — fix or clear it first.'); return; }
@@ -747,21 +755,42 @@ export default function AdminProductForm({ copyMode = false }) {
         : barcode.trim() ? 'barcode' : 'text';
       const payload = { lookupKey, source, productName: finalReport.productName, ingredientsText: ingredientsText.trim(), report: finalReport };
 
+      let savedId = id;
       if (isEdit) {
         await adminUpdateProduct(id, payload);
       } else {
-        await adminCreateProduct(payload);
+        savedId = await adminCreateProduct(payload);
         // Only after the product really exists -- an approved submission
         // must never point at nothing.
         if (submissionId) {
           try { await adminMarkSubmissionApproved(submissionId, finalReport.productName); } catch { /* product is saved; the admin can tidy the status by hand */ }
         }
       }
-      navigate(submissionId ? '/admin/submissions' : '/admin/products');
+      // A new row always starts 'pending' (the database forces it), so
+      // approving is a separate step -- done here only after the save
+      // itself succeeded.
+      if (approve) await adminSetReviewStatus([{ id: savedId, productName: finalReport.productName }], 'approved');
+      navigate(submissionId ? '/admin/submissions' : fromReview ? '/admin/review' : '/admin/products');
     } catch (err) {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Status only, no save -- for a product that needs no changes.
+  const handleSetReviewStatus = async (status) => {
+    if (status === 'rejected' && !window.confirm('Reject this product? It will stay out of the app.')) return;
+    setReviewBusy(true);
+    setError('');
+    try {
+      await adminSetReviewStatus([{ id, productName: productName.trim() }], status);
+      if (fromReview) navigate('/admin/review');
+      else setReviewStatus(status);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setReviewBusy(false);
     }
   };
 
@@ -806,6 +835,36 @@ export default function AdminProductForm({ copyMode = false }) {
         </p>
       ) : (
         <div className="mb-3" />
+      )}
+
+      {/* Review: whether this product is shown in the app yet. Approve /
+          Reject here change only the status; "Save & approve" at the
+          bottom saves edits first, then approves. */}
+      {isEdit && reviewStatus && (
+        <div className="flex flex-wrap items-center gap-2 mb-4 px-3.5 py-2.5 rounded-[12px]" style={{ background: 'var(--bg-card)', border: '1px solid var(--separator)' }}>
+          <span className="text-[12.5px] font-semibold" style={{ color: 'var(--label-2)' }}>Review status</span>
+          <StatusPill status={reviewStatus} />
+          <span className="text-[12px]" style={{ color: 'var(--label-3)' }}>
+            {reviewStatus === 'pending' ? 'Hidden in the app until approved.' : reviewStatus === 'rejected' ? 'Kept out of the app.' : reviewStatus === 'live' ? 'Shown in the app, not reviewed yet.' : 'Reviewed and shown in the app.'}
+          </span>
+          <div className="flex items-center gap-2 ml-auto">
+            {reviewStatus !== 'approved' && (
+              <button type="button" disabled={reviewBusy} onClick={() => handleSetReviewStatus('approved')} className="tap-scale px-3 py-1.5 rounded-[8px] text-[13px] font-semibold text-white" style={{ background: 'var(--v-good)', opacity: reviewBusy ? 0.5 : 1 }}>
+                Approve (no changes)
+              </button>
+            )}
+            {reviewStatus !== 'rejected' && (
+              <button type="button" disabled={reviewBusy} onClick={() => handleSetReviewStatus('rejected')} className="tap-scale px-3 py-1.5 rounded-[8px] text-[13px] font-semibold" style={{ background: 'var(--v-poor-bg)', color: 'var(--v-poor)', opacity: reviewBusy ? 0.5 : 1 }}>
+                Reject
+              </button>
+            )}
+            {(reviewStatus === 'approved' || reviewStatus === 'rejected') && (
+              <button type="button" disabled={reviewBusy} onClick={() => handleSetReviewStatus('pending')} className="tap-scale px-3 py-1.5 rounded-[8px] text-[13px] font-semibold" style={{ background: 'var(--fill)', color: 'var(--label-1)', opacity: reviewBusy ? 0.5 : 1 }}>
+                Back to review
+              </button>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)' }}>
@@ -1021,13 +1080,24 @@ export default function AdminProductForm({ copyMode = false }) {
 
           <button
             type="button"
-            onClick={handleSave}
+            onClick={() => handleSave()}
             disabled={!report || saving}
             className="tap-scale w-full py-3 rounded-[12px] text-[15px] font-semibold text-white"
             style={{ background: 'var(--v-very-healthy)', opacity: !report || saving ? 0.5 : 1 }}
           >
             {saving ? 'Saving…' : isEdit ? 'Save changes' : copyMode ? 'Save as new product' : 'Save product'}
           </button>
+          {reviewStatus !== 'approved' && (
+            <button
+              type="button"
+              onClick={() => handleSave({ approve: true })}
+              disabled={!report || saving}
+              className="tap-scale w-full mt-2 py-3 rounded-[12px] text-[15px] font-semibold"
+              style={{ background: 'var(--v-good-bg)', color: 'var(--v-good)', opacity: !report || saving ? 0.5 : 1 }}
+            >
+              {saving ? 'Saving…' : 'Save & approve (publish in app)'}
+            </button>
+          )}
         </div>
 
         <div>

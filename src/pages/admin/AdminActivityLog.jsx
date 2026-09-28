@@ -15,6 +15,9 @@ const ACTION_LABEL = {
   resolve_flag: 'Resolved flag on',
   reopen_flag: 'Re-opened flag on',
   import: 'Imported',
+  approve_product: 'Approved',
+  reject_product: 'Rejected',
+  unreview_product: 'Moved back to review',
 };
 
 export default function AdminActivityLog() {

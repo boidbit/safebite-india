@@ -8,6 +8,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabaseClient';
 
 const NAV = [
+  { to: '/admin/review', label: 'Review' },
   { to: '/admin/products', label: 'Products' },
   { to: '/admin/scrape-progress', label: 'Scrape progress' },
   { to: '/admin/flags', label: 'Flags' },

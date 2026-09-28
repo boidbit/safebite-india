@@ -356,6 +356,7 @@ export default function Home() {
           // product — it's already cached in the ingredients table, so
           // saving it again here as a "product" would just be redundant.
           if (!analysis.isIngredientOnly) {
+            result.reviewStatus = 'pending';
             saveReport({
               lookupKey: key,
               source: 'text',
@@ -456,6 +457,7 @@ export default function Home() {
         // Same rule as text mode: a single-ingredient result isn't a
         // real product, so don't cache it as one.
         if (!analysis.isIngredientOnly) {
+          result.reviewStatus = 'pending';
           saveReport({
             lookupKey: key,
             source: review.source,

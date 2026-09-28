@@ -29,6 +29,16 @@ function normalizeText(text) {
   return text.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+// Admin review (supabase/product_reports_review_status_migration.sql): a
+// newly added product is 'pending' until an admin approves it, and only
+// 'live' (published before review existed) and 'approved' ones appear
+// anywhere someone browses -- search, categories, alternatives, recently
+// analyzed, today's picks, popular searches, the catalog counts. An EXACT
+// lookup (getCachedReport, by the barcode/text someone just scanned, or a
+// share link) is deliberately not filtered: the person who scanned a
+// product still gets their result.
+export const VISIBLE_REVIEW_STATUSES = ['live', 'approved'];
+
 export function barcodeKey(barcode) {
   return `barcode:${barcode.trim()}`;
 }
@@ -64,6 +74,7 @@ export async function searchCachedProducts(query, { limit = 5 } = {}) {
   const { data, error } = await supabase
     .from('product_reports')
     .select('lookup_key, product_name, report')
+    .in('review_status', VISIBLE_REVIEW_STATUSES)
     .or(`product_name.ilike.${pattern},report->>brand.ilike.${pattern}`)
     .limit(limit);
 
@@ -95,6 +106,7 @@ export async function browseCategoryProducts(keywords, { limit = 24 } = {}) {
   const { data, error } = await supabase
     .from('product_reports')
     .select('lookup_key, product_name, report')
+    .in('review_status', VISIBLE_REVIEW_STATUSES)
     .or(orFilter)
     .limit(limit);
 
@@ -135,6 +147,7 @@ export async function getPopularSearchTerms(limit = 8) {
   const { data, error } = await supabase
     .from('product_reports')
     .select('product_name, report, scan_count')
+    .in('review_status', VISIBLE_REVIEW_STATUSES)
     .order('scan_count', { ascending: false })
     .limit(limit * 6); // over-fetch so de-duping brands + skipping long names still leaves enough
 
@@ -172,6 +185,7 @@ export async function getRecentlyAddedProducts(limit = 10) {
   const { data, error } = await supabase
     .from('product_reports')
     .select('lookup_key, product_name, report, created_at')
+    .in('review_status', VISIBLE_REVIEW_STATUSES)
     .order('created_at', { ascending: false })
     .limit(limit);
 
@@ -215,6 +229,7 @@ export async function getDailySpotlight() {
   const { data, error } = await supabase
     .from('product_reports')
     .select('lookup_key, product_name, score:report->>overallScore, verdict:report->>verdict, brand:report->>brand, imageUrl:report->>imageUrl, flags:report->flags, positives:report->positives, isInfantFormula:report->>isInfantFormula')
+    .in('review_status', VISIBLE_REVIEW_STATUSES)
     .limit(1000);
 
   if (error || !data?.length) return { best: null, worst: null };
@@ -295,6 +310,7 @@ async function getCategoryProducts({ productName, lookupKey, limit, minScore }) 
   const { data, error } = await supabase
     .from('product_reports')
     .select('lookup_key, product_name, report')
+    .in('review_status', VISIBLE_REVIEW_STATUSES)
     .or(orFilter)
     .neq('lookup_key', lookupKey || '')
     // Ordered server-side by score -- a category like "chocolates" has
@@ -368,10 +384,11 @@ export async function getCatalogStats() {
   startOfToday.setHours(0, 0, 0, 0);
 
   const [totalRes, todayRes] = await Promise.all([
-    supabase.from('product_reports').select('*', { count: 'exact', head: true }),
+    supabase.from('product_reports').select('*', { count: 'exact', head: true }).in('review_status', VISIBLE_REVIEW_STATUSES),
     supabase
       .from('product_reports')
       .select('*', { count: 'exact', head: true })
+      .in('review_status', VISIBLE_REVIEW_STATUSES)
       .gte('created_at', startOfToday.toISOString()),
   ]);
 
@@ -430,7 +447,7 @@ export async function getCachedReport(lookupKey) {
 
   const { data, error } = await supabase
     .from('product_reports')
-    .select('id, scan_count, report, ingredients_text')
+    .select('id, scan_count, report, ingredients_text, review_status')
     .eq('lookup_key', lookupKey)
     .maybeSingle();
 
@@ -446,7 +463,7 @@ export async function getCachedReport(lookupKey) {
   // The raw label text lives in its own column, not inside the report
   // JSON -- attach it here so callers get it the same way whether this
   // was a fresh analysis or a cache hit.
-  return { ...data.report, ingredientsText: data.ingredients_text };
+  return { ...data.report, ingredientsText: data.ingredients_text, reviewStatus: data.review_status };
 }
 
 /**

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { getHistoryById, updateHistoryProductName, refreshHistoryEntry, saveToHistory, getScoreColor, getIngredientSeverity } from '../utils/storage';
-import { updateProductName, getCachedReport, getSaferAlternatives, getSimilarProducts, deleteReport, saveReport, getReportIdByLookupKey } from '../services/productCache';
+import { updateProductName, getCachedReport, getSaferAlternatives, getSimilarProducts, saveReport, getReportIdByLookupKey } from '../services/productCache';
 import { buildProductShareText, productShareUrl, whatsappShareUrl } from '../utils/share';
 import { renderShareCardImage } from '../utils/shareCard';
 import headerIcon from '../assets/header-icon.png';
@@ -407,8 +407,11 @@ export default function Result() {
       fresh.ingredientsText = result.ingredientsText;
       fresh.lookupKey = result.lookupKey;
 
+      // saveReport upserts on lookup_key, so this overwrites the row in
+      // place. It used to delete first -- under admin review that re-created
+      // the row as 'pending' and took an approved product out of the app
+      // for everyone the moment anyone tapped Refresh.
       if (result.lookupKey && !analysis.isIngredientOnly) {
-        await deleteReport(result.lookupKey);
         await saveReport({
           lookupKey: result.lookupKey,
           source: result.inputType || 'text',
@@ -1071,6 +1074,18 @@ export default function Result() {
           <span className="text-[16px] leading-none mt-0.5 flex-shrink-0">🥄</span>
           <p className="text-[13px] leading-relaxed" style={{ color: 'var(--label-1)' }}>
             {t('seasoningNote')}
+          </p>
+        </div>
+      )}
+
+      {/* Newly added and not yet reviewed by an admin -- it isn't listed
+          for anyone else yet, but the person who scanned it still gets the
+          result (see VISIBLE_REVIEW_STATUSES in productCache.js). */}
+      {(result.reviewStatus === 'pending' || result.reviewStatus === 'rejected') && (
+        <div className="mx-4 mt-3 rounded-[14px] px-4 py-3 flex items-start gap-2" style={{ background: 'var(--v-moderate-bg)' }}>
+          <span className="text-[14px] flex-shrink-0" aria-hidden="true">🕒</span>
+          <p className="text-[13px] leading-relaxed" style={{ color: 'var(--label-1)' }}>
+            {t('reviewPendingNote')}
           </p>
         </div>
       )}
