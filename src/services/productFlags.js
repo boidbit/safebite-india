@@ -23,6 +23,29 @@ export const FLAG_REASONS = [
   { key: 'other', label: 'Something else' },
 ];
 
+// Not one of FLAG_REASONS (those are what the "Report an issue" sheet
+// offers): a user renaming a product on the Result page used to rename
+// it in the shared catalog for EVERYONE, straight from the public key --
+// including after an admin had reviewed it. Now the new name only
+// changes on that person's own device, and reaches the admin as this
+// kind of flag, with the suggested name in `remarks`.
+export const NAME_SUGGESTION_REASON = 'name_suggestion';
+
+/** Sends a user's rename to the admin as a suggestion. Best-effort, like the rename itself. */
+export async function submitNameSuggestion({ report, suggestedName }) {
+  if (!isSupabaseConfigured || !report?.lookupKey || !suggestedName?.trim()) return { ok: false };
+  const { error } = await supabase.from('product_flags').insert({
+    lookup_key: report.lookupKey,
+    product_name: report.productName || null,
+    reason: NAME_SUGGESTION_REASON,
+    remarks: suggestedName.trim(),
+    score_at_flag: typeof report.overallScore === 'number' ? report.overallScore : null,
+    verdict_at_flag: report.verdict || null,
+    report_snapshot: report,
+  });
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
 /**
  * Records one report. Returns { ok: true } or { ok: false, error } --
  * never swallows a failure into a fake success, since the whole value

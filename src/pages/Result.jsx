@@ -3,14 +3,14 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { getHistoryById, updateHistoryProductName, refreshHistoryEntry, saveToHistory, getScoreColor, getIngredientSeverity } from '../utils/storage';
-import { updateProductName, getCachedReport, getSaferAlternatives, getSimilarProducts, saveReport, getReportIdByLookupKey } from '../services/productCache';
+import { getCachedReport, getSaferAlternatives, getSimilarProducts, saveReport, getReportIdByLookupKey } from '../services/productCache';
 import { buildProductShareText, productShareUrl, whatsappShareUrl } from '../utils/share';
 import { renderShareCardImage } from '../utils/shareCard';
 import headerIcon from '../assets/header-icon.png';
 import { analyzeText } from '../services/analyzeText';
 import { lookupBarcode } from '../services/openFoodFacts';
 import { getRelatedNews } from '../services/newsRepo';
-import { submitProductFlag, FLAG_REASONS } from '../services/productFlags';
+import { submitProductFlag, submitNameSuggestion, FLAG_REASONS } from '../services/productFlags';
 import { categoryIcon } from '../utils/categoryIcon';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useFamily } from '../contexts/FamilyContext';
@@ -237,6 +237,7 @@ export default function Result() {
   const [filter, setFilter] = useState('all');
   const [view, setView] = useState('overview');
   const [editingName, setEditingName] = useState(false);
+  const [nameSuggested, setNameSuggested] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [alternatives, setAlternatives] = useState([]);
   const [relatedNews, setRelatedNews] = useState([]);
@@ -374,9 +375,15 @@ export default function Result() {
       setEditingName(false);
       return;
     }
+    // Renames it on this device only. The shared catalog name is the
+    // admin's to change -- this used to overwrite it for everyone, from
+    // the public key, even after review -- so the new name goes to the
+    // admin as a suggestion instead (see productFlags.js).
+    if (result.lookupKey && trimmed !== (result.productName || '').trim()) {
+      submitNameSuggestion({ report: result, suggestedName: trimmed }).then((r) => { if (r.ok) setNameSuggested(true); }, () => {});
+    }
     setResult((prev) => ({ ...prev, productName: trimmed }));
     updateHistoryProductName(result.id, trimmed);
-    if (result.lookupKey) updateProductName(result.lookupKey, trimmed);
     setEditingName(false);
   };
 
@@ -736,6 +743,10 @@ export default function Result() {
                 {t('edit')}
               </button>
             </h1>
+          )}
+
+          {nameSuggested && !editingName && (
+            <p className="text-[12.5px] mb-1.5" style={{ color: 'var(--label-3)' }}>{t('nameSuggestedNote')}</p>
           )}
 
           {result.productName === 'Unknown Product' && !editingName ? (
