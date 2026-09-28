@@ -16,6 +16,7 @@ import AdminLayout from './AdminLayout';
 import PhotoCropModal from './PhotoCropModal';
 import { analyzeText } from '../../services/analyzeText';
 import { buildReport } from '../../services/scoringEngine';
+import { finalizeScore } from '../../services/finalizeScore';
 import { extractIngredientsFromImage } from '../../services/geminiService';
 import { lookupBarcode } from '../../services/openFoodFacts';
 import { parseLabel, looksLikeNutritionPanel, findIngredientTextIssues } from '../../services/ingredientParser';
@@ -685,15 +686,27 @@ export default function AdminProductForm({ copyMode = false }) {
   // A per-ingredient status/penalty edit only changes the underlying
   // data; this is what actually recomputes score/verdict/flags/
   // positives/summary/recommendation from it.
+  //
+  // buildReport alone is only the ingredient math -- the Quick Health
+  // Check's nutrient cap and the fried/energy-dense ceiling come after it
+  // (finalizeScore.js), exactly as a fresh scan does. Running just
+  // buildReport here made a recalculated fried snack lose that ceiling
+  // and jump back up to its ingredient-only score. Uses the nutrition
+  // values currently in this form, so an edited panel counts too.
   const handleRecalculate = () => {
     if (!report?.ingredients) return;
+    const trimmedPack = packSize.trim() || null;
     const recalculated = buildReport(report.ingredients, {
       productName: productName.trim(),
       brand: brand.trim() || null,
       imageUrl: photoDataUrl || null,
-      packSize: packSize.trim() || null,
+      packSize: trimmedPack,
     });
-    setReport({ ...report, ...recalculated });
+    const next = { ...report, ...recalculated };
+    const nutrientsInfo = buildNutrientsInfo();
+    if (nutrientsInfo) next.nutrientsPer100 = nutrientsInfo.nutrientsPer100;
+    finalizeScore(next, { nutrientsInfo, packSize: trimmedPack || undefined });
+    setReport(next);
   };
 
   const handleSave = async () => {
