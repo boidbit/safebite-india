@@ -5,9 +5,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getPopularSearchTerms } from '../services/productCache';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export default function PopularSearches() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [terms, setTerms] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -24,14 +26,14 @@ export default function PopularSearches() {
         onClick={() => navigate(-1)}
         className="tap-scale inline-flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 mb-4 transition-colors"
       >
-        ← Back
+        ← {t('genericBack')}
       </button>
-      <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-5">Popular searches</h1>
+      <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-5">{t('homePopularSearches')}</h1>
 
-      {loading && <p className="text-sm text-slate-400 dark:text-slate-500 px-1">Loading…</p>}
+      {loading && <p className="text-sm text-slate-400 dark:text-slate-500 px-1">{t('genericLoading')}</p>}
 
       {!loading && terms.length === 0 && (
-        <p className="text-sm text-slate-400 dark:text-slate-500 px-1">Nothing scanned enough yet to show here.</p>
+        <p className="text-sm text-slate-400 dark:text-slate-500 px-1">{t('popularSearchesEmpty')}</p>
       )}
 
       {!loading && terms.length > 0 && (

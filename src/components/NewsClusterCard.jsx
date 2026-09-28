@@ -5,6 +5,7 @@
 // card per outlet. See newsCluster.js for the grouping itself.
 import { useState } from 'react';
 import { TypeBadge } from './NewsCard';
+import { useLanguage } from '../contexts/LanguageContext';
 
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -12,6 +13,7 @@ function formatDate(dateStr) {
 }
 
 export default function NewsClusterCard({ items }) {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const lead = items[0]; // newest-first order is preserved by clusterNewsItems
 
@@ -22,14 +24,14 @@ export default function NewsClusterCard({ items }) {
         {lead.summary || lead.title}
       </p>
       <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">
-        Updated {formatDate(lead.published_at)} · {items.length} sources
+        {t('newsClusterUpdated', { date: formatDate(lead.published_at), count: items.length })}
       </p>
 
       <button
         onClick={() => setExpanded((v) => !v)}
         className="tap-scale text-xs font-semibold text-green-600 dark:text-green-400"
       >
-        {expanded ? '▾ Hide sources' : `▸ Show all ${items.length} sources`}
+        {expanded ? t('newsClusterHide') : t('newsClusterShowAll', { count: items.length })}
       </button>
 
       {expanded && (
@@ -44,7 +46,7 @@ export default function NewsClusterCard({ items }) {
             >
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-snug line-clamp-1">{item.title}</p>
               <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                {[item.source, formatDate(item.published_at)].filter(Boolean).join(' · ')} · Read ›
+                {[item.source, formatDate(item.published_at)].filter(Boolean).join(' · ')} · {t('newsRead')}
               </p>
             </a>
           ))}

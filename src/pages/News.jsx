@@ -9,6 +9,7 @@ import { getNewsItems } from '../services/newsRepo';
 import { clusterNewsItems } from '../services/newsCluster';
 import NewsCard from '../components/NewsCard';
 import NewsClusterCard from '../components/NewsClusterCard';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const OFFICIAL_SOURCES = [
   { label: 'FSSAI', url: 'https://fssai.gov.in' },
@@ -36,6 +37,7 @@ function NewsSection({ items }) {
 }
 
 export default function News() {
+  const { t } = useLanguage();
   const [research, setResearch] = useState([]);
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,14 +53,14 @@ export default function News() {
   return (
     <div className="page-in max-w-2xl mx-auto px-4 py-6 pb-24">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-1">News &amp; Research</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Stay up to date on food safety in India and beyond.</p>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-1">{t('newsTitle')}</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{t('newsSubtitle')}</p>
       </div>
 
       {/* Compact -- these are navigation links to each regulator's own
           site, not stories, so they shouldn't cost a full card each. */}
       <div className="mb-6 flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Official sources</span>
+        <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t('newsOfficialSources')}</span>
         {OFFICIAL_SOURCES.map((s) => (
           <a
             key={s.url}
@@ -72,23 +74,23 @@ export default function News() {
         ))}
       </div>
 
-      <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">India food news</h2>
+      <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">{t('newsIndiaFoodNews')}</h2>
       <div className="mb-6">
         {loading ? (
-          <EmptySection>Loading…</EmptySection>
+          <EmptySection>{t('genericLoading')}</EmptySection>
         ) : news.length === 0 ? (
-          <EmptySection>Coming soon — this section fills in once headlines are connected.</EmptySection>
+          <EmptySection>{t('newsComingSoon')}</EmptySection>
         ) : (
           <NewsSection items={news} />
         )}
       </div>
 
-      <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">Latest research</h2>
+      <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">{t('newsLatestResearch')}</h2>
       <div>
         {loading ? (
-          <EmptySection>Loading…</EmptySection>
+          <EmptySection>{t('genericLoading')}</EmptySection>
         ) : research.length === 0 ? (
-          <EmptySection>Nothing yet — check back soon.</EmptySection>
+          <EmptySection>{t('newsNothingYet')}</EmptySection>
         ) : (
           <NewsSection items={research} />
         )}

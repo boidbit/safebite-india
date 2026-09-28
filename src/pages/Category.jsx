@@ -13,14 +13,15 @@ import ProductImage from '../components/ProductImage';
 import LoadingScreen from '../components/LoadingScreen';
 import { randomLoadDelayMs, waitForMinimum } from '../utils/loadingPace';
 import { useLoaderFinish } from '../hooks/useLoaderFinish';
-
-const SORTS = [
-  { id: 'default', label: 'All' },
-  { id: 'high', label: 'Top rated' },
-  { id: 'low', label: 'Lowest rated' },
-];
+import { useLanguage } from '../contexts/LanguageContext';
 
 export default function Category() {
+  const { t, language } = useLanguage();
+  const SORTS = [
+    { id: 'default', label: t('categorySortAll') },
+    { id: 'high', label: t('categorySortHigh') },
+    { id: 'low', label: t('categorySortLow') },
+  ];
   const { id } = useParams();
   const navigate = useNavigate();
   const category = CATEGORIES.find((c) => c.id === id);
@@ -62,7 +63,7 @@ export default function Category() {
     const cached = await getCachedReport(item.lookupKey);
     if (!cached) {
       setOpening(false);
-      setError("Couldn't load that saved report. Please try another one.");
+      setError(t('categoryErrLoad'));
       return;
     }
     cached.lookupKey = item.lookupKey;
@@ -77,9 +78,9 @@ export default function Category() {
   if (!category) {
     return (
       <div className="page-in max-w-2xl mx-auto px-4 py-16 text-center">
-        <p className="text-slate-500 dark:text-slate-400">Unknown category.</p>
+        <p className="text-slate-500 dark:text-slate-400">{t('categoryUnknown')}</p>
         <button onClick={() => navigate('/')} className="tap-scale mt-4 text-green-600 dark:text-green-400 font-semibold">
-          ← Back to home
+          ← {t('categoryBackToHome')}
         </button>
       </div>
     );
@@ -91,7 +92,7 @@ export default function Category() {
         onClick={() => navigate(-1)}
         className="tap-scale inline-flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 mb-4 transition-colors"
       >
-        ← Back
+        ← {t('genericBack')}
       </button>
 
       {/* Full-width banner instead of a small icon + title row -- the
@@ -101,7 +102,7 @@ export default function Category() {
       <div className="relative rounded-2xl overflow-hidden mb-4" style={{ aspectRatio: '4.5 / 1' }}>
         <img src={category.image} alt="" className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent" />
-        <h1 className="absolute inset-x-4 bottom-2.5 text-lg font-bold text-white truncate">{category.label}</h1>
+        <h1 className="absolute inset-x-4 bottom-2.5 text-lg font-bold text-white truncate">{language === 'hi' && category.labelHi ? category.labelHi : category.label}</h1>
       </div>
 
       {!loading && results.length > 0 && (
@@ -120,11 +121,11 @@ export default function Category() {
         </div>
       )}
 
-      {loading && <p className="text-sm text-slate-400 dark:text-slate-500 px-1">Loading…</p>}
+      {loading && <p className="text-sm text-slate-400 dark:text-slate-500 px-1">{t('genericLoading')}</p>}
 
       {!loading && results.length === 0 && (
         <p className="text-sm text-slate-400 dark:text-slate-500 px-1">
-          Nothing scored in this category yet — check back as more products get added.
+          {t('categoryEmpty')}
         </p>
       )}
 
@@ -150,7 +151,7 @@ export default function Category() {
                   }}
                   className="tap-scale cursor-zoom-in"
                   role="button"
-                  aria-label="View larger image and rating"
+                  aria-label={t('categoryViewLarger')}
                 >
                   <ProductImage src={item.imageUrl} size={90} expandable={false} />
                 </div>
@@ -197,7 +198,7 @@ export default function Category() {
           </div>
           <button
             onClick={() => setPreview(null)}
-            aria-label="Close"
+            aria-label={t('ariaClose')}
             className="tap-scale absolute top-4 right-4 w-10 h-10 rounded-full bg-white/15 text-white text-2xl leading-none flex items-center justify-center backdrop-blur-sm"
           >
             ×

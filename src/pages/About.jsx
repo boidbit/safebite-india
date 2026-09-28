@@ -1,10 +1,21 @@
 // src/pages/About.jsx
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useLanguage } from '../contexts/LanguageContext';
+
+// A translated string can't carry JSX <strong> tags directly, so
+// **this** marks bold the same way the English copy used <strong> --
+// split on it and wrap the matched parts, in whichever language t()
+// returned.
+function renderBold(text) {
+  const parts = String(text).split(/\*\*(.+?)\*\*/g);
+  return parts.map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : part));
+}
 
 export default function About() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useLanguage();
 
   // React Router doesn't auto-scroll to #hash targets on navigation —
   // do it ourselves so links like "How is this score calculated?" from
@@ -15,54 +26,46 @@ export default function About() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [location.hash]);
 
+  const steps = [
+    { step: '1', title: t('aboutStep1Title'), desc: t('aboutStep1Desc') },
+    { step: '2', title: t('aboutStep2Title'), desc: t('aboutStep2Desc') },
+    { step: '3', title: t('aboutStep3Title'), desc: t('aboutStep3Desc') },
+    { step: '4', title: t('aboutStep4Title'), desc: t('aboutStep4Desc') },
+  ];
+
+  const tiers = [
+    { range: '85–100', color: 'bg-green-500', label: t('weekTierExcellent'), desc: t('aboutTierExcellentDesc') },
+    { range: '65–84', color: 'bg-green-400', label: t('weekTierGood'), desc: t('aboutTierGoodDesc') },
+    { range: '45–64', color: 'bg-yellow-400', label: t('weekTierModerate'), desc: t('aboutTierModerateDesc') },
+    { range: '25–44', color: 'bg-orange-400', label: t('weekTierPoor'), desc: t('aboutTierPoorDesc') },
+    { range: '0–24', color: 'bg-red-500', label: t('aboutTierAvoidLabel'), desc: t('aboutTierAvoidDesc') },
+  ];
+
   return (
     <div className="page-in max-w-2xl mx-auto px-4 py-8 pb-24">
       <div className="text-center mb-8">
         <div className="w-16 h-16 bg-green-600 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">
           🛡️
         </div>
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">About FoodGuard India</h1>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">{t('aboutTitle')}</h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm">
-          Food label transparency for every Indian consumer
+          {t('aboutTagline')}
         </p>
       </div>
 
       {/* Mission */}
       <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-2xl p-5 mb-4">
-        <h2 className="font-bold text-green-800 dark:text-green-300 mb-2">🎯 Our Mission</h2>
+        <h2 className="font-bold text-green-800 dark:text-green-300 mb-2">🎯 {t('aboutMissionTitle')}</h2>
         <p className="text-sm text-green-700 dark:text-green-400 leading-relaxed">
-          International apps like Yuka are built for Europe and America. They don't recognize Indian brands, 
-          don't understand FSSAI regulations, and flag ingredients that are actually fine under Indian standards — 
-          while missing ones that aren't. FoodGuard fixes that.
+          {t('aboutMissionBody')}
         </p>
       </div>
 
       {/* How it works */}
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 mb-4">
-        <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-4">⚙️ How It Works</h2>
+        <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-4">⚙️ {t('aboutHowItWorksTitle')}</h2>
         <div className="space-y-4">
-          {[
-            {
-              step: '1',
-              title: 'You upload, paste, or scan a barcode',
-              desc: 'Take a photo of the ingredient label, paste the ingredient text, or enter a barcode. FoodGuard accepts all three.'
-            },
-            {
-              step: '2',
-              title: 'Every ingredient is looked up',
-              desc: "Each ingredient is checked against FoodGuard's own growing database first — built from the official FSSAI additive regulations plus every ingredient ever researched before. Known ones are instant."
-            },
-            {
-              step: '3',
-              title: 'New ingredients get researched once',
-              desc: "Anything genuinely new gets researched by AI a single time, then saved permanently — so the next person (or your next scan) never pays that cost again."
-            },
-            {
-              step: '4',
-              title: 'Your score is calculated with plain math',
-              desc: 'No AI guesses your final score — it\'s computed with a transparent formula from each ingredient\'s data. See exactly how below.'
-            },
-          ].map((item) => (
+          {steps.map((item) => (
             <div key={item.step} className="flex gap-3">
               <div className="w-7 h-7 bg-green-600 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
                 {item.step}
@@ -78,66 +81,50 @@ export default function About() {
 
       {/* How the score is actually calculated */}
       <div id="how-score-works" className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 mb-4 scroll-mt-4">
-        <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-2">🧮 How Your Score Is Calculated</h2>
+        <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-2">🧮 {t('aboutScoreCalcTitle')}</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
-          Every product starts at a perfect <strong>100</strong>. Each ingredient then subtracts points based on how much it's actually worth worrying about — and, critically, <strong>how much of the product it actually is</strong>.
+          {renderBold(t('aboutScoreCalcIntro'))}
         </p>
 
         <div className="space-y-3 mb-5">
           <div className="flex gap-3">
             <span className="text-lg flex-shrink-0">1️⃣</span>
-            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-              <strong>Every ingredient gets a 0–40 penalty</strong> reflecting nutritional quality — not just whether it's legal. Being permitted doesn't mean penalty-free: refined flour (maida) is completely legal, but it's stripped of fibre and spikes blood sugar, so it still costs real points.
-            </p>
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{renderBold(t('aboutScoreRule1'))}</p>
           </div>
           <div className="flex gap-3">
             <span className="text-lg flex-shrink-0">2️⃣</span>
-            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-              <strong>Quantity matters.</strong> When a label states a percentage, that ingredient's penalty is scaled by how dominant it is — from 0.5× for a trace amount up to a full 1× if it's basically the whole product. A stated 3% gets far less weight than a stated 68%.
-            </p>
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{renderBold(t('aboutScoreRule2'))}</p>
           </div>
           <div className="flex gap-3">
             <span className="text-lg flex-shrink-0">3️⃣</span>
-            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-              <strong>One bad ingredient can't hide in a crowd.</strong> If anything is FSSAI-banned or genuinely harmful, the score is capped at 24 no matter how many safe ingredients surround it. A pile of safe ingredients should never be able to launder something dangerous into looking "moderate."
-            </p>
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{renderBold(t('aboutScoreRule3'))}</p>
           </div>
         </div>
 
         {/* Worked example */}
         <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
-          <p className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wide mb-2">📎 Real example — Parle-G Gluco Biscuits</p>
-          <p className="text-sm text-amber-900 leading-relaxed mb-3">
-            The label states <strong>Refined Wheat Flour (Maida) — 68%</strong>, its single largest ingredient. Maida carries a penalty of <strong>15</strong> (nutritionally poor, though legal). Here's its actual contribution to the score:
-          </p>
+          <p className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wide mb-2">📎 {t('aboutExampleLabel')}</p>
+          <p className="text-sm text-amber-900 leading-relaxed mb-3">{renderBold(t('aboutExampleIntro'))}</p>
           <div className="bg-white dark:bg-slate-800 rounded-lg p-3 font-mono text-xs text-slate-700 dark:text-slate-200 mb-3 overflow-x-auto">
             weight = 0.5 + (68 ÷ 100) × 0.5 = <strong>0.84</strong><br />
             contribution = 15 × 0.84 = <strong>12.6 points</strong>
           </div>
-          <p className="text-sm text-amber-900 leading-relaxed">
-            Add sugar, refined palm oil, and a few minor ingredients on top, and the total comes to about 47 points off — landing the product at a final score of <strong>53/100 — Moderate</strong>. If maida had been a trace 2% ingredient instead of 68%, its contribution would drop to under 1 point — the same substance, treated very differently, because quantity genuinely changes how much it matters.
-          </p>
+          <p className="text-sm text-amber-900 leading-relaxed">{renderBold(t('aboutExampleOutro'))}</p>
         </div>
 
         <p className="text-xs text-slate-400 dark:text-slate-500 mt-4 leading-relaxed">
-          Honest note: this is FoodGuard's own transparent formula, not a government or scientific standard — there isn't one universal agreed formula for this anywhere (Nutri-Score, NOVA, and Yuka all score differently from each other, too). We'd rather show you the exact math than hide behind a black box.
+          {t('aboutScoreCalcNote')}
         </p>
       </div>
 
       {/* Score guide */}
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 mb-4">
-        <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-1">📊 FoodGuard Score</h2>
+        <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-1">📊 {t('aboutScoreGuideTitle')}</h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-          A product assessment based on its ingredients, nutrition and available product information — not a medical judgment.
+          {t('aboutScoreGuideIntro')}
         </p>
         <div className="space-y-2">
-          {[
-            { range: '85–100', color: 'bg-green-500', label: 'Excellent', desc: 'Whole/minimally processed, nothing concerning' },
-            { range: '65–84', color: 'bg-green-400', label: 'Good', desc: 'Mostly natural, only minor deductions' },
-            { range: '45–64', color: 'bg-yellow-400', label: 'Moderate', desc: 'Real concerns present — also the ceiling whenever any ingredient is flagged "concerning," however small the penalty' },
-            { range: '25–44', color: 'bg-orange-400', label: 'Poor', desc: 'Multiple or significant concerns, heavily processed' },
-            { range: '0–24', color: 'bg-red-500', label: 'Avoid', desc: 'Always the result whenever a harmful/banned ingredient is present, regardless of anything else in the product' },
-          ].map((item) => (
+          {tiers.map((item) => (
             <div key={item.range} className="flex items-center gap-3">
               <div className={`w-10 h-6 ${item.color} rounded text-white text-xs font-bold flex items-center justify-center flex-shrink-0`}>
                 {item.range.split('–')[0]}
@@ -153,33 +140,33 @@ export default function About() {
 
       {/* Data sources */}
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 mb-4">
-        <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-3">📚 Data Sources</h2>
+        <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-3">📚 {t('aboutDataSourcesTitle')}</h2>
         <ul className="text-sm text-slate-600 dark:text-slate-300 space-y-2">
           <li className="flex items-start gap-2">
             <span>🇮🇳</span>
-            <span><strong>FSSAI</strong> — legal/permitted status for food additives comes directly from the official Food Safety and Standards (Food Products Standards and Food Additives) Regulations, not from AI guessing</span>
+            <span>{renderBold(t('aboutSourceFssai'))}</span>
           </li>
           <li className="flex items-start gap-2">
             <span>🇪🇺</span>
-            <span><strong>EU/EFSA</strong> — European Food Safety Authority guidelines for comparison</span>
+            <span>{renderBold(t('aboutSourceEu'))}</span>
           </li>
           <li className="flex items-start gap-2">
             <span>🤖</span>
-            <span><strong>AI research, done once per ingredient</strong> — health effects, category, and scoring are researched by AI a single time per ingredient and saved permanently, not regenerated per scan</span>
+            <span>{renderBold(t('aboutSourceAi'))}</span>
           </li>
         </ul>
       </div>
 
       {/* Disclaimer */}
       <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl p-4 mb-6 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-        <strong>⚠️ Disclaimer:</strong> FoodGuard is an independent, AI-powered informational tool and is not affiliated with FSSAI or any government body. Scores are for general awareness only. Always consult a healthcare professional for personal dietary advice. AI analysis may occasionally make errors.
+        <strong>⚠️ {t('aboutDisclaimerLabel')}</strong> {t('aboutDisclaimerBody')}
       </div>
 
       <button
         onClick={() => navigate('/')}
         className="tap-scale w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-colors"
       >
-        🔍 Start Scanning
+        🔍 {t('aboutStartScanning')}
       </button>
     </div>
   );

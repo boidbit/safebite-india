@@ -10,11 +10,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { searchCachedProducts, getCachedReport } from '../services/productCache';
 import ProductImage from '../components/ProductImage';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const MAX_COMPARE = 4;
 const MIN_COMPARE = 2;
 
 export default function CompareManage() {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [selected, setSelected] = useState([]); // full report objects, up to MAX_COMPARE
   const [showSearch, setShowSearch] = useState(false);
@@ -49,7 +51,7 @@ export default function CompareManage() {
     setAddingKey(lookupKey);
     try {
       const full = await getCachedReport(lookupKey);
-      if (!full) { setError("Couldn't load that product -- try another one."); return; }
+      if (!full) { setError(t('compareManageErrLoad')); return; }
       setSelected((prev) => (prev.some((p) => p.lookupKey === lookupKey) ? prev : [...prev, { ...full, lookupKey }].slice(0, MAX_COMPARE)));
       setQuery('');
       setResults([]);
@@ -70,17 +72,17 @@ export default function CompareManage() {
           <button onClick={() => navigate(-1)} className="tap-scale inline-flex items-center gap-1.5 text-[15px]" style={{ color: 'var(--tint)' }}>
             ←
           </button>
-          <h1 className="text-2xl font-bold mt-1" style={{ color: 'var(--label-1)' }}>Compare Products</h1>
+          <h1 className="text-2xl font-bold mt-1" style={{ color: 'var(--label-1)' }}>{t('compareManageTitle')}</h1>
         </div>
         {selected.length > 0 && (
           <button onClick={() => setSelected([])} className="tap-scale text-xs text-red-400 hover:text-red-600 font-medium mt-2">
-            Clear all
+            {t('compareManageClearAll')}
           </button>
         )}
       </div>
 
       <p className="text-sm mt-2 mb-5" style={{ color: 'var(--label-3)' }}>
-        {selected.length} product{selected.length === 1 ? '' : 's'} added (Add up to {MAX_COMPARE})
+        {t(selected.length === 1 ? 'compareManageAdded' : 'compareManageAddedPlural', { count: selected.length, max: MAX_COMPARE })}
       </p>
 
       <div className="space-y-2.5">
@@ -93,7 +95,7 @@ export default function CompareManage() {
             </div>
             <button
               onClick={() => removeProduct(p.lookupKey)}
-              aria-label="Remove"
+              aria-label={t('ariaRemove')}
               className="tap-scale w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
               style={{ background: 'var(--fill)', color: 'var(--label-2)' }}
             >
@@ -111,8 +113,8 @@ export default function CompareManage() {
                 style={{ border: '2px dashed var(--separator)', color: 'var(--tint)' }}
               >
                 <span className="text-[18px] leading-none">+</span>
-                Add another product
-                <span style={{ color: 'var(--label-3)', fontWeight: 500 }}>(Up to {MAX_COMPARE} products)</span>
+                {t('compareManageAddAnother')}
+                <span style={{ color: 'var(--label-3)', fontWeight: 500 }}>{t('compareManageUpTo', { max: MAX_COMPARE })}</span>
               </button>
             ) : (
               <div className="rounded-[14px] p-3" style={{ background: 'var(--bg-card)' }}>
@@ -121,7 +123,7 @@ export default function CompareManage() {
                     autoFocus
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search a product to add..."
+                    placeholder={t('compareManageSearchPlaceholder')}
                     className="admin-field flex-1 px-3 py-2.5 rounded-[10px] text-[14px]"
                   />
                   <button
@@ -129,14 +131,14 @@ export default function CompareManage() {
                     className="tap-scale text-[13px] font-semibold flex-shrink-0"
                     style={{ color: 'var(--label-3)' }}
                   >
-                    Cancel
+                    {t('compareManageCancel')}
                   </button>
                 </div>
 
-                {searching && <p className="text-[12px] mt-2" style={{ color: 'var(--label-3)' }}>Searching…</p>}
+                {searching && <p className="text-[12px] mt-2" style={{ color: 'var(--label-3)' }}>{t('compareManageSearching')}</p>}
 
                 {!searching && query.trim().length >= 2 && results.length === 0 && (
-                  <p className="text-[12px] mt-2" style={{ color: 'var(--label-3)' }}>No matching products found.</p>
+                  <p className="text-[12px] mt-2" style={{ color: 'var(--label-3)' }}>{t('compareManageNoResults')}</p>
                 )}
 
                 {results.length > 0 && (
@@ -154,7 +156,7 @@ export default function CompareManage() {
                           {r.brand && <p className="text-[11px]" style={{ color: 'var(--label-3)' }}>{r.brand}</p>}
                         </div>
                         <span className="text-[12px] font-bold flex-shrink-0" style={{ color: 'var(--tint)' }}>
-                          {addingKey === r.lookupKey ? '…' : '+ Add'}
+                          {addingKey === r.lookupKey ? '…' : t('compareManageAdd')}
                         </span>
                       </button>
                     ))}
@@ -176,13 +178,13 @@ export default function CompareManage() {
         className="tap-scale w-full mt-6 py-3.5 rounded-2xl text-[15px] font-semibold text-white shadow-lg transition-opacity"
         style={{ background: '#16a34a', opacity: selected.length < MIN_COMPARE ? 0.5 : 1 }}
       >
-        ⚖️ {selected.length < MIN_COMPARE ? `Add at least ${MIN_COMPARE} to compare` : 'Compare Products'}
+        ⚖️ {selected.length < MIN_COMPARE ? t('compareManageAtLeast', { min: MIN_COMPARE }) : t('compareManageTitle')}
       </button>
 
       <div className="mt-4 rounded-[14px] p-3.5 flex items-start gap-2.5" style={{ background: 'var(--tint-bg)' }}>
         <span className="text-[16px] leading-none flex-shrink-0">💡</span>
         <p className="text-[12px] leading-relaxed" style={{ color: 'var(--label-2)' }}>
-          <span className="font-semibold">Tip:</span> Compare similar products to make a better choice. Nutrition values are shown per 100g for fair comparison.
+          <span className="font-semibold">{t('compareManageTipLabel')}</span> {t('compareManageTip')}
         </p>
       </div>
     </div>

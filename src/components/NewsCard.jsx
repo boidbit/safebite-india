@@ -2,6 +2,8 @@
 // One news/research item card -- shared between the News page and the
 // Result page's "Related reading" section, so both look and behave
 // identically rather than maintaining two near-copies.
+import { useLanguage } from '../contexts/LanguageContext';
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
   return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -11,6 +13,7 @@ function formatDate(dateStr) {
 // research -- readers should immediately know which kind of source
 // they're looking at, not have to infer it from the wording alone.
 export function TypeBadge({ type }) {
+  const { t } = useLanguage();
   const isResearch = type === 'research';
   return (
     <span
@@ -21,12 +24,13 @@ export function TypeBadge({ type }) {
           : { background: 'var(--tint-bg)', color: 'var(--tint)' }
       }
     >
-      {isResearch ? 'Research' : 'News'}
+      {isResearch ? t('newsCardResearch') : t('newsCardNews')}
     </span>
   );
 }
 
 export default function NewsCard({ item }) {
+  const { t } = useLanguage();
   const isResearch = item.type === 'research';
   return (
     <a
@@ -46,7 +50,7 @@ export default function NewsCard({ item }) {
       )}
       <p className="text-xs text-slate-400 dark:text-slate-500">
         {[item.source, formatDate(item.published_at)].filter(Boolean).join(' · ')}
-        {item.summary && (isResearch ? ' · Read study ›' : ' · Read original ›')}
+        {item.summary && ` · ${isResearch ? t('newsReadStudy') : t('newsReadOriginal')}`}
       </p>
     </a>
   );
