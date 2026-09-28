@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AdminLayout from './AdminLayout';
-import { adminListReviewQueue, adminReviewCounts, adminSetReviewStatus } from '../../services/adminReviewRepo';
+import { adminListReviewQueue, adminReviewCounts, adminSetReviewStatus, REVIEW_TABS, DEFAULT_REVIEW_TAB } from '../../services/adminReviewRepo';
 import { getScoreColor } from '../../utils/storage';
 import { CATEGORY_KEYWORDS } from '../../data/categoryKeywords';
 import { FOOD_TYPES } from '../../services/foodType';
@@ -17,9 +17,12 @@ const PAGE_SIZE = 25;
 const FILTER_DEBOUNCE_MS = 400;
 const SOURCES = ['blinkit', 'barcode', 'search', 'image', 'text'];
 
+// Newly added products are split by where they came from -- scraping
+// vs someone's scan -- and never mixed with the products that were
+// already live before review existed.
 const STATUS_TABS = [
-  { id: 'unreviewed', label: 'Not reviewed' },
-  { id: 'pending', label: 'New (hidden)' },
+  { id: 'newScraped', label: 'New from scraping' },
+  { id: 'newScans', label: 'New from user scans' },
   { id: 'live', label: 'Live, not reviewed' },
   { id: 'approved', label: 'Approved' },
   { id: 'rejected', label: 'Rejected' },
@@ -42,7 +45,7 @@ const SORT_OPTIONS = [
 ];
 
 const INITIAL_FILTERS = {
-  status: 'unreviewed', search: '', brand: '', foodType: '', categoryId: '', source: '',
+  status: DEFAULT_REVIEW_TAB, search: '', brand: '', foodType: '', categoryId: '', source: '',
   scoreMin: '', scoreMax: '', hasImage: '', hasNutrition: '', problemsOnly: false,
   addedWithinDays: '', sort: 'newest',
 };
@@ -54,7 +57,10 @@ function loadStored() {
   try {
     const parsed = JSON.parse(localStorage.getItem(FILTERS_STORAGE_KEY) || 'null');
     if (!parsed) return null;
-    return { filters: { ...INITIAL_FILTERS, ...parsed.filters }, page: Number(parsed.page) || 0 };
+    const filters = { ...INITIAL_FILTERS, ...parsed.filters };
+    // A tab saved before the tabs were split ('unreviewed'/'pending') no longer exists.
+    if (!REVIEW_TABS[filters.status]) filters.status = DEFAULT_REVIEW_TAB;
+    return { filters, page: Number(parsed.page) || 0 };
   } catch {
     return null;
   }

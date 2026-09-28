@@ -17,15 +17,21 @@ function requireSupabase() {
 
 export const REVIEW_STATUSES = ['pending', 'live', 'approved', 'rejected'];
 
-// What a status filter value means as a set of review_status values.
-const STATUS_FILTER = {
-  unreviewed: ['pending', 'live'],
-  pending: ['pending'],
-  live: ['live'],
-  approved: ['approved'],
-  rejected: ['rejected'],
-  all: null,
+// The scraper's source -- newly scraped products get their own list,
+// apart from new products that came from someone's scan.
+const SCRAPED_SOURCE = 'blinkit';
+
+// What each review tab means: which review_status values, and whether
+// it's limited to (or excludes) scraped products.
+export const REVIEW_TABS = {
+  newScraped: { statuses: ['pending'], source: SCRAPED_SOURCE },
+  newScans: { statuses: ['pending'], notSource: SCRAPED_SOURCE },
+  live: { statuses: ['live'] },
+  approved: { statuses: ['approved'] },
+  rejected: { statuses: ['rejected'] },
+  all: { statuses: null },
 };
+export const DEFAULT_REVIEW_TAB = 'newScraped';
 
 const SORTS = {
   newest: { column: 'created_at', ascending: false },
@@ -49,7 +55,7 @@ async function lookupKeysWithOpenProblems() {
 
 /**
  * @param {object} opts
- * @param {'unreviewed'|'pending'|'live'|'approved'|'rejected'|'all'} [opts.status]
+ * @param {keyof REVIEW_TABS} [opts.status] - which review tab
  * @param {string} [opts.search] - product name contains
  * @param {string} [opts.brand] - brand contains
  * @param {string} [opts.foodType] - exact report.foodType
@@ -64,7 +70,7 @@ async function lookupKeysWithOpenProblems() {
  * @param {keyof SORTS} [opts.sort]
  */
 export async function adminListReviewQueue({
-  status = 'unreviewed',
+  status = DEFAULT_REVIEW_TAB,
   search = '',
   brand = '',
   foodType = '',
@@ -89,8 +95,10 @@ export async function adminListReviewQueue({
     .order('id', { ascending: true }) // stable paging when the sort column ties
     .range(offset, offset + limit - 1);
 
-  const statuses = STATUS_FILTER[status];
-  if (statuses) query = query.in('review_status', statuses);
+  const tab = REVIEW_TABS[status] || REVIEW_TABS[DEFAULT_REVIEW_TAB];
+  if (tab.statuses) query = query.in('review_status', tab.statuses);
+  if (tab.source) query = query.eq('source', tab.source);
+  if (tab.notSource) query = query.neq('source', tab.notSource);
 
   if (search.trim()) query = query.ilike('product_name', `%${search.trim()}%`);
   if (brand.trim()) query = query.ilike('report->>brand', `%${brand.trim()}%`);
@@ -120,19 +128,23 @@ export async function adminListReviewQueue({
   return { rows: data || [], count: count || 0 };
 }
 
-/** How many products sit in each review status -- for the tab counts and the nav badge. */
+/** How many products sit in each review tab -- for the tab counts. */
 export async function adminReviewCounts() {
   requireSupabase();
-  const results = await Promise.all(
-    REVIEW_STATUSES.map((s) => supabase.from('product_reports').select('*', { count: 'exact', head: true }).eq('review_status', s))
-  );
+  const ids = Object.keys(REVIEW_TABS);
+  const results = await Promise.all(ids.map((id) => {
+    const tab = REVIEW_TABS[id];
+    let q = supabase.from('product_reports').select('*', { count: 'exact', head: true });
+    if (tab.statuses) q = q.in('review_status', tab.statuses);
+    if (tab.source) q = q.eq('source', tab.source);
+    if (tab.notSource) q = q.neq('source', tab.notSource);
+    return q;
+  }));
   const counts = {};
-  REVIEW_STATUSES.forEach((s, i) => {
+  ids.forEach((id, i) => {
     if (results[i].error) throw new Error(results[i].error.message);
-    counts[s] = results[i].count || 0;
+    counts[id] = results[i].count || 0;
   });
-  counts.unreviewed = counts.pending + counts.live;
-  counts.all = counts.unreviewed + counts.approved + counts.rejected;
   return counts;
 }
 
