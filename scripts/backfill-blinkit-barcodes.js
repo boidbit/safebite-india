@@ -34,6 +34,7 @@ import { blinkitLookupKey } from '../src/services/blinkitProductsRepo.js';
 const PAGE_GAP_MS = 1500; // same politeness gap as the scraper
 const SAVE_EVERY_PAGES = 10;
 const RUN_ROW = '__run__';
+const NETWORK_RETRIES = 5;
 
 const args = process.argv.slice(2);
 const flag = (name, fallback = null) => {
@@ -108,7 +109,16 @@ async function main() {
     const cursor = progress[sitemap.category] || {};
     if (cursor.exhausted) continue;
 
-    const urls = await productUrlsFrom(sitemap.url);
+    // A dropped connection used to skip every remaining category in a few
+    // seconds and end the run -- wait it out instead.
+    let urls = null;
+    for (let attempt = 1; attempt <= NETWORK_RETRIES && urls === null; attempt++) {
+      urls = await productUrlsFrom(sitemap.url);
+      if (urls === null && attempt < NETWORK_RETRIES) {
+        console.warn(`   couldn't load ${sitemap.category} (network?) -- retrying in 1 min (${attempt}/${NETWORK_RETRIES})`);
+        await sleep(60_000);
+      }
+    }
     if (urls === null) continue; // a failed fetch isn't "finished"
     const row = {
       category: sitemap.category,
