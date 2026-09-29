@@ -63,6 +63,19 @@ export async function adminApproveBarcodeLink({ barcode, lookupKey, productName 
   logActivity({ action: 'approve_barcode_link', targetType: 'barcode', targetId: barcode, productName, details: { lookupKey } });
 }
 
+/** The barcode approved for this product in Barcode matches, or null. */
+export async function adminApprovedBarcodeFor(lookupKey) {
+  if (!isSupabaseConfigured || !lookupKey) return null;
+  const { data } = await supabase
+    .from('barcode_links')
+    .select('barcode')
+    .eq('lookup_key', lookupKey)
+    .eq('status', 'approved')
+    .order('reviewed_at', { ascending: false })
+    .limit(1);
+  return data?.[0]?.barcode || null;
+}
+
 const chunks = (list, size) => Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, i * size + size));
 
 /**

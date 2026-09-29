@@ -18,6 +18,7 @@ import { analyzeText } from '../../services/analyzeText';
 import { buildReport } from '../../services/scoringEngine';
 import { finalizeScore } from '../../services/finalizeScore';
 import { adminSetReviewStatus } from '../../services/adminReviewRepo';
+import { adminApprovedBarcodeFor } from '../../services/adminBarcodeLinksRepo';
 import { StatusPill } from './AdminReviewList';
 import { extractIngredientsFromImage } from '../../services/geminiService';
 import { lookupBarcode } from '../../services/openFoodFacts';
@@ -312,6 +313,10 @@ export default function AdminProductForm({ copyMode = false }) {
   const [existingSource, setExistingSource] = useState(null);
   // The row's identity as loaded -- an edit must keep it (see handleSave).
   const [existingLookupKey, setExistingLookupKey] = useState(null);
+  // A barcode approved for this product in Barcode matches (a Blinkit
+  // product's barcode lives there, not in its lookup key). Shown in the
+  // barcode field; saving with it unchanged keeps the key as it is.
+  const [linkedBarcode, setLinkedBarcode] = useState(null);
   // The name as loaded, for edit mode only -- checkNameDuplicate skips
   // its query entirely while the field still matches this, so simply
   // blurring an untouched name field never flags a product against
@@ -394,6 +399,13 @@ export default function AdminProductForm({ copyMode = false }) {
           setPackSize(r.packSize || '');
           setExistingSource(row.source || null);
           setExistingLookupKey(row.lookup_key || null);
+          if (row.lookup_key && !row.lookup_key.startsWith('barcode:')) {
+            adminApprovedBarcodeFor(row.lookup_key).then((code) => {
+              if (!code) return;
+              setLinkedBarcode(code);
+              setBarcode((current) => current || code);
+            }, () => {});
+          }
         }
         setIngredientsText(row.ingredients_text || '');
         if (!copyMode) setReviewStatus(row.review_status || null);
@@ -753,7 +765,9 @@ export default function AdminProductForm({ copyMode = false }) {
       // a blinkit:/text: key into a different one) left the original key
       // unowned, so the next scan/refresh/scrape of the very same pack
       // saved a second row for it -- "editing creates a new product".
-      const typedBarcode = barcode.trim();
+      // The approved Barcode-matches barcode shown in the field isn't a
+      // newly typed one -- keeping it must not turn the key into barcode:.
+      const typedBarcode = barcode.trim() === linkedBarcode ? '' : barcode.trim();
       const keepKey = isEdit && existingLookupKey && !existingLookupKey.startsWith('barcode:') ? existingLookupKey : null;
       const lookupKey = typedBarcode ? barcodeKey(typedBarcode) : keepKey || textKey(ingredientsText.trim());
       // 'blinkit' is a real provenance marker (this row came from the
@@ -910,6 +924,9 @@ export default function AdminProductForm({ copyMode = false }) {
                   Barcode (optional) {fetchingBarcode && <span style={{ color: 'var(--tint)' }}>— checking Open Food Facts…</span>}
                 </label>
                 <input value={barcode} onChange={(e) => setBarcode(e.target.value)} onBlur={handleBarcodeBlur} placeholder="Type or scan — auto-fills from Open Food Facts if known" className={FIELD} />
+                {linkedBarcode && barcode.trim() === linkedBarcode && (
+                  <p className="text-[11.5px] mt-1" style={{ color: 'var(--v-good)' }}>✓ Approved barcode match — scanning it opens this product</p>
+                )}
               </div>
               <button
                 type="button"
