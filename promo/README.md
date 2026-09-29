@@ -1,4 +1,14 @@
-# FoodGuard India — 25s promo video
+# FoodGuard India — promo videos
+
+## v2: 50s "The Label Is Lying" (no voice-over)
+
+Graphics-first story in `v2/`: shouting shelf → "*Conditions apply" → fine print → "Until now." →
+scan + X-ray → sugar jar (637 teaspoons/year) → verdict gauge → family allergy alert → compare scale →
+real app + CTA. Only one real screenshot is used (home screen, near the end). No voice: kinetic text,
+synthesized score and sound design (`v2/audio.py`). Build with `v2/build.sh` →
+`out/foodguard-promo-50s.mp4`. Edit copy/timing in `v2/index.html` (`HL` = headlines, `CAP` = captions).
+
+## v1: 25s screenshot walkthrough
 
 Vertical (1080x1920) promo built from real app screenshots. The whole video is one HTML page
 (`index.html`) that draws every frame from a single time value `render(t)`, so it is deterministic

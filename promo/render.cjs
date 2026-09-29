@@ -7,6 +7,7 @@ const path = require('path');
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 
 const ROOT = __dirname + '/..';           // repo root so ../assets/* resolves
+const PAGE = process.env.PAGE || 'promo/index.html';   // e.g. promo/v2/index.html
 const FPS = 30;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.jpg': 'image/jpeg',
   '.woff2': 'font/woff2', '.css': 'text/css' };
@@ -31,7 +32,7 @@ function serve() {
   const port = srv.address().port;
   const browser = await chromium.launch({ args: ['--font-render-hinting=none'] });
   const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
-  await page.goto(`http://127.0.0.1:${port}/promo/index.html`);
+  await page.goto(`http://127.0.0.1:${port}/${PAGE}`);
   await page.waitForFunction('window.READY===true', null, { timeout: 60000 });
 
   const shot = async (t, file) => {

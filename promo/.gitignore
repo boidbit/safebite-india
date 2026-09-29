@@ -2,3 +2,4 @@ node_modules/
 src/
 out/*
 !out/foodguard-promo.mp4
+!out/foodguard-promo-50s.mp4
