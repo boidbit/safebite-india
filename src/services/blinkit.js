@@ -17,6 +17,7 @@ import { chromium } from 'playwright';
 import { isGeminiAvailable, callGemini } from './geminiService.js';
 import { isBundleListing } from './bundleListing.js';
 import { optimizeAndUploadBlinkitImage } from './blinkitImageOptimizer.js';
+import { isValidGtin, readBarcodesFromPhoto, confirmBarcode } from './barcodeReader.js';
 
 const SITEMAP_INDEX = 'https://blinkit.com/sitemap.xml';
 // A real browser UA, not a self-identifying bot string. Manual testing
@@ -256,13 +257,22 @@ export function extractImageGallery(html) {
   );
 }
 
+// Two misreads this prompt guards against, both found comparing photo reads
+// with Blinkit's own text on 47 products: a front-of-pack claim ("Ragi,
+// Natural Cocoa, Sugar") read as the ingredients -- hiding the palm oil and
+// hydrogenated fat in the real list -- and one photo listing four flavours'
+// ingredients, all merged into one.
 const IMAGE_AI_PROMPT = `You are reading one photo from an Indian packaged food product's listing.
 
-Rules:
-- If THIS image shows a printed ingredients list, transcribe it exactly as written.
-- Do NOT invent, infer, complete or guess ingredients.
-- If no ingredients list is visible in this image (e.g. it's a front-of-pack marketing shot, a nutrition table only, or a lifestyle photo), reply with exactly: NONE
-- Do not add commentary, labels or markdown. Just the ingredients text, or NONE.`;
+Return ONLY JSON: {"ingredients": string or null, "barcode": string or null}
+
+ingredients:
+- Only the printed list that follows an "Ingredients" heading (usually on the back of the pack). Transcribe it exactly as written, keeping percentages, brackets and INS codes.
+- Front-of-pack claims and marketing text ("made with ragi", "real mango", "no maida") are NOT the ingredients list -- use null for those.
+- If the photo shows lists for several flavours or variants, give only the list for the product named below; if you can't tell which one it is, use null.
+- Do NOT invent, infer, complete or guess ingredients. null if no ingredients list is visible (front shot, nutrition table only, lifestyle photo).
+
+barcode: the digits printed under the barcode, digits only; null if there's no barcode or you can't read every digit.`;
 
 // Checked in order, stopping at the first photo that actually shows an
 // ingredients panel -- most galleries put the back-of-pack shot within
@@ -280,11 +290,11 @@ const IMAGE_REQUEST_GAP_MS = 4200; // free-tier vision limit is 15 req/min
  * ingredients list on the pack photo, never in any text attribute — this
  * is the only way to recover those.
  */
-export async function extractIngredientsFromImages(productName, imageUrls) {
+export async function extractIngredientsFromImages(productName, imageUrls, { photo = fetchImageBuffer, barcodeReads = [] } = {}) {
   if (!isGeminiAvailable || imageUrls.length === 0) return null;
 
-  for (const url of imageUrls.slice(0, MAX_GALLERY_IMAGES_TRIED)) {
-    const buf = await fetchImageBuffer(url);
+  for (const [i, url] of imageUrls.slice(0, MAX_GALLERY_IMAGES_TRIED).entries()) {
+    const buf = await photo(url);
     await sleep(IMAGE_REQUEST_GAP_MS);
     if (!buf) continue;
 
@@ -298,24 +308,47 @@ export async function extractIngredientsFromImages(productName, imageUrls) {
       generationConfig: {
         temperature: 0,
         topK: 1,
-        maxOutputTokens: 500,
+        maxOutputTokens: 1200,
+        responseMimeType: 'application/json',
         thinkingConfig: { thinkingLevel: 'low' },
       },
     };
 
     try {
       const { text, finishReason } = await callGemini(body);
-      if (finishReason !== 'STOP') continue;
-      const trimmed = text?.trim();
-      if (!trimmed || /^NONE\b/i.test(trimmed) || trimmed.length < 12) continue;
-      return trimmed;
+      if (finishReason !== 'STOP' || !text) continue;
+      const read = JSON.parse(text);
+      // Gemini's barcode is one more read for confirmBarcode -- never
+      // enough on its own.
+      const digits = String(read?.barcode || '').replace(/\D/g, '');
+      if (isValidGtin(digits)) barcodeReads.push({ code: digits, read: `${i + 1}:gemini` });
+      const ingredients = typeof read?.ingredients === 'string' ? read.ingredients.trim() : '';
+      if (ingredients.length >= 12) return ingredients;
     } catch {
-      // This one photo's call failed (quota/transient) — try the next
-      // photo rather than giving up on the whole product.
+      // This one photo's call failed (quota/transient/bad JSON) — try the
+      // next photo rather than giving up on the whole product.
       continue;
     }
   }
   return null;
+}
+
+// Photos checked for a barcode -- in testing barcodes turned up as late as
+// the 13th photo of a 13-photo gallery.
+const MAX_GALLERY_IMAGES_FOR_BARCODE = 14;
+
+/**
+ * Reads the product's barcode off its gallery photos with ZXing (no AI),
+ * stopping as soon as one is confirmed (read the same twice -- see
+ * barcodeReader.js). `barcodeReads` may already hold Gemini's reads.
+ */
+async function barcodeFromGallery(imageUrls, photo, barcodeReads) {
+  for (const [i, url] of imageUrls.slice(0, MAX_GALLERY_IMAGES_FOR_BARCODE).entries()) {
+    if (confirmBarcode(barcodeReads)) break;
+    const buf = await photo(url);
+    if (buf) barcodeReads.push(...await readBarcodesFromPhoto(buf, i + 1));
+  }
+  return confirmBarcode(barcodeReads);
 }
 
 /**
@@ -379,7 +412,7 @@ export function isComboListing(productName) {
   return isBundleListing(productName);
 }
 
-export async function scrapeProduct(url, category, { useAI = false, useImageFallback = false } = {}) {
+export async function scrapeProduct(url, category, { useAI = false, useImageFallback = false, readBarcode = false } = {}) {
   const html = await fetchText(url);
   if (!html) return { error: 'fetch failed' };
 
@@ -404,9 +437,18 @@ export async function scrapeProduct(url, category, { useAI = false, useImageFall
   // ingredients list as text anywhere on the page -- only on a gallery
   // photo. Tried last since it costs a vision call per photo checked,
   // the most expensive of the three routes.
+  // Each gallery photo is downloaded once, then shared by the ingredients
+  // read and the barcode read.
+  const images = extractImageGallery(html);
+  const photos = new Map();
+  const photo = (imageUrl) => {
+    if (!photos.has(imageUrl)) photos.set(imageUrl, fetchImageBuffer(imageUrl));
+    return photos.get(imageUrl);
+  };
+  const barcodeReads = [];
+
   if (!ingredients && useImageFallback) {
-    const images = extractImageGallery(html);
-    ingredients = await extractIngredientsFromImages(productName, images);
+    ingredients = await extractIngredientsFromImages(productName, images, { photo, barcodeReads });
     viaImage = Boolean(ingredients);
   }
 
@@ -415,6 +457,8 @@ export async function scrapeProduct(url, category, { useAI = false, useImageFall
   if (!ingredients || ingredients.length < 12) {
     return { error: 'no ingredients listed', productName };
   }
+
+  const barcode = readBarcode ? await barcodeFromGallery(images, photo, barcodeReads) : null;
 
   const nutrition = {};
   for (const field of NUTRITION_FIELDS) {
@@ -466,6 +510,7 @@ export async function scrapeProduct(url, category, { useAI = false, useImageFall
   return {
     viaAI,
     viaImage,
+    barcode,
     product: {
       product_name: productName,
       brand,

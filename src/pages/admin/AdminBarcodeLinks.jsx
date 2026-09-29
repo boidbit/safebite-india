@@ -13,7 +13,7 @@ const TABS = [
   { id: 'rejected', label: 'Rejected' },
 ];
 
-const SOURCE_LABEL = { name_search: 'typed name', photo: 'pack photo', off_name: 'Open Food Facts name' };
+const SOURCE_LABEL = { name_search: 'typed name', photo: 'pack photo', off_name: 'Open Food Facts name', blinkit_photo: 'Blinkit photo (barcode read twice)' };
 
 export default function AdminBarcodeLinks() {
   const [status, setStatus] = useState('pending');

@@ -33,6 +33,7 @@
     "playwright": "^1.63.0",
     "postcss": "^8.5.28",
     "tailwindcss": "^3.4.19",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "zxing-wasm": "^2.2.4"
   }
 }

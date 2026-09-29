@@ -25,12 +25,19 @@
 // publish it that way. Costs one vision call per photo checked, so
 // it's opt-in.
 //
+// Barcodes: Blinkit pages carry none, so each saved product's gallery
+// photos are also read with ZXing (src/services/barcodeReader.js -- no AI;
+// a code only counts once read the same twice). A confirmed code is saved
+// as a PENDING barcode link for an admin to approve (Admin > Barcode
+// matches), never straight onto the product. --no-barcodes skips this.
+//
 // Usage:
 //   node scripts/scrape-blinkit.js --list
 //   node scripts/scrape-blinkit.js --all                          (per-category quota comes from FOOD_GROUP_QUOTA, not a flag)
 //   node scripts/scrape-blinkit.js --category soft-drinks --limit 15
 //   node scripts/scrape-blinkit.js --all --dry-run --no-ai
 //   node scripts/scrape-blinkit.js --all --no-ai --image-fallback
+//   node scripts/scrape-blinkit.js --category soft-drinks --limit 15 --no-barcodes
 //
 // --all mode gets its per-category count from src/services/blinkit.js's
 // FOOD_GROUP_QUOTA instead of --per-category now, so higher-priority
@@ -48,6 +55,7 @@ import {
   scrapeProduct,
   sleep,
 } from '../src/services/blinkit.js';
+import { blinkitLookupKey } from '../src/services/blinkitProductsRepo.js';
 
 const REQUEST_GAP_MS = 1500; // be polite; this is someone else's server
 
@@ -65,6 +73,7 @@ const PER_CATEGORY = parseInt(flag('per-category', '8'), 10);
 const DRY_RUN = has('dry-run');
 const USE_AI = !has('no-ai');
 const USE_IMAGE_FALLBACK = has('image-fallback');
+const READ_BARCODES = !has('no-barcodes');
 
 function client() {
   const url = process.env.VITE_SUPABASE_URL;
@@ -111,6 +120,26 @@ async function save(products) {
     return false;
   }
   return true;
+}
+
+// barcode_links rows the public key may insert (pending only -- see
+// supabase/barcode_links_schema.sql). One scraper "device", so a re-scrape
+// of the same product doesn't add a second confirmation of its own link.
+async function saveBarcodeLinks(found) {
+  const supabase = client();
+  if (!supabase || found.length === 0) return;
+  const rows = found.map(({ barcode, product }) => ({
+    barcode,
+    lookup_key: blinkitLookupKey(product.source, product.brand, product.product_name),
+    product_name: product.product_name,
+    device_id: 'blinkit-scraper',
+    source: 'blinkit_photo',
+    status: 'pending',
+  }));
+  const { error } = await supabase
+    .from('barcode_links')
+    .upsert(rows, { onConflict: 'barcode,lookup_key,device_id', ignoreDuplicates: true });
+  if (error) console.warn(`Could not save barcode links: ${error.message}`);
 }
 
 async function main() {
@@ -168,12 +197,14 @@ async function main() {
     console.log(`Matched ${targets.length} category/categories for "${CATEGORY}".`);
   }
   console.log(USE_AI ? 'AI text fallback: on' : 'AI text fallback: off');
-  console.log(USE_IMAGE_FALLBACK ? 'AI image fallback: on\n' : 'AI image fallback: off\n');
+  console.log(USE_IMAGE_FALLBACK ? 'AI image fallback: on' : 'AI image fallback: off');
+  console.log(READ_BARCODES ? 'Barcodes from photos: on\n' : 'Barcodes from photos: off\n');
 
   let totalSaved = 0;
   let skipped = 0;
   let aiRescued = 0;
   let imageRescued = 0;
+  let barcodesFound = 0;
   let categoriesDone = 0;
   let categoriesExhausted = 0;
   let anySaveFailed = false;
@@ -211,9 +242,10 @@ async function main() {
 
     console.log(`${sitemap.group}/${sitemap.category}  [${startIndex}-${startIndex + urls.length} of ${all.length}]`);
     const collectedHere = [];
+    const barcodesHere = [];
 
     for (const url of urls) {
-      const result = await scrapeProduct(url, sitemap.category, { useAI: USE_AI, useImageFallback: USE_IMAGE_FALLBACK });
+      const result = await scrapeProduct(url, sitemap.category, { useAI: USE_AI, useImageFallback: USE_IMAGE_FALLBACK, readBarcode: READ_BARCODES });
       await sleep(REQUEST_GAP_MS);
 
       if (result.error) {
@@ -225,8 +257,11 @@ async function main() {
       if (result.viaAI) aiRescued++;
       if (result.viaImage) imageRescued++;
       const p = result.product;
+      if (result.barcode && !barcodesHere.some((b) => b.barcode === result.barcode && b.product.product_name === p.product_name)) {
+        barcodesHere.push({ barcode: result.barcode, product: p });
+      }
       const tag = result.viaImage ? 'img' : result.viaAI ? 'ai ' : 'ok ';
-      console.log(`   ${tag} ${p.brand || '?'} — ${p.product_name}`);
+      console.log(`   ${tag} ${p.brand || '?'} — ${p.product_name}${result.barcode ? `  [barcode ${result.barcode}]` : ''}`);
       console.log(`        ${p.ingredients_text.replace(/\s+/g, ' ').slice(0, 100)}…`);
     }
 
@@ -239,6 +274,7 @@ async function main() {
 
     if (DRY_RUN) {
       totalSaved += dedupedHere.length;
+      barcodesFound += barcodesHere.length;
       continue;
     }
 
@@ -262,6 +298,9 @@ async function main() {
         continue;
       }
       totalSaved += dedupedHere.length;
+      // Only once the products themselves are stored.
+      await saveBarcodeLinks(barcodesHere);
+      barcodesFound += barcodesHere.length;
     }
 
     if (SCRAPE_ALL) {
@@ -276,6 +315,7 @@ async function main() {
   }
 
   console.log(`\n${totalSaved} products with ingredients (${aiRescued} recovered by AI text, ${imageRescued} by AI image), ${skipped} skipped.`);
+  if (READ_BARCODES) console.log(`${barcodesFound} barcodes confirmed from photos${DRY_RUN ? '' : ' (saved for admin review)'}.`);
 
   if (DRY_RUN) {
     console.log('--dry-run: nothing written to the database.');
