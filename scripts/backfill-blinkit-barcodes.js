@@ -62,12 +62,17 @@ async function allRows(table, columns, filter = (q) => q) {
   }
 }
 
+// One row per call: a bulk upsert of rows with different columns (a
+// category row and the '__run__' row) sends null for every column a row
+// lacks, which the not-null counters reject.
 async function saveProgress(rows) {
   if (DRY_RUN) return;
-  const { error } = await supabase
-    .from('barcode_backfill_progress')
-    .upsert(rows.map((r) => ({ ...r, updated_at: new Date().toISOString() })), { onConflict: 'category' });
-  if (error) console.warn(`Could not save progress: ${error.message}`);
+  for (const r of rows) {
+    const { error } = await supabase
+      .from('barcode_backfill_progress')
+      .upsert({ ...r, updated_at: new Date().toISOString() }, { onConflict: 'category' });
+    if (error) console.warn(`Could not save progress: ${error.message}`);
+  }
 }
 
 const run = { category: RUN_ROW, status: 'running', last_product: null, started_at: new Date().toISOString() };
