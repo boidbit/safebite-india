@@ -97,7 +97,6 @@ export const STRINGS = {
     categoryBackToHome: 'Back to home',
     categoryEmpty: 'Nothing scored in this category yet — check back as more products get added.',
     categoryErrLoad: "Couldn't load that saved report. Please try another one.",
-    categoryViewLarger: 'View larger image and rating',
     genericBack: 'Back',
     genericLoading: 'Loading…',
 
@@ -695,7 +694,6 @@ export const STRINGS = {
     categoryBackToHome: 'होम पर वापस जाएं',
     categoryEmpty: 'इस कैटेगरी में अभी कुछ स्कोर नहीं हुआ — जैसे-जैसे प्रोडक्ट जुड़ेंगे, यहां दिखेंगे।',
     categoryErrLoad: 'वह सेव की गई रिपोर्ट लोड नहीं हो पाई। कोई और चुनें।',
-    categoryViewLarger: 'बड़ी इमेज और रेटिंग देखें',
     genericBack: 'वापस',
     genericLoading: 'लोड हो रहा है…',
 
