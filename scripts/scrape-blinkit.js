@@ -132,6 +132,7 @@ async function saveBarcodeLinks(found) {
     barcode,
     lookup_key: blinkitLookupKey(product.source, product.brand, product.product_name),
     product_name: product.product_name,
+    brand: product.brand || null,
     device_id: 'blinkit-scraper',
     source: 'blinkit_photo',
     status: 'pending',

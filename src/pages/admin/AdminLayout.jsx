@@ -17,6 +17,7 @@ const NAV = [
   { to: '/admin/duplicates', label: 'Duplicates' },
   { to: '/admin/barcode-check', label: 'Barcode check' },
   { to: '/admin/barcode-links', label: 'Barcode matches' },
+  { to: '/admin/barcode-backfill', label: 'Barcode backfill' },
   { to: '/admin/import', label: 'Import' },
   { to: '/admin/activity', label: 'Activity' },
 ];

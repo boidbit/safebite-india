@@ -209,7 +209,7 @@ export async function fetchText(url, retries = 3) {
 }
 
 /** Read a top-level JSON string field out of the embedded page data. */
-function jsonField(html, key) {
+export function jsonField(html, key) {
   const match = html.match(new RegExp(`"${key}":("(?:[^"\\\\]|\\\\.)*")`));
   if (!match) return null;
   try {
@@ -349,6 +349,11 @@ async function barcodeFromGallery(imageUrls, photo, barcodeReads) {
     if (buf) barcodeReads.push(...await readBarcodesFromPhoto(buf, i + 1));
   }
   return confirmBarcode(barcodeReads);
+}
+
+/** The confirmed barcode on a product page's gallery, or null -- for the barcode backfill. */
+export function readGalleryBarcode(html) {
+  return barcodeFromGallery(extractImageGallery(html), fetchImageBuffer, []);
 }
 
 /**
