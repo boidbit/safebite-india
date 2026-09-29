@@ -1,0 +1,538 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>FoodGuard India promo</title>
+<style>
+@font-face{font-family:'Poppins';font-weight:800;src:url(node_modules/@fontsource/poppins/files/poppins-latin-800-normal.woff2) format('woff2');}
+@font-face{font-family:'Poppins';font-weight:700;src:url(node_modules/@fontsource/poppins/files/poppins-latin-700-normal.woff2) format('woff2');}
+@font-face{font-family:'Poppins';font-weight:600;src:url(node_modules/@fontsource/poppins/files/poppins-latin-600-normal.woff2) format('woff2');}
+@font-face{font-family:'Inter';font-weight:500;src:url(node_modules/@fontsource/inter/files/inter-latin-500-normal.woff2) format('woff2');}
+@font-face{font-family:'Inter';font-weight:700;src:url(node_modules/@fontsource/inter/files/inter-latin-700-normal.woff2) format('woff2');}
+@font-face{font-family:'Inter';font-weight:800;src:url(node_modules/@fontsource/inter/files/inter-latin-800-normal.woff2) format('woff2');}
+
+:root{
+  --green:#1fa463; --green-d:#0c4a34; --lime:#c6f432; --amber:#f5a623;
+  --red:#ef4444; --ink:#0b1220; --cream:#fff8e7;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1920px;overflow:hidden;background:#0b1220;font-family:'Inter',sans-serif}
+#root{position:relative;width:1080px;height:1920px;overflow:hidden}
+#bg{position:absolute;inset:0}
+.blob{position:absolute;border-radius:50%;filter:blur(90px);opacity:.35}
+
+/* headline */
+.hl{position:absolute;left:40px;right:40px;top:120px;text-align:center;font-family:'Poppins',sans-serif;font-weight:800;
+    font-size:96px;line-height:1.04;color:#fff;letter-spacing:-1px}
+.hl .line{display:block;white-space:nowrap}
+.hl .w{display:inline-block;margin:0 .13em;will-change:transform}
+.hl .hl-lime{color:var(--lime)}
+.hl .hl-amber{color:var(--amber)}
+.hl .hl-red{color:#ff6b6b}
+.hl.small{font-size:84px}
+
+/* score headline */
+#scoreHead{position:absolute;left:0;right:0;top:36px;text-align:center;color:#fff;font-family:'Poppins',sans-serif}
+#scoreHead .num{font-weight:800;font-size:250px;line-height:1;color:var(--amber);letter-spacing:-8px}
+#scoreHead .of{font-weight:700;font-size:84px;color:#fff;opacity:.9;margin-left:8px}
+#scoreHead .verdict{display:inline-block;margin-top:2px;padding:6px 36px;border-radius:60px;background:rgba(245,166,35,.2);
+    border:4px solid var(--amber);color:var(--amber);font-weight:800;font-size:48px;letter-spacing:4px}
+
+/* phone */
+#stage{position:absolute;inset:0;perspective:2400px}
+#phone{position:absolute;left:206px;top:470px;width:668px;height:1268px;border-radius:84px;background:#0a0a0e;padding:14px;
+    box-shadow:0 60px 120px rgba(0,0,0,.55),0 0 0 3px #2a2f3a inset,0 0 0 2px #000;transform-origin:50% 50%}
+#screen{position:relative;width:640px;height:1240px;border-radius:70px;overflow:hidden;background:#f2f2f7}
+#inner{position:absolute;left:0;top:0;width:1080px;height:2093px;transform-origin:0 0;transform:scale(.59259)}
+#hole{position:absolute;left:50%;top:22px;width:26px;height:26px;margin-left:-13px;border-radius:50%;background:#000;z-index:5}
+#glare{position:absolute;inset:14px;border-radius:70px;pointer-events:none;
+    background:linear-gradient(115deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,0) 32%)}
+.layer{position:absolute;left:0;top:0;width:1080px;transform-origin:0 0}
+.layer img.shot{display:block;width:1080px}
+.abs{position:absolute}
+
+/* scanner UI */
+#L_scan{height:2373px;background:#06070a}
+#camBg{position:absolute;left:0;top:0;width:1080px;height:2373px;background:radial-gradient(circle at 50% 46%,#232833 0%,#0a0c11 62%,#050608 100%)}
+#camPack{position:absolute;width:800px;height:500px;left:140px;top:960px;border-radius:26px;background:#f3efe6;overflow:hidden}
+#camPack .lines i{position:absolute;left:40px;height:14px;border-radius:7px;background:#c9c2b0}
+#frame{position:absolute;left:133px;top:940px;width:813px;height:541px;border-radius:56px;border:6px solid rgba(255,255,255,.85)}
+#scanline{position:absolute;left:20px;right:20px;height:8px;border-radius:4px;background:linear-gradient(90deg,transparent,#4ade80,transparent);
+    box-shadow:0 0 40px 14px rgba(74,222,128,.55)}
+#scanHint{position:absolute;left:0;width:1080px;top:1965px;text-align:center;color:rgba(255,255,255,.92);font-size:44px;font-weight:500}
+.camBtn{position:absolute;top:2062px;height:104px;border-radius:34px;background:#1f2126;color:#fff;font-size:42px;font-weight:700;
+    display:flex;align-items:center;justify-content:center}
+#found{position:absolute;left:290px;top:860px;width:500px;height:84px;border-radius:42px;background:#22c55e;color:#04210f;font-weight:800;
+    font-size:44px;display:flex;align-items:center;justify-content:center;gap:16px}
+
+/* overlays in layers */
+.ring{position:absolute;border-radius:34px;border:10px solid var(--lime);box-shadow:0 0 40px rgba(198,244,50,.6)}
+.patch{position:absolute;overflow:hidden}
+.patch img{position:absolute;max-width:none}
+.patchTint{position:absolute;background:rgba(255,255,255,.55)}
+.patchLbl{position:absolute;text-align:center;font-family:'Inter';font-weight:800;font-size:38px;color:#334155}
+#beam{position:absolute;left:30px;width:1020px;height:130px;border-radius:30px;
+    background:linear-gradient(180deg,rgba(74,222,128,0),rgba(74,222,128,.55),rgba(74,222,128,0));}
+
+/* callouts */
+.callout{position:absolute;width:250px;padding:16px 18px;border-radius:30px;background:#fff;color:var(--ink);
+    box-shadow:0 22px 50px rgba(0,0,0,.35);font-family:'Poppins',sans-serif}
+.callout b{display:block;font-weight:800;font-size:33px;line-height:1.08}
+.callout span{display:block;margin-top:6px;font-family:'Inter';font-weight:500;font-size:24px;line-height:1.18;color:#475569}
+.callout .dot{display:inline-block;width:18px;height:18px;border-radius:50%;margin-right:10px;vertical-align:-1px;background:var(--green)}
+.callout.warn .dot{background:var(--amber)}
+.callout.bad .dot{background:var(--red)}
+.callout.big{width:520px;background:var(--lime)}
+.callout.big b{font-size:96px;letter-spacing:-2px}
+.callout.big span{color:#1a2e05;font-weight:700;font-size:32px}
+
+/* bottom band */
+#bottom{position:absolute;left:0;right:0;top:1770px;height:150px}
+#logoMini{position:absolute;left:52px;top:14px;width:96px;height:96px;border-radius:24%;background:#fff url(../assets/foodguard.png) center/114% no-repeat}
+#sub{position:absolute;left:176px;right:52px;top:0;height:126px;display:flex;align-items:center;color:#fff;font-size:38px;font-weight:700;line-height:1.2}
+
+/* CTA */
+#cta{position:absolute;inset:0}
+#ctaLogo{position:absolute;left:390px;top:110px;width:300px;height:300px;border-radius:24%;box-shadow:0 30px 60px rgba(0,0,0,.35);background:#fff url(../assets/foodguard.png) center/114% no-repeat}
+#ctaHead{position:absolute;left:30px;right:30px;top:450px;text-align:center;font-family:'Poppins';font-weight:800;font-size:92px;line-height:1.04;color:#fff;letter-spacing:-1px}
+#ctaChip{position:absolute;left:0;right:0;top:760px;text-align:center}
+#ctaChip div{display:inline-block;padding:14px 38px;border-radius:60px;background:rgba(255,255,255,.18);border:3px solid rgba(255,255,255,.55);
+    color:#fff;font-weight:700;font-size:38px}
+#ctaBtn{position:absolute;left:160px;top:860px;width:760px;height:136px;border-radius:70px;background:var(--lime);color:#123006;
+    font-family:'Poppins';font-weight:800;font-size:52px;display:flex;align-items:center;justify-content:center;gap:26px;
+    box-shadow:0 22px 0 #7ea51a,0 40px 60px rgba(0,0,0,.35)}
+
+/* HOOK: dummy pack */
+#pack{position:absolute;left:260px;top:560px;width:560px;height:800px;transform-origin:50% 60%}
+#packBody{position:absolute;inset:36px 0;border-radius:40px;background:linear-gradient(160deg,#ffb020 0%,#ff8a1f 45%,#e8550f 100%);
+    box-shadow:0 40px 90px rgba(0,0,0,.5),inset 0 0 0 8px rgba(255,255,255,.18)}
+.crimp{position:absolute;left:0;right:0;height:60px;background:
+    repeating-linear-gradient(90deg,#d94c0b 0 14px,#f07a1c 14px 28px);border-radius:10px}
+#crimpT{top:0}#crimpB{bottom:0}
+#packTitle{position:absolute;left:0;right:0;top:80px;text-align:center;font-family:'Poppins';font-weight:800;color:#fff;line-height:.98;
+    text-shadow:0 6px 0 rgba(120,40,0,.35)}
+#packTitle small{display:block;font-size:44px;letter-spacing:2px}
+#packTitle big{display:block;font-size:92px}
+#cookie{position:absolute;left:150px;top:330px;width:260px;height:260px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#e9b26b,#c98a43 60%,#a96a2c);box-shadow:0 20px 30px rgba(90,40,0,.45)}
+#cookie i{position:absolute;width:34px;height:34px;border-radius:50%;background:#3b1d0e}
+#packFine{position:absolute;left:0;right:0;bottom:78px;text-align:center;font-family:'Inter';font-weight:700;color:#fff;font-size:30px;opacity:.9}
+.stamp{position:absolute;padding:14px 26px;border-radius:18px;border:8px solid;font-family:'Poppins';font-weight:800;font-size:44px;
+    background:rgba(255,255,255,.96);white-space:nowrap;display:flex;align-items:center;gap:14px;box-shadow:0 14px 30px rgba(0,0,0,.35)}
+.chk{display:inline-block;width:30px;height:16px;border-left:9px solid currentColor;border-bottom:9px solid currentColor;transform:rotate(-45deg) translate(2px,-6px)}
+#packBeam{position:absolute;left:-30px;right:-30px;height:12px;border-radius:6px;background:linear-gradient(90deg,transparent,#4ade80,transparent);
+    box-shadow:0 0 50px 18px rgba(74,222,128,.6)}
+#qmark{position:absolute;left:300px;top:380px;width:480px;text-align:center;font-family:'Poppins';font-weight:800;font-size:520px;line-height:1;
+    color:#ff4d4d;text-shadow:0 10px 60px rgba(255,60,60,.7)}
+
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="bg"></div>
+  <div id="blobs"></div>
+  <div id="hlWrap"></div>
+
+  <div id="scoreHead"><span class="num" id="scoreNum">0</span><span class="of">/100</span><br><span class="verdict">MODERATE</span></div>
+
+  <div id="stage">
+    <div id="pack">
+      <div class="crimp" id="crimpT"></div>
+      <div id="packBody">
+        <div id="packTitle"><small>FRUIT &amp; NUT</small><big>COOKIES</big></div>
+        <div id="cookie"></div>
+        <div id="packFine">Crunchy &bull; Baked &bull; 250 g</div>
+      </div>
+      <div class="crimp" id="crimpB"></div>
+      <div id="packBeam"></div>
+      <div class="stamp" id="st1" style="left:-90px;top:300px;color:#15803d;border-color:#15803d">100% NATURAL</div>
+      <div class="stamp" id="st2" style="left:250px;top:470px;color:#0e7490;border-color:#0e7490"><i class="chk"></i>HEALTHY</div>
+      <div class="stamp" id="st3" style="left:-30px;top:640px;color:#be185d;border-color:#be185d">NO GUILT!</div>
+    </div>
+    <div id="qmark">?</div>
+
+    <div id="phone">
+      <div id="screen">
+        <div id="hole"></div>
+        <div id="inner">
+          <div class="layer" id="L_scan">
+            <div id="camBg"></div>
+            <div id="camPack"></div>
+            <div id="frame"><div id="scanline"></div></div>
+            <div id="found"><i class="chk" style="width:34px;height:18px"></i>Barcode found</div>
+            <div id="scanHint">Line the barcode up inside the frame</div>
+            <div class="camBtn" style="left:42px;width:484px">Enter number</div>
+            <div class="camBtn" style="left:553px;width:486px">From gallery</div>
+          </div>
+          <div class="layer" id="L_cookies"><img class="shot" id="img07" src="src/07.png">
+            <div class="abs" id="titlePatch" style="left:36px;top:335px;width:925px;height:218px"></div>
+            <div class="abs" id="topPatch" style="left:0;top:252px;width:1080px;height:84px"></div>
+            <div class="abs" id="titleTxt"style="left:51px;top:392px;font-family:'Inter';font-weight:800;font-size:66px;line-height:77px;color:#111827">Fruit &amp; Nut<br>Cookies</div>
+          </div>
+          <div class="layer" id="L_xray"><img class="shot" src="src/08.png"><div id="beam"></div></div>
+          <div class="layer" id="L_why"><img class="shot" src="src/01.png"></div>
+          <div class="layer" id="L_sugar"><img class="shot" src="src/02.png"></div>
+          <div class="layer" id="L_compare"><img class="shot" id="img06" src="src/06.png"></div>
+          <div class="layer" id="L_home"><img class="shot" src="src/14.png"></div>
+        </div>
+      </div>
+      <div id="glare"></div>
+    </div>
+  </div>
+
+  <div id="callouts"></div>
+  <div id="bottom"><div id="logoMini"></div><div id="sub"></div></div>
+
+  <div id="cta">
+    <div id="ctaLogo"></div>
+    <div id="ctaHead">Know what's in<br><span style="color:var(--lime)">your food.</span></div>
+    <div id="ctaChip"><div>7,028 foods checked &amp; counting</div></div>
+    <div id="ctaBtn">
+      <svg width="64" height="64" viewBox="0 0 64 64"><path d="M32 8v32M16 26l16 16 16-16M12 54h40" fill="none" stroke="#123006" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Free on Android
+    </div>
+  </div>
+  <div id="flash"></div>
+</div>
+
+<script>
+/* ---------- helpers ---------- */
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const seg=(t,a,b)=>clamp((t-a)/(b-a));
+const lerp=(a,b,x)=>a+(b-a)*x;
+const eOut=x=>1-Math.pow(1-x,3);
+const eInOut=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const eBack=(x,s=1.70158)=>1+(s+1)*Math.pow(x-1,3)+s*Math.pow(x-1,2);
+const $=id=>document.getElementById(id);
+function hex(c){return [1,3,5].map(i=>parseInt(c.slice(i,i+2),16));}
+function mix(c1,c2,x){const a=hex(c1),b=hex(c2);return 'rgb('+a.map((v,i)=>Math.round(lerp(v,b[i],x))).join(',')+')';}
+
+/* ---------- scenes ---------- */
+const SC={hook:[0,3.0],scan:[3.0,6.4],score:[6.4,10.0],xray:[10.0,13.0],sugar:[13.0,16.0],family:[16.0,19.0],compare:[19.0,21.6],cta:[21.6,25.0]};
+const BGC={hook:['#101828','#1e293b'],scan:['#0b1220','#111a2b'],score:['#0b5d3b','#0d3b2b'],xray:['#0b5d3b','#0d3b2b'],
+           sugar:['#0b5d3b','#0d3b2b'],family:['#0b5d3b','#0d3b2b'],compare:['#0b5d3b','#0d3b2b'],cta:['#17b56d','#0b7a4b']};
+const ORDER=Object.keys(SC);
+
+/* headlines: [scene, lines[[word,cls]...], className] */
+const HEAD=[
+ ['hook',[[['Is your snack']],[['REALLY','hl-red'],['healthy?']]]],
+ ['scan',[[['Just scan']],[['the barcode.','hl-lime']]]],
+ ['xray',[[['Every ingredient,']],[['decoded.','hl-lime']]]],
+ ['sugar',[[['Sugar, in']],[['teaspoons.','hl-lime']]]],
+ ['family',[[['Made for']],[['your family.','hl-lime']]]],
+ ['compare',[[['Compare.']],[['Pick the better one.','hl-lime']]]],
+];
+const hlEls={};
+HEAD.forEach(([sc,lines])=>{
+  const d=document.createElement('div');d.className='hl';
+  if(sc==='compare'||sc==='xray'||sc==='family')d.classList.add('small');
+  lines.forEach(l=>{const ln=document.createElement('span');ln.className='line';
+    l.forEach(([txt,cls])=>{txt.split(' ').forEach(w=>{const s=document.createElement('span');s.className='w '+(cls||'');s.textContent=w;ln.appendChild(s);});});
+    d.appendChild(ln);});
+  $('hlWrap').appendChild(d);hlEls[sc]=d;
+});
+function updHead(t){
+  for(const sc in hlEls){
+    const [a,b]=SC[sc],el=hlEls[sc];
+    const on=t>=a-0.001&&t<b;
+    el.style.display=on?'block':'none';
+    if(!on)continue;
+    el.querySelectorAll('.w').forEach((w,i)=>{
+      const t0=a+0.06+i*0.11;const x=seg(t,t0,t0+0.45);const e=eBack(x);const ex=seg(t,b-0.22,b);
+      w.style.opacity=Math.min(x*2.5,1)*(1-ex);
+      w.style.transform='translateY('+((1-e)*70-ex*60)+'px) scale('+(0.8+0.2*e)+')';
+    });
+  }
+}
+
+/* bottom sub-line */
+const SUB={hook:"Packs say healthy. What does the label say?",scan:"Point your camera at any packet. That's it.",
+ score:"A score, plus a straight answer in plain words.",xray:"Tap any ingredient to see why it's flagged.",
+ sugar:"See what it adds up to, every day and every year.",family:"Same cookies, a different score for each person.",
+ compare:"Two products or three, see the better pick.",cta:""};
+let lastSub='';
+function updSub(t){
+  let cur='hook';for(const k of ORDER){if(t>=SC[k][0])cur=k;}
+  const [a,b]=SC[cur];
+  const el=$('sub');
+  if(lastSub!==cur){el.textContent=SUB[cur];lastSub=cur;}
+  const inn=seg(t,a+0.2,a+0.55),out=seg(t,b-0.2,b);
+  el.style.opacity=(1-out)*inn;
+  el.style.transform='translateY('+((1-eOut(inn))*24)+'px)';
+  const showB=cur!=='cta';
+  $('bottom').style.display=showB?'block':'none';
+}
+
+/* ---------- background ---------- */
+function updBg(t){
+  let idx=0;for(let i=0;i<ORDER.length;i++){if(t>=SC[ORDER[i]][0])idx=i;}
+  const cur=ORDER[idx],prev=ORDER[Math.max(0,idx-1)];
+  const x=idx===0?1:eInOut(seg(t,SC[cur][0]-0.1,SC[cur][0]+0.4));
+  const top=mix(BGC[prev][0],BGC[cur][0],x),bot=mix(BGC[prev][1],BGC[cur][1],x);
+  $('bg').style.background='linear-gradient(180deg,'+top+' 0%,'+bot+' 100%)';
+  const bl=$('blobs');
+  if(!bl.children.length){[['#22c55e',700],['#84cc16',600],['#06b6d4',560]].forEach(([c,s])=>{const d=document.createElement('div');d.className='blob';
+    d.style.background=c;d.style.width=d.style.height=s+'px';bl.appendChild(d);});}
+  [...bl.children].forEach((d,i)=>{
+    const px=540+Math.sin(t*.5+i*2.1)*420,py=[300,1000,1600][i]+Math.cos(t*.4+i*1.7)*240;
+    d.style.left=(px-parseFloat(d.style.width)/2)+'px';d.style.top=(py-parseFloat(d.style.width)/2)+'px';
+  });
+}
+
+/* ---------- pack (hook) ---------- */
+function updPack(t){
+  const p=$('pack');
+  const inn=eBack(seg(t,0.15,0.75));
+  const gone=seg(t,2.8,3.45);
+  const vis=t<3.5;
+  p.style.display=vis?'block':'none';
+  if(!vis){$('qmark').style.display='none';return;}
+  const wob=Math.sin(t*4.2)*2.2;
+  p.style.opacity=(1-eOut(gone));
+  p.style.transform='translateY('+(lerp(600,0,inn)+eInOut(gone)*720)+'px) rotate('+(wob+lerp(-10,0,inn))+'deg) scale('+(inn*(1-0.7*eInOut(gone)))+')';
+  [['st1',1.0],['st2',1.4],['st3',1.8]].forEach(([id,t0])=>{
+    const x=seg(t,t0,t0+0.22),e=eOut(x);const shake=(t>t0&&t<t0+0.3)?Math.sin((t-t0)*90)*6*(1-(t-t0)/.3):0;
+    const el=$(id);el.style.opacity=clamp(x*4);
+    el.style.transform='translate('+shake+'px,'+shake+'px) scale('+lerp(2.8,1,e)+') rotate('+({st1:-12,st2:9,st3:-7}[id])+'deg)';
+  });
+  const bx=seg(t,2.15,2.8);
+  const beam=$('packBeam');beam.style.opacity=(bx>0&&bx<1)?1:0;beam.style.top=lerp(40,760,eInOut(bx))+'px';
+  const q=$('qmark');
+  const qx=seg(t,2.35,2.6);
+  q.style.display='block';
+  q.style.opacity=clamp(qx)*(1-seg(t,2.85,3.1));
+  q.style.transform='translate(-40px,'+(Math.sin(t*9)*8)+'px) rotate('+(-8+Math.sin(t*7)*4)+'deg) scale('+(0.6+0.5*eBack(qx))+')';
+}
+
+/* ---------- barcode for camera pack ---------- */
+(function buildCam(){
+  const pk=$('camPack');
+  // deterministic bar/space widths scaled to fill the white panel
+  let s=7;const ws=[];for(let i=0;i<61;i++){s=(s*73+19)%97;ws.push(1+(s%4));}
+  const tot=ws.reduce((a,b)=>a+b,0),k=(720-64)/tot;let x=32,bars='';
+  ws.forEach((w,i)=>{if(i%2===0)bars+='<rect x="'+x.toFixed(1)+'" y="0" width="'+(w*k).toFixed(1)+'" height="190" fill="#111"/>';x+=w*k;});
+  pk.innerHTML='<div class="lines">'+[50,90,130,170].map((y,i)=>'<i style="top:'+y+'px;width:'+(300-i*40)+'px"></i>').join('')+'</div>'+
+   '<div style="position:absolute;left:40px;top:250px;width:720px;height:210px;background:#fff;border-radius:14px"></div>'+
+   '<svg style="position:absolute;left:40px;top:262px" width="720" height="190" viewBox="0 0 720 190">'+bars+'</svg>'+
+   '<div style="position:absolute;left:0;width:800px;top:452px;text-align:center;font:700 34px Inter;letter-spacing:10px;color:#222">8 901234 567895</div>'+
+   '<div style="position:absolute;right:46px;top:46px;font:800 38px Poppins;color:#e8550f">FRUIT &amp; NUT COOKIES</div>';
+})();
+
+function updScan(t){
+  const a=3.0;
+  // pack drifts in and focuses
+  const d=eOut(seg(t,3.5,4.4));
+  const blur=lerp(10,0,eOut(seg(t,3.6,4.6)));
+  const cp=$('camPack');
+  cp.style.transform='translate('+lerp(260,0,d)+'px,'+lerp(-120,0,d)+'px) rotate('+lerp(-14,-2,d)+'deg) scale('+lerp(1.25,0.95,d)+')';
+  cp.style.filter='blur('+blur+'px)';
+  // scanline: two sweeps then lock
+  const sl=$('scanline');
+  const sw=seg(t,4.5,5.2);
+  const pos=sw<.5?sw*2:2-sw*2;
+  sl.style.top=lerp(24,500,eInOut(clamp(pos)))+'px';
+  sl.style.opacity=(t>4.45&&t<5.25)?1:0;
+  const lock=t>=5.25;
+  const f=$('frame');
+  f.style.borderColor=lock?'#22c55e':'rgba(255,255,255,.85)';
+  f.style.boxShadow=lock?'0 0 60px 12px rgba(34,197,94,.55)':'none';
+  f.style.transform='scale('+(lock?1+0.03*Math.sin(seg(t,5.25,5.55)*Math.PI):1)+')';
+  const fd=$('found');fd.style.opacity=lock?clamp((t-5.25)*8):0;
+  fd.style.transform='translateY('+(lock?lerp(20,0,eOut(seg(t,5.25,5.5))):20)+'px)';
+  $('scanHint').style.opacity=lock?0:1;
+}
+
+/* ---------- camera for layers ---------- */
+const VX=540,VY=1046.5;
+const LAY={
+ L_scan:{vis:[[2.9,5.7]],cam:[[0,540,1168.5,1]]},
+ L_cookies:{vis:[[5.45,10.15],[15.85,19.15]],cam:[[5.4,540,1168.5,1],[6.4,540,1168.5,1],[9.9,540,1168.5,1.06],[15.8,540,1168.5,1],[18.6,540,1168.5,1.05]]},
+ L_xray:{vis:[[9.9,11.85]],cam:[[9.9,540,1168.5,1],[11.8,540,1168.5,1.06]]},
+ L_why:{vis:[[11.7,13.15]],cam:[[11.7,540,1168.5,1],[13,540,1168.5,1.05]]},
+ L_sugar:{vis:[[12.9,16.1]],cam:[[12.9,540,1168.5,1],[16.0,540,1168.5,1.06]]},
+ L_compare:{vis:[[18.95,21.75]],cam:[[18.9,540,1168.5,1],[21.6,540,1250,1]]},
+ L_home:{vis:[[21.5,26]],cam:[[21.5,540,1168.5,1]]},
+};
+function camAt(kf,t){
+  if(t<=kf[0][0])return kf[0].slice(1);
+  for(let i=0;i<kf.length-1;i++){
+    if(t<=kf[i+1][0]){const x=eInOut(seg(t,kf[i][0],kf[i+1][0]));
+      return [1,2,3].map(j=>lerp(kf[i][j],kf[i+1][j],x));}
+  }
+  return kf[kf.length-1].slice(1);
+}
+function updLayers(t){
+  for(const id in LAY){
+    const L=LAY[id],el=$(id);
+    let o=0;
+    L.vis.forEach(([a,b])=>{o=Math.max(o,seg(t,a,a+0.15)*(1-seg(t,b-0.15,b)));});
+    el.style.opacity=o;el.style.display=o>0.001?'block':'none';
+    if(o<=0.001)continue;
+    const [fx,fy,z]=camAt(L.cam,t);
+    el.style.transform='translate('+(VX-fx*z)+'px,'+(VY-fy*z)+'px) scale('+z+')';
+  }
+}
+
+/* ---------- rings & overlays in layers ---------- */
+const RINGS=[
+ {layer:'L_cookies',x:93,y:1510,w:900,h:250,a:8.4,b:9.9},
+ {layer:'L_cookies',x:36,y:672,w:1008,h:322,a:16.2,b:17.4},
+ {layer:'L_cookies',x:36,y:1948,w:560,h:176,a:17.6,b:18.95},
+ {layer:'L_xray',x:346,y:410,w:126,h:80,a:10.9,b:11.8},
+ {layer:'L_xray',x:76,y:485,w:524,h:80,a:11.05,b:11.8},
+ {layer:'L_why',x:180,y:1095,w:170,h:50,a:12.0,b:13.1},
+ {layer:'L_sugar',x:540,y:415,w:236,h:198,a:13.25,b:14.2},
+ {layer:'L_sugar',x:700,y:1604,w:304,h:272,a:15.1,b:16.05},
+ {layer:'L_compare',x:36,y:1085,w:1008,h:85,a:19.7,b:20.5},
+ {layer:'L_compare',x:36,y:1250,w:1008,h:85,a:20.4,b:21.5},
+];
+RINGS.forEach((r,i)=>{const d=document.createElement('div');d.className='ring';d.id='ring'+i;
+  d.style.left=r.x+'px';d.style.top=r.y+'px';d.style.width=r.w+'px';d.style.height=r.h+'px';$(r.layer).appendChild(d);r.el=d;});
+function updRings(t){
+  RINGS.forEach(r=>{
+    const x=seg(t,r.a,r.a+0.3),ex=seg(t,r.b-0.2,r.b);
+    const on=t>=r.a&&t<r.b;
+    r.el.style.display=on?'block':'none';
+    if(!on)return;
+    const pul=(Math.sin((t-r.a)*9)+1)/2;
+    r.el.style.opacity=eOut(x)*(1-ex);
+    r.el.style.transform='scale('+(lerp(1.25,1,eBack(x))+pul*0.02)+')';
+    r.el.style.transformOrigin='50% 50%';
+    r.el.style.borderColor=pul>.5?'#c6f432':'#f7ffb0';
+  });
+}
+function updBeam(t){
+  const b=$('beam');const x=seg(t,10.35,11.35);
+  b.style.display=(x>0&&x<1)?'block':'none';
+  b.style.top=lerp(300,1000,eInOut(x))+'px';
+}
+
+/* ---------- patches (brand-safety) ---------- */
+function setupPatches(){
+  // cookies title patch: sample bg colour from the screenshot itself
+  const img=$('img07');
+  try{
+    const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;
+    const g=c.getContext('2d');g.drawImage(img,0,0);
+    const p=g.getImageData(1060,360,1,1).data;
+    const col='rgb('+p[0]+','+p[1]+','+p[2]+')';
+    $('titlePatch').style.background=col;$('topPatch').style.background=col;
+  }catch(e){$('titlePatch').style.background='#f2f2f7';$('topPatch').style.background='#f2f2f7';}
+  // chocolate chips on the dummy cookie
+  [[70,60],[150,40],[190,120],[60,150],[120,120],[170,190],[90,200],[200,60],[40,100]].forEach(([x,y])=>{
+    const i=document.createElement('i');i.style.left=x+'px';i.style.top=y+'px';$('cookie').appendChild(i);});
+  // compare: blur product images/names, label as Product A/B/C
+  const L=$('L_compare'),im=$('img06');
+  const rx=330,ry=750,rw=710,rh=305;
+  const pt=document.createElement('div');pt.className='patch';pt.style.cssText='left:'+rx+'px;top:'+ry+'px;width:'+rw+'px;height:'+rh+'px';
+  const pi=document.createElement('img');pi.src=im.src;pi.style.cssText='left:'+(-rx)+'px;top:'+(-ry)+'px;width:1080px;filter:blur(26px)';
+  pt.appendChild(pi);L.appendChild(pt);
+  const tint=document.createElement('div');tint.className='patchTint';tint.style.cssText='left:'+rx+'px;top:'+ry+'px;width:'+rw+'px;height:'+rh+'px';L.appendChild(tint);
+  [[457,'A'],[682,'B'],[904,'C']].forEach(([cx,l])=>{
+    const d=document.createElement('div');d.className='patchLbl';d.style.cssText='left:'+(cx-105)+'px;top:'+(ry+rh/2-26)+'px;width:210px;white-space:nowrap';d.textContent='Product '+l;L.appendChild(d);});
+}
+
+/* ---------- callouts ---------- */
+const CO=[
+ {a:7.0,b:9.9,x:6,y:1030,cls:'',b1:'Health score',s:'a number out of 100'},
+ {a:8.5,b:9.9,x:824,y:1290,cls:'warn',b1:'Straight answer',s:'Should I eat it? Occasionally.'},
+ {a:16.1,b:17.5,x:6,y:800,cls:'warn',b1:'Allergen alerts',s:'flagged for each person'},
+ {a:17.7,b:18.95,x:824,y:1520,cls:'',b1:'Personal score',s:'different for every member'},
+ {a:10.6,b:11.8,x:6,y:740,cls:'warn',b1:'Label X-Ray',s:'concerning ones highlighted'},
+ {a:11.95,b:13.0,x:824,y:980,cls:'bad',b1:'Why flagged?',s:'explained in plain words'},
+ {a:19.6,b:21.5,x:824,y:1110,cls:'',b1:'Personal fit',s:'scored for you'},
+];
+CO.forEach((c,i)=>{const d=document.createElement('div');d.className='callout '+c.cls;
+  d.innerHTML='<b><i class="dot"></i>'+c.b1+'</b><span>'+c.s+'</span>';d.style.left=c.x+'px';d.style.top=c.y+'px';$('callouts').appendChild(d);c.el=d;c.i=i;});
+// big sugar counter callout
+const sugarBig=document.createElement('div');sugarBig.className='callout big';
+sugarBig.innerHTML='<b id="sugNum">0</b><span>teaspoons of sugar a year</span>';
+sugarBig.style.left='280px';sugarBig.style.top='560px';$('callouts').appendChild(sugarBig);
+function updCallouts(t){
+  CO.forEach(c=>{
+    const on=t>=c.a&&t<c.b;c.el.style.display=on?'block':'none';if(!on)return;
+    const x=seg(t,c.a,c.a+0.4),ex=seg(t,c.b-0.2,c.b);
+    c.el.style.opacity=clamp(x*3)*(1-ex);
+    c.el.style.transform='translateY('+(Math.sin(t*3+c.i)*5)+'px) scale('+eBack(x)+')';
+  });
+  const a=14.9,b=15.98;
+  const on=t>=a&&t<b;sugarBig.style.display=on?'block':'none';
+  if(on){
+    const x=seg(t,a,a+0.4),ex=seg(t,b-0.2,b);
+    sugarBig.style.opacity=clamp(x*3)*(1-ex);
+    sugarBig.style.transform='rotate(-3deg) translateY('+(Math.sin(t*4)*6)+'px) scale('+eBack(x)+')';
+    $('sugNum').textContent=Math.round(637*eOut(seg(t,a+0.1,a+0.9)));
+  }
+}
+
+/* ---------- phone ---------- */
+function updPhone(t){
+  const ph=$('phone');
+  const inn=eOut(seg(t,3.0,3.75));
+  const cta=eInOut(seg(t,21.6,22.4));
+  let ty=lerp(1500,0,inn)+cta*416;
+  let sc=lerp(1,0.66,cta);
+  let rz=lerp(9,0,inn);
+  const fl=Math.sin(t*1.3);
+  let ry=fl*4*(1-cta),rx=Math.sin(t*.9+1)*2*(1-cta);
+  // punch on scene boundaries
+  let punch=0;
+  ORDER.forEach(k=>{const b=SC[k][0];if(b>3.5&&t>=b&&t<b+0.3){punch=Math.sin(seg(t,b,b+0.3)*Math.PI)*0.035;}});
+  ph.style.transform='translateY('+ty+'px) rotateZ('+rz+'deg) rotateY('+ry+'deg) rotateX('+rx+'deg) scale('+(sc*(1+punch))+')';
+  ph.style.display=t>=2.95?'block':'none';
+}
+
+/* ---------- score headline ---------- */
+function updScore(t){
+  const [a,b]=SC.score;const el=$('scoreHead');
+  const on=t>=a&&t<b;el.style.display=on?'block':'none';if(!on)return;
+  const x=eBack(seg(t,a+0.05,a+0.5)),ex=seg(t,b-0.22,b);
+  el.style.opacity=clamp(seg(t,a+0.05,a+0.3)*(1-ex));
+  el.style.transform='translateY('+((1-x)*60-ex*50)+'px) scale('+(0.8+0.2*x)+')';
+  $('scoreNum').textContent=Math.round(53*eOut(seg(t,a+0.3,a+1.6)));
+  const v=el.querySelector('.verdict');v.style.opacity=seg(t,a+1.5,a+1.8);
+  v.style.transform='scale('+eBack(seg(t,a+1.5,a+1.9))+')';
+}
+
+/* ---------- CTA ---------- */
+function updCTA(t){
+  const [a,b]=SC.cta;const el=$('cta');
+  const on=t>=a;el.style.display=on?'block':'none';if(!on)return;
+  const lg=$('ctaLogo'),x=eBack(seg(t,a+0.25,a+0.85));
+  lg.style.opacity=clamp(seg(t,a+0.25,a+0.4));
+  lg.style.transform='scale('+x+') rotate('+lerp(-14,0,x)+'deg) translateY('+(Math.sin(t*3)*6)+'px)';
+  const h=$('ctaHead'),hx=eBack(seg(t,a+0.6,a+1.15));
+  h.style.opacity=clamp(seg(t,a+0.6,a+0.8));h.style.transform='translateY('+((1-hx)*80)+'px)';
+  const c=$('ctaChip'),cx=eBack(seg(t,a+1.3,a+1.8));
+  c.style.opacity=clamp(seg(t,a+1.3,a+1.5));c.style.transform='scale('+cx+')';
+  const bt=$('ctaBtn'),bx=eBack(seg(t,a+1.7,a+2.25));
+  const pulse=t>a+2.3?1+0.035*Math.sin((t-a-2.3)*7):1;
+  bt.style.opacity=clamp(seg(t,a+1.7,a+1.9));bt.style.transform='scale('+(bx*pulse)+')';
+}
+
+/* ---------- flashes ---------- */
+function updFlash(t){
+  let f=0;
+  const pulse=(t0,d,p)=>{if(t>=t0&&t<t0+d)f=Math.max(f,p*(1-(t-t0)/d));};
+  pulse(5.28,0.35,0.85);   // barcode lock
+  pulse(10.0,0.18,0.35);pulse(13.0,0.18,0.35);pulse(16.0,0.18,0.35);pulse(19.0,0.18,0.35);
+  pulse(2.82,0.25,0.5);
+  $('flash').style.opacity=f;
+}
+
+/* ---------- main ---------- */
+window.render=function(t){
+  updBg(t);updHead(t);updSub(t);updPack(t);updScan(t);updLayers(t);updRings(t);updBeam(t);
+  updCallouts(t);updPhone(t);updScore(t);updCTA(t);updFlash(t);
+  // top-level fade in/out
+  const fade=Math.min(seg(t,0,0.15),1-seg(t,24.75,25));
+  $('root').style.opacity=fade;
+};
+window.READY=false;
+Promise.all([document.fonts.ready,...[...document.images].map(i=>i.complete?Promise.resolve():new Promise(r=>{i.onload=i.onerror=r;}))]).then(()=>{
+  setupPatches();window.render(0);window.READY=true;
+});
+</script>
+</body>
+</html>
