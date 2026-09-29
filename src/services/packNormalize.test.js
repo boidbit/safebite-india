@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { singleUnitPackSize, singleUnitName, normalizeListing } from './packNormalize.js';
+import { singleUnitPackSize, singleUnitName, normalizeListing, isMultiPackListing } from './packNormalize.js';
 
 test('N x size keeps one unit', () => {
   assert.deepEqual(singleUnitPackSize('3 x 250 ml'), { packSize: '250 ml', units: 3, clear: true });
@@ -40,6 +40,17 @@ test('normalizeListing flags what it will not guess', () => {
   assert.match(normalizeListing({ product_name: 'Amul Butter - Pack of 2', pack_size: '500 g' }).needsLook, /whole pack/);
   assert.match(normalizeListing({ product_name: 'Ghee', pack_size: '2 x 500 g + 100 g' }).needsLook, /by hand/);
   assert.equal(normalizeListing({ product_name: 'Amul Butter', pack_size: '100 g' }).changed, false);
+});
+
+test('isMultiPackListing spots multi-packs and offers', () => {
+  assert.equal(isMultiPackListing('Yu Cranberry Juice', '2 x 250 ml'), true);
+  assert.equal(isMultiPackListing('Amul Butter - Pack of 2', '100 g'), true);
+  assert.equal(isMultiPackListing('Nestle Gold Flakes - Buy 1 Get 1 Free', null), true);
+  assert.equal(isMultiPackListing('Jivo Olive Oil', '1 ltr + 200 ml'), true);
+  assert.equal(isMultiPackListing('Amul Butter', '100 g'), false);
+  assert.equal(isMultiPackListing('Amul Butter', '1 x 100 g'), false);
+  assert.equal(isMultiPackListing('Amul Butter', null), false);
+  assert.equal(isMultiPackListing('Bournvita 2x Nutrition Drink Mix', '500 g'), false);
 });
 
 test('bundles of different products are left alone', () => {

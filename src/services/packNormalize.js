@@ -55,6 +55,17 @@ export function singleUnitName(name) {
 }
 
 /**
+ * A listing of several units of one product ("3 x 250 ml", "- Pack of 2",
+ * "Buy 1 Get 1 Free", "1 ltr + 200 ml"). The scraper skips these: the
+ * single-unit listing is the product.
+ */
+export function isMultiPackListing(name, packSize) {
+  if (singleUnitName(name) !== String(name || '')) return true;
+  const pack = singleUnitPackSize(packSize);
+  return !pack.clear || (pack.units || 1) > 1;
+}
+
+/**
  * What to do with one listing. `packInName` = the name said how many units
  * (so a plain pack size like "500 g" could be the whole pack's weight).
  * @returns {{ name, packSize, changed: boolean, needsLook: string|null }}

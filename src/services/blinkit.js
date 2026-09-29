@@ -18,6 +18,7 @@ import { isGeminiAvailable, callGemini } from './geminiService.js';
 import { isBundleListing } from './bundleListing.js';
 import { optimizeAndUploadBlinkitImage } from './blinkitImageOptimizer.js';
 import { isValidGtin, readBarcodesFromPhoto, confirmBarcode } from './barcodeReader.js';
+import { isMultiPackListing } from './packNormalize.js';
 
 const SITEMAP_INDEX = 'https://blinkit.com/sitemap.xml';
 // A real browser UA, not a self-identifying bot string. Manual testing
@@ -429,6 +430,14 @@ export async function scrapeProduct(url, category, { useAI = false, useImageFall
   }
 
   const attributes = allAttributes(html);
+
+  // "3 x 250 ml", "- Pack of 2", "Buy 1 Get 1 Free": the same product as
+  // its single-unit listing, which is the one we keep (packNormalize.js).
+  // Checked before any AI or photo work is spent on it.
+  if (isMultiPackListing(productName, attributes['Unit (with options)'] || attributes['Net Weight (Without Packaging)'])) {
+    return { error: 'multi-pack listing (the single unit is the product)', productName };
+  }
+
   let ingredients = attributes['Ingredients'] || null;
   let viaAI = false;
   let viaImage = false;
