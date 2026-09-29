@@ -51,6 +51,12 @@ test('isMultiPackListing spots multi-packs and offers', () => {
   assert.equal(isMultiPackListing('Amul Butter', '1 x 100 g'), false);
   assert.equal(isMultiPackListing('Amul Butter', null), false);
   assert.equal(isMultiPackListing('Bournvita 2x Nutrition Drink Mix', '500 g'), false);
+  // Real listings the first version wrongly skipped:
+  assert.equal(isMultiPackListing('Turtle  chips  spicy devil', null), false);
+  assert.equal(isMultiPackListing("Pio' -  Badam", null), false);
+  assert.equal(isMultiPackListing('Chipo Kerala Mixture Namkeen', '175'), false);
+  assert.equal(isMultiPackListing('Snackora Flavoured Makhana', '5 packs'), true);
+  assert.equal(isMultiPackListing('Delichic Classic Smoked Chicken Breast', '170 - 180 g'), false);
 });
 
 test('bundles of different products are left alone', () => {

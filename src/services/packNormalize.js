@@ -34,6 +34,8 @@ export function singleUnitPackSize(packSize) {
   const raw = (packSize || '').trim();
   if (!raw) return { packSize: null, units: null, clear: true };
   if (/^1\s*packs?$/i.test(raw)) return { packSize: raw, units: 1, clear: true };
+  // "170 - 180 g": one piece whose weight varies, not several.
+  if (/^\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?\s*[a-z]+$/i.test(raw)) return { packSize: raw, units: 1, clear: true };
   // "2 x 290.4 g + 290.4 g", "150 g + 150 g": every unit the same size.
   const terms = raw.split('+').map((t) => {
     const m = t.match(MULTIPLIED) || t.match(SINGLE);
@@ -60,7 +62,11 @@ export function singleUnitName(name) {
  * single-unit listing is the product.
  */
 export function isMultiPackListing(name, packSize) {
-  if (singleUnitName(name) !== String(name || '')) return true;
+  // Only a real pack/offer part counts -- not extra spaces in a name.
+  const squash = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+  if (squash(singleUnitName(name)) !== squash(name)) return true;
+  // A bare number ("175", unit missing on the page) is one unit too.
+  if (/^\s*\d+(?:\.\d+)?\s*$/.test(packSize || '')) return false;
   const pack = singleUnitPackSize(packSize);
   return !pack.clear || (pack.units || 1) > 1;
 }
