@@ -63,6 +63,19 @@ test('not safe when the company code differs from the brand’s', () => {
 test('not safe when there is nothing of the brand to compare with', () => {
   const l = link('8906186161820', 'blinkit:a', 'OVS Guruvayur');
   assert.equal(verdict(judge([l]), l).safe, false);
+  // ...and the brand has other products in the catalog it could belong to
+  assert.equal(verdict(judge([l], { productsByBrand: new Map([['ovs', 3]]) }), l).safe, false);
+});
+
+test('safe when the brand has just this one product in the catalog', () => {
+  const l = link('8906186161820', 'blinkit:a', 'OVS Guruvayur');
+  assert.deepEqual(verdict(judge([l], { productsByBrand: new Map([['ovs', 1]]) }), l), { safe: true, reasons: [] });
+});
+
+test('a single-product brand is still not safe when another rule fails', () => {
+  const l = link('8906186161820', 'blinkit:a', 'OVS Guruvayur');
+  const r = judge([l], { productsByBrand: new Map([['ovs', 1]]), catalogBarcodes: new Set(['8906186161820']) });
+  assert.equal(verdict(r, l).safe, false);
 });
 
 test('a link a person made is never auto-approved', () => {

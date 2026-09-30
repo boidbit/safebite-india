@@ -6,7 +6,8 @@
 // product. Each row is one device's confirmation -- grouped per pair here.
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { logActivity } from './adminActivityRepo.js';
-import { assessBarcodeLinks } from './barcodeLinkSafety.js';
+import { assessBarcodeLinks, brandKey } from './barcodeLinkSafety.js';
+import { blinkitLookupKey } from './blinkitProductsRepo.js';
 
 function requireSupabase() {
   if (!isSupabaseConfigured) throw new Error('Supabase isn’t configured.');
@@ -76,45 +77,81 @@ export async function adminApprovedBarcodeFor(lookupKey) {
   return data?.[0]?.barcode || null;
 }
 
-const chunks = (list, size) => Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, i * size + size));
-
 /**
- * Pending pairs judged by barcodeLinkSafety.js. Fills in a missing brand
- * from the product's own report (links saved before the brand column).
- * @returns {Promise<Map<string, { safe: boolean, reasons: string[] }>>}
+ * Pending pairs judged by barcodeLinkSafety.js, plus each pair's brand
+ * (filled in for links saved before the brand column) and product photo.
+ * @returns {Promise<{ verdicts: Map<string, { safe: boolean, reasons: string[] }>,
+ *   brandOf: Map<string, string|null>, imageOf: Map<string, string|null> }>}
+ *   verdicts/brandOf keyed "barcode|lookupKey", imageOf by lookupKey
  */
 export async function adminAssessBarcodeLinks(pairs) {
   requireSupabase();
-  if (pairs.length === 0) return new Map();
+  const empty = { verdicts: new Map(), brandOf: new Map(), imageOf: new Map() };
+  if (pairs.length === 0) return empty;
 
-  const missingBrand = [...new Set(pairs.filter((p) => !p.brand).map((p) => p.lookupKey))];
-  const brandOf = {};
-  for (const keys of chunks(missingBrand, 100)) {
-    const { data } = await supabase.from('product_reports').select('lookup_key, brand:report->>brand').in('lookup_key', keys);
-    for (const r of data || []) brandOf[r.lookup_key] = r.brand;
-  }
-  const links = pairs.map((p) => ({ ...p, brand: p.brand || brandOf[p.lookupKey] || null }));
-
-  const [otherLinks, catalog] = await Promise.all([
+  const [otherLinks, reports, blinkit] = await Promise.all([
     allRows(() => supabase.from('barcode_links').select('barcode, lookup_key, brand').in('status', ['pending', 'approved'])),
-    allRows(() => supabase.from('product_reports').select('lookup_key, brand:report->>brand').like('lookup_key', 'barcode:%')),
+    allRows(() => supabase.from('product_reports').select('lookup_key, brand:report->>brand, image:report->>imageUrl')),
+    allRows(() => supabase.from('blinkit_products').select('source, brand, product_name, optimized_image_url')),
   ]);
+  const reportByKey = new Map(reports.map((r) => [r.lookup_key, r]));
+  const blinkitByKey = new Map(blinkit.map((b) => [blinkitLookupKey(b.source, b.brand, b.product_name), b]));
+
+  // Each pair's brand (links saved before the brand column have none) and
+  // photo -- from its report, or the scraped row if no report exists yet.
+  const brandOf = new Map();
+  const imageOf = new Map();
+  for (const p of pairs) {
+    const report = reportByKey.get(p.lookupKey);
+    const row = blinkitByKey.get(p.lookupKey);
+    brandOf.set(`${p.barcode}|${p.lookupKey}`, p.brand || report?.brand || row?.brand || null);
+    imageOf.set(p.lookupKey, report?.image || row?.optimized_image_url || null);
+  }
+  const links = pairs.map((p) => ({ ...p, brand: brandOf.get(`${p.barcode}|${p.lookupKey}`) }));
+
+  // Catalog products per brand: every scraped Blinkit row, plus every
+  // report that isn't one of those (barcode / text / photo scans).
+  const productsByBrand = new Map();
+  const count = (brand) => { const b = brandKey(brand); if (b) productsByBrand.set(b, (productsByBrand.get(b) || 0) + 1); };
+  for (const b of blinkit) count(b.brand);
+  for (const r of reports) if (!r.lookup_key.startsWith('blinkit:')) count(r.brand);
+
+  const catalog = reports.filter((r) => r.lookup_key.startsWith('barcode:'));
   const catalogBarcodes = new Set(catalog.map((r) => r.lookup_key.slice('barcode:'.length)));
   const knownBarcodes = [
     ...catalog.map((r) => ({ barcode: r.lookup_key.slice('barcode:'.length), lookupKey: r.lookup_key, brand: r.brand })),
     ...otherLinks.filter((l) => l.brand).map((l) => ({ barcode: l.barcode, lookupKey: l.lookup_key, brand: l.brand })),
   ];
-  return assessBarcodeLinks(links, {
+  const verdicts = assessBarcodeLinks(links, {
     otherLinks: otherLinks.map((l) => ({ barcode: l.barcode, lookupKey: l.lookup_key })),
     catalogBarcodes,
     knownBarcodes,
+    productsByBrand,
   });
+  return { verdicts, brandOf, imageOf };
 }
 
-/** Approves each pair in turn; `onProgress(done, total)` after each. */
+/**
+ * Approves each pair in turn; `onProgress(done, total)` after each. Only
+ * the first pair of any one barcode -- approving it rejects the barcode's
+ * other waiting products, and approving a second would leave the barcode
+ * approved for two products.
+ */
 export async function adminApproveBarcodeLinks(pairs, onProgress = () => {}) {
+  const done = new Set();
   for (const [i, pair] of pairs.entries()) {
-    await adminApproveBarcodeLink(pair);
+    if (!done.has(pair.barcode)) {
+      await adminApproveBarcodeLink(pair);
+      done.add(pair.barcode);
+    }
+    onProgress(i + 1, pairs.length);
+  }
+}
+
+/** Rejects each pair in turn; `onProgress(done, total)` after each. */
+export async function adminRejectBarcodeLinks(pairs, onProgress = () => {}) {
+  for (const [i, pair] of pairs.entries()) {
+    await adminRejectBarcodeLink(pair);
     onProgress(i + 1, pairs.length);
   }
 }

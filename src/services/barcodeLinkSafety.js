@@ -12,7 +12,8 @@
 //   2. no other product has this barcode (any link that isn't rejected)
 //   3. it isn't already a barcode product in our catalog
 //   4. its company code (first 7 digits) matches another barcode of the
-//      same brand we already know
+//      same brand we already know -- or the brand has just this one product
+//      in our catalog, so there's no sibling flavour/pack it could belong to
 // Pure: the caller loads the data (adminBarcodeLinksRepo.js).
 
 export const COMPANY_PREFIX_LENGTH = 7;
@@ -32,9 +33,10 @@ const prefixOf = (barcode) => barcode.slice(0, COMPANY_PREFIX_LENGTH);
  * @param {Array<{ barcode, lookupKey }>} context.otherLinks - every link that isn't rejected
  * @param {Set<string>} context.catalogBarcodes - barcodes already a product_reports key ("barcode:<code>")
  * @param {Array<{ barcode, lookupKey, brand }>} context.knownBarcodes - barcodes with a known brand
+ * @param {Map<string, number>} [context.productsByBrand] - catalog products per brandKey()
  * @returns {Map<string, { safe: boolean, reasons: string[] }>} keyed "barcode|lookupKey"
  */
-export function assessBarcodeLinks(links, { otherLinks = [], catalogBarcodes = new Set(), knownBarcodes = [] } = {}) {
+export function assessBarcodeLinks(links, { otherLinks = [], catalogBarcodes = new Set(), knownBarcodes = [], productsByBrand = new Map() } = {}) {
   const productsByBarcode = new Map();
   for (const l of [...otherLinks, ...links]) {
     if (!productsByBarcode.has(l.barcode)) productsByBarcode.set(l.barcode, new Set());
@@ -61,7 +63,12 @@ export function assessBarcodeLinks(links, { otherLinks = [], catalogBarcodes = n
     const brand = brandKey(link.brand);
     const sameBrand = (byBrand.get(brand) || []).filter((k) => k.lookupKey !== link.lookupKey && k.barcode !== link.barcode);
     if (!brand) reasons.push('Brand unknown, so the company code can’t be checked');
-    else if (sameBrand.length === 0) reasons.push(`No other ${link.brand} barcode yet to compare the company code with`);
+    else if (sameBrand.length === 0) {
+      // Nothing to compare with -- fine only if the brand has no other
+      // product in the catalog this barcode could really belong to.
+      const products = productsByBrand.get(brand);
+      if (products === undefined || products > 1) reasons.push(`No other ${link.brand} barcode yet to compare the company code with`);
+    }
     else if (!sameBrand.some((k) => prefixOf(k.barcode) === prefixOf(link.barcode))) {
       reasons.push(`Company code ${prefixOf(link.barcode)} doesn’t match ${link.brand}’s other barcodes (${[...new Set(sameBrand.map((k) => prefixOf(k.barcode)))].slice(0, 3).join(', ')})`);
     }
