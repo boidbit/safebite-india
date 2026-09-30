@@ -39,10 +39,10 @@ import PopularSearches from './pages/PopularSearches';
 import News from './pages/News';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminGuard from './pages/admin/AdminGuard';
-import AdminReviewList from './pages/admin/AdminReviewList';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminProducts from './pages/admin/AdminProducts';
 import AdminBarcodeLinks from './pages/admin/AdminBarcodeLinks';
 import AdminBarcodeBackfill from './pages/admin/AdminBarcodeBackfill';
-import AdminProductList from './pages/admin/AdminProductList';
 import AdminProductForm from './pages/admin/AdminProductForm';
 import AdminFlagsList from './pages/admin/AdminFlagsList';
 import AdminDataIssuesList from './pages/admin/AdminDataIssuesList';
@@ -232,10 +232,12 @@ function AppShell() {
           <Route path="/news" element={<News />} />
           <Route path="/submit-product" element={<SubmitProduct />} />
           <Route path="/admin" element={<AdminLogin />} />
-          <Route path="/admin/review" element={<AdminGuard><AdminReviewList /></AdminGuard>} />
+          <Route path="/admin/dashboard" element={<AdminGuard><AdminDashboard /></AdminGuard>} />
+          {/* Review and Products are one list now -- old links land on it. */}
+          <Route path="/admin/review" element={<Navigate to="/admin/products" replace />} />
           <Route path="/admin/barcode-links" element={<AdminGuard><AdminBarcodeLinks /></AdminGuard>} />
           <Route path="/admin/barcode-backfill" element={<AdminGuard><AdminBarcodeBackfill /></AdminGuard>} />
-          <Route path="/admin/products" element={<AdminGuard><AdminProductList /></AdminGuard>} />
+          <Route path="/admin/products" element={<AdminGuard><AdminProducts /></AdminGuard>} />
           <Route path="/admin/products/new" element={<AdminGuard><AdminProductForm /></AdminGuard>} />
           <Route path="/admin/products/:id/edit" element={<AdminGuard><AdminProductForm /></AdminGuard>} />
           <Route path="/admin/products/:id/copy" element={<AdminGuard><AdminProductForm copyMode /></AdminGuard>} />

@@ -19,7 +19,7 @@ import { buildReport } from '../../services/scoringEngine';
 import { finalizeScore } from '../../services/finalizeScore';
 import { adminSetReviewStatus } from '../../services/adminReviewRepo';
 import { adminApprovedBarcodeFor } from '../../services/adminBarcodeLinksRepo';
-import { StatusPill } from './AdminReviewList';
+import { StatusPill } from './AdminProducts';
 import { extractIngredientsFromImage } from '../../services/geminiService';
 import { lookupBarcode } from '../../services/openFoodFacts';
 import { parseLabel, looksLikeNutritionPanel, findIngredientTextIssues } from '../../services/ingredientParser';

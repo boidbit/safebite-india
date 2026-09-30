@@ -1,14 +1,18 @@
-// src/pages/admin/AdminReviewList.jsx
+// src/pages/admin/AdminProducts.jsx
 //
-// The review queue: every product, filterable, so an admin can check each
-// one before it's shown in the app. A newly added product is 'pending' --
-// hidden from search/categories/alternatives -- until approved here (or
-// from the edit form, which "Review" opens). Products that were already
-// live before review existed are listed as "Live, not reviewed".
+// Every product in one list -- what used to be two pages, "Review" and
+// "Products". Status tabs split it the way reviewing needs (new from
+// scraping / new from user scans / live not reviewed / approved /
+// rejected / all), each row shows whether the product is visible in the
+// app, and the same row edits, approves, rejects, crops, shows history or
+// deletes it. A newly added product is 'pending' -- hidden from search,
+// categories and alternatives -- until approved here or from the edit form.
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import AdminLayout from './AdminLayout';
+import PhotoCropModal from './PhotoCropModal';
 import { adminListReviewQueue, adminReviewCounts, adminSetReviewStatus, REVIEW_TABS, DEFAULT_REVIEW_TAB } from '../../services/adminReviewRepo';
+import { adminDeleteProduct, adminUpdateProduct } from '../../services/adminProductsRepo';
 import { getScoreColor } from '../../utils/storage';
 import { CATEGORY_KEYWORDS } from '../../data/categoryKeywords';
 import { FOOD_TYPES } from '../../services/foodType';
@@ -32,8 +36,8 @@ const STATUS_TABS = [
 export const STATUS_LOOK = {
   pending: { label: 'New · hidden', color: 'var(--v-moderate)', bg: 'var(--v-moderate-bg)' },
   live: { label: 'Live · not reviewed', color: 'var(--tint)', bg: 'var(--tint-bg)' },
-  approved: { label: 'Approved', color: 'var(--v-good)', bg: 'var(--v-good-bg)' },
-  rejected: { label: 'Rejected', color: 'var(--v-poor)', bg: 'var(--v-poor-bg)' },
+  approved: { label: 'Approved · live', color: 'var(--v-good)', bg: 'var(--v-good-bg)' },
+  rejected: { label: 'Rejected · hidden', color: 'var(--v-poor)', bg: 'var(--v-poor-bg)' },
 };
 
 const SORT_OPTIONS = [
@@ -47,18 +51,18 @@ const SORT_OPTIONS = [
 const INITIAL_FILTERS = {
   status: DEFAULT_REVIEW_TAB, search: '', brand: '', foodType: '', categoryId: '', source: '',
   scoreMin: '', scoreMax: '', hasImage: '', hasNutrition: '', problemsOnly: false,
-  addedWithinDays: '', sort: 'newest',
+  addedWithinDays: '', barcode: '', hasBarcode: '', sort: 'newest',
 };
 
-// Kept across opening a product and coming back, like the Products list.
-const FILTERS_STORAGE_KEY = 'foodguard-admin-review-filters';
+// Kept across opening a product and coming back.
+const FILTERS_STORAGE_KEY = 'foodguard-admin-products-list';
+const OLD_REVIEW_FILTERS_KEY = 'foodguard-admin-review-filters';
 
 function loadStored() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(FILTERS_STORAGE_KEY) || 'null');
+    const parsed = JSON.parse(localStorage.getItem(FILTERS_STORAGE_KEY) || localStorage.getItem(OLD_REVIEW_FILTERS_KEY) || 'null');
     if (!parsed) return null;
     const filters = { ...INITIAL_FILTERS, ...parsed.filters };
-    // A tab saved before the tabs were split ('unreviewed'/'pending') no longer exists.
     if (!REVIEW_TABS[filters.status]) filters.status = DEFAULT_REVIEW_TAB;
     return { filters, page: Number(parsed.page) || 0 };
   } catch {
@@ -95,12 +99,18 @@ function Field({ label, children, className = '' }) {
   );
 }
 
-const GRID = '28px 72px 2.2fr 1fr 1fr 0.9fr 0.8fr 1fr 80px 190px';
+const GRID = '28px 64px 2.4fr 1fr 1fr 0.8fr 0.7fr 1.05fr 70px 200px';
 
-export default function AdminReviewList() {
-  const [filters, setFilters] = useState(() => loadStored()?.filters || INITIAL_FILTERS);
+export default function AdminProducts() {
+  const [searchParams] = useSearchParams();
+  const [filters, setFilters] = useState(() => {
+    const stored = loadStored()?.filters || INITIAL_FILTERS;
+    // The dashboard links straight to a tab: /admin/products?tab=newScraped
+    const tab = searchParams.get('tab');
+    return tab && REVIEW_TABS[tab] ? { ...stored, status: tab } : stored;
+  });
   const setFilter = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
-  const [page, setPage] = useState(() => loadStored()?.page || 0);
+  const [page, setPage] = useState(() => (searchParams.get('tab') ? 0 : loadStored()?.page || 0));
   const [rows, setRows] = useState([]);
   const [count, setCount] = useState(0);
   const [counts, setCounts] = useState(null);
@@ -108,6 +118,8 @@ export default function AdminReviewList() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(() => new Set());
   const [busy, setBusy] = useState(false);
+  const [croppingRow, setCroppingRow] = useState(null);
+  const [savingCrop, setSavingCrop] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({ filters, page })); } catch { /* private mode */ }
@@ -132,6 +144,8 @@ export default function AdminReviewList() {
           hasNutrition: f.hasNutrition,
           problemsOnly: f.problemsOnly,
           addedWithinDays: f.addedWithinDays !== '' ? Number(f.addedWithinDays) : null,
+          barcode: f.barcode,
+          hasBarcode: f.hasBarcode,
           sort: f.sort,
           limit: PAGE_SIZE,
           offset: pageValue * PAGE_SIZE,
@@ -151,7 +165,7 @@ export default function AdminReviewList() {
     }
   };
 
-  // Same debounce/page-reset behaviour as the Products list.
+  // One debounce for every filter; a page-only change fetches at once.
   const prevFiltersRef = useRef(filters);
   const mountedRef = useRef(false);
   useEffect(() => {
@@ -179,6 +193,37 @@ export default function AdminReviewList() {
     }
   };
 
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Delete "${name || 'this product'}"? This can't be undone.`)) return;
+    try {
+      await adminDeleteProduct(id, name);
+      await load(filters, page);
+    } catch (err) {
+      window.alert(err.message);
+    }
+  };
+
+  // The row already carries its full report -- only the photo changes.
+  const handleCropped = async (dataUrl) => {
+    const row = croppingRow;
+    setSavingCrop(true);
+    try {
+      await adminUpdateProduct(row.id, {
+        lookupKey: row.lookup_key,
+        source: row.source,
+        productName: row.product_name,
+        ingredientsText: row.ingredients_text,
+        report: { ...row.report, imageUrl: dataUrl },
+      });
+      setCroppingRow(null);
+      await load(filters, page);
+    } catch (err) {
+      window.alert(err.message);
+    } finally {
+      setSavingCrop(false);
+    }
+  };
+
   const selectedProducts = rows.filter((r) => selected.has(r.id)).map((r) => ({ id: r.id, productName: r.product_name }));
   const toggle = (id) => setSelected((prev) => {
     const next = new Set(prev);
@@ -190,18 +235,26 @@ export default function AdminReviewList() {
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const filtersActive = JSON.stringify({ ...filters, status: 'x', sort: 'x' }) !== JSON.stringify({ ...INITIAL_FILTERS, status: 'x', sort: 'x' });
+  const select = (key, options) => (
+    <select value={filters[key]} onChange={(e) => setFilter(key, e.target.value)} className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]">
+      {options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+    </select>
+  );
 
   return (
     <AdminLayout>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <p className="text-[22px] font-bold tracking-tight" style={{ color: 'var(--label-1)' }}>
-            Review <span style={{ color: 'var(--label-3)', fontWeight: 500 }}>({count})</span>
+            Products <span style={{ color: 'var(--label-3)', fontWeight: 500 }}>({count.toLocaleString()})</span>
           </p>
           <p className="text-[12.5px]" style={{ color: 'var(--label-3)' }}>
-            New products stay hidden in the app until approved. Open one to check and fix it in the edit form.
+            Every product in one place. New ones stay hidden in the app until approved — the status on each row says whether it’s live.
           </p>
         </div>
+        <Link to="/admin/products/new" className="tap-scale flex-shrink-0 px-4 py-2.5 rounded-[10px] text-[14px] font-semibold text-white" style={{ background: 'var(--tint)' }}>
+          + Add new product
+        </Link>
       </div>
 
       {/* Status tabs */}
@@ -229,12 +282,8 @@ export default function AdminReviewList() {
         <Field label="Brand" className="flex-1 min-w-[150px]">
           <input value={filters.brand} onChange={(e) => setFilter('brand', e.target.value)} placeholder="Any brand" className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]" />
         </Field>
-        <Field label="Food type" className="min-w-[150px]">
-          <select value={filters.foodType} onChange={(e) => setFilter('foodType', e.target.value)} className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]">
-            <option value="">Any type</option>
-            {FOOD_TYPES.map((ft) => <option key={ft} value={ft}>{ft}</option>)}
-            <option value="__none">Not set</option>
-          </select>
+        <Field label="Barcode" className="min-w-[170px]">
+          <input value={filters.barcode} onChange={(e) => setFilter('barcode', e.target.value)} placeholder="Barcode number" inputMode="numeric" className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]" />
         </Field>
         <Field label="Category" className="min-w-[160px]">
           <select value={filters.categoryId} onChange={(e) => setFilter('categoryId', e.target.value)} className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]">
@@ -242,11 +291,15 @@ export default function AdminReviewList() {
             {CATEGORY_KEYWORDS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
           </select>
         </Field>
-        <Field label="Source" className="min-w-[130px]">
-          <select value={filters.source} onChange={(e) => setFilter('source', e.target.value)} className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]">
-            <option value="">Any source</option>
-            {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+        <Field label="Food type" className="min-w-[140px]">
+          <select value={filters.foodType} onChange={(e) => setFilter('foodType', e.target.value)} className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]">
+            <option value="">Any type</option>
+            {FOOD_TYPES.map((ft) => <option key={ft} value={ft}>{ft}</option>)}
+            <option value="__none">Not set</option>
           </select>
+        </Field>
+        <Field label="Source" className="min-w-[120px]">
+          {select('source', [['', 'Any source'], ...SOURCES.map((s) => [s, s])])}
         </Field>
       </div>
       <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -257,36 +310,14 @@ export default function AdminReviewList() {
             <input type="number" min="0" max="100" value={filters.scoreMax} onChange={(e) => setFilter('scoreMax', e.target.value)} placeholder="100" className="admin-field w-16 px-2 py-2 rounded-[10px] text-[14px]" />
           </div>
         </Field>
-        <Field label="Photo" className="min-w-[120px]">
-          <select value={filters.hasImage} onChange={(e) => setFilter('hasImage', e.target.value)} className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]">
-            <option value="">Any</option>
-            <option value="yes">Has photo</option>
-            <option value="no">No photo</option>
-          </select>
-        </Field>
-        <Field label="Nutrition" className="min-w-[130px]">
-          <select value={filters.hasNutrition} onChange={(e) => setFilter('hasNutrition', e.target.value)} className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]">
-            <option value="">Any</option>
-            <option value="yes">Has nutrition</option>
-            <option value="no">No nutrition</option>
-          </select>
-        </Field>
-        <Field label="Added" className="min-w-[130px]">
-          <select value={filters.addedWithinDays} onChange={(e) => setFilter('addedWithinDays', e.target.value)} className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]">
-            <option value="">Any time</option>
-            <option value="1">Last 24 hours</option>
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-          </select>
-        </Field>
-        <Field label="Sort" className="min-w-[160px]">
-          <select value={filters.sort} onChange={(e) => setFilter('sort', e.target.value)} className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]">
-            {SORT_OPTIONS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-        </Field>
+        <Field label="Photo" className="min-w-[120px]">{select('hasImage', [['', 'Any'], ['yes', 'Has photo'], ['no', 'No photo']])}</Field>
+        <Field label="Nutrition" className="min-w-[130px]">{select('hasNutrition', [['', 'Any'], ['yes', 'Has nutrition'], ['no', 'No nutrition']])}</Field>
+        <Field label="Scanned barcode" className="min-w-[150px]">{select('hasBarcode', [['', 'Any'], ['yes', 'Barcode product'], ['no', 'Not a barcode product']])}</Field>
+        <Field label="Added" className="min-w-[130px]">{select('addedWithinDays', [['', 'Any time'], ['1', 'Last 24 hours'], ['7', 'Last 7 days'], ['30', 'Last 30 days']])}</Field>
+        <Field label="Sort" className="min-w-[160px]">{select('sort', SORT_OPTIONS.map((s) => [s.id, s.label]))}</Field>
         <label className="flex items-center gap-2 px-3 py-2 rounded-[10px] text-[13px] font-semibold cursor-pointer" style={{ background: 'var(--fill)', color: 'var(--label-1)' }}>
           <input type="checkbox" checked={filters.problemsOnly} onChange={(e) => setFilter('problemsOnly', e.target.checked)} />
-          Data issue or flag only
+          Flagged or data issue
         </label>
         {filtersActive && (
           <button onClick={() => setFilters({ ...INITIAL_FILTERS, status: filters.status, sort: filters.sort })} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--label-3)' }}>
@@ -317,12 +348,12 @@ export default function AdminReviewList() {
       {error && <p className="text-[13px] mb-3" style={{ color: 'var(--v-poor)' }}>{error}</p>}
       {loading && <p className="text-[13px]" style={{ color: 'var(--label-3)' }}>Loading…</p>}
       {!loading && !error && rows.length === 0 && (
-        <p className="text-[13px] text-center py-10" style={{ color: 'var(--label-3)' }}>Nothing to review with these filters.</p>
+        <p className="text-[13px] text-center py-10" style={{ color: 'var(--label-3)' }}>No products match these filters.</p>
       )}
 
       {rows.length > 0 && (
         <div className="rounded-[14px] overflow-x-auto" style={{ background: 'var(--bg-card)', border: '1px solid var(--separator)' }}>
-          <div className="min-w-[1000px]">
+          <div className="min-w-[1080px]">
             <div className="grid gap-3 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide items-center" style={{ gridTemplateColumns: GRID, color: 'var(--label-3)', borderBottom: '1px solid var(--separator)' }}>
               <input type="checkbox" checked={allOnPageSelected} onChange={toggleAll} aria-label="Select all on this page" />
               <span></span>
@@ -331,7 +362,7 @@ export default function AdminReviewList() {
               <span>Score</span>
               <span>Food type</span>
               <span>Source</span>
-              <span>Status</span>
+              <span>Status in app</span>
               <span>Added</span>
               <span></span>
             </div>
@@ -341,12 +372,18 @@ export default function AdminReviewList() {
               return (
                 <div key={row.id} className="grid gap-3 px-4 py-2.5 items-center text-[13.5px]" style={{ gridTemplateColumns: GRID, borderBottom: '1px solid var(--separator)', background: selected.has(row.id) ? 'var(--tint-bg)' : undefined }}>
                   <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggle(row.id)} aria-label={`Select ${row.product_name}`} />
-                  <div className="w-14 h-14 rounded-[8px] overflow-hidden flex items-center justify-center" style={{ background: 'var(--fill)' }}>
+                  <button
+                    onClick={() => r.imageUrl && setCroppingRow(row)}
+                    title={r.imageUrl ? 'Crop photo' : 'No photo'}
+                    className="tap-scale w-14 h-14 rounded-[8px] overflow-hidden flex items-center justify-center"
+                    style={{ background: 'var(--fill)', cursor: r.imageUrl ? 'pointer' : 'default' }}
+                  >
                     {r.imageUrl ? <img src={r.imageUrl} alt="" className="w-full h-full object-cover" /> : <span style={{ fontSize: 20 }}>🍽️</span>}
-                  </div>
+                  </button>
                   <div className="min-w-0">
                     <p className="font-semibold truncate" style={{ color: 'var(--label-1)' }}>{row.product_name || 'Unnamed product'}</p>
                     <p className="text-[11px] truncate" style={{ color: 'var(--label-3)' }}>
+                      {row.barcode ? <span className="font-mono">{row.barcode} · </span> : 'no barcode · '}
                       {(r.ingredients || []).length} ingredients{r.nutrientsPer100 ? ' · nutrition' : ' · no nutrition'}
                     </p>
                   </div>
@@ -359,13 +396,22 @@ export default function AdminReviewList() {
                     {row.created_at ? new Date(row.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'}
                   </span>
                   <div className="flex items-center gap-2.5 justify-end">
-                    <Link to={`/admin/products/${row.id}/edit?review=1`} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--tint)' }}>Review</Link>
+                    <Link to={`/admin/products/${row.id}/edit`} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--tint)' }}>Edit</Link>
                     {row.review_status !== 'approved' && (
                       <button disabled={busy} onClick={() => setStatus(product, 'approved')} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--v-good)' }}>Approve</button>
                     )}
                     {row.review_status !== 'rejected' && (
                       <button disabled={busy} onClick={() => window.confirm(`Reject "${row.product_name}"? It'll stay out of the app.`) && setStatus(product, 'rejected')} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--v-poor)' }}>Reject</button>
                     )}
+                    <details className="relative">
+                      <summary className="tap-scale list-none cursor-pointer text-[15px] px-1" style={{ color: 'var(--label-3)' }} title="More">⋯</summary>
+                      <div className="absolute right-0 top-6 z-10 min-w-[140px] rounded-[10px] py-1 shadow-lg" style={{ background: 'var(--bg-card)', border: '1px solid var(--separator)' }}>
+                        <a href={`#/p/${row.id}`} target="_blank" rel="noreferrer" className="block px-3 py-1.5 text-[13px]" style={{ color: 'var(--label-1)' }}>View in app ↗</a>
+                        <Link to={`/admin/products/${row.id}/history`} className="block px-3 py-1.5 text-[13px]" style={{ color: 'var(--label-1)' }}>History</Link>
+                        {r.imageUrl && <button onClick={() => setCroppingRow(row)} className="block w-full text-left px-3 py-1.5 text-[13px]" style={{ color: 'var(--label-1)' }}>Crop photo</button>}
+                        <button onClick={() => handleDelete(row.id, row.product_name)} className="block w-full text-left px-3 py-1.5 text-[13px]" style={{ color: 'var(--v-poor)' }}>Delete</button>
+                      </div>
+                    </details>
                   </div>
                 </div>
               );
@@ -383,6 +429,19 @@ export default function AdminReviewList() {
           <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="tap-scale px-4 py-2 rounded-[10px] text-[13px] font-semibold" style={{ background: 'var(--fill)', color: 'var(--label-1)', opacity: page >= totalPages - 1 ? 0.4 : 1 }}>
             Next →
           </button>
+        </div>
+      )}
+
+      {croppingRow && (
+        <PhotoCropModal
+          imageUrl={croppingRow.report?.imageUrl}
+          onCropped={handleCropped}
+          onClose={() => !savingCrop && setCroppingRow(null)}
+        />
+      )}
+      {savingCrop && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40">
+          <p className="px-4 py-2.5 rounded-full text-[13px] font-semibold text-white" style={{ background: 'rgba(0,0,0,0.7)' }}>Saving…</p>
         </div>
       )}
     </AdminLayout>

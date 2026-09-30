@@ -67,7 +67,12 @@ async function lookupKeysWithOpenProblems() {
  * @param {''|'yes'|'no'} [opts.hasNutrition]
  * @param {boolean} [opts.problemsOnly] - only products with an open data issue or user flag
  * @param {number} [opts.addedWithinDays] - created in the last N days
+ * @param {string} [opts.barcode] - digits; matches a barcode in the product's key
+ *   ("barcode:...") or a barcode matched to it in Barcode matches (a Blinkit
+ *   product's barcode lives there)
+ * @param {''|'yes'|'no'} [opts.hasBarcode] - whether the key itself is a barcode
  * @param {keyof SORTS} [opts.sort]
+ * @returns rows, each with `barcode` (its key's, or an approved match's) or null
  */
 export async function adminListReviewQueue({
   status = DEFAULT_REVIEW_TAB,
@@ -82,6 +87,8 @@ export async function adminListReviewQueue({
   hasNutrition = '',
   problemsOnly = false,
   addedWithinDays = null,
+  barcode = '',
+  hasBarcode = '',
   sort = 'newest',
   limit = 25,
   offset = 0,
@@ -90,7 +97,7 @@ export async function adminListReviewQueue({
   const order = SORTS[sort] || SORTS.newest;
   let query = supabase
     .from('product_reports')
-    .select('id, lookup_key, source, product_name, report, review_status, reviewed_at, created_at, updated_at', { count: 'exact' })
+    .select('id, lookup_key, source, product_name, ingredients_text, report, review_status, reviewed_at, created_at, updated_at', { count: 'exact' })
     .order(order.column, { ascending: order.ascending, nullsFirst: false })
     .order('id', { ascending: true }) // stable paging when the sort column ties
     .range(offset, offset + limit - 1);
@@ -122,10 +129,43 @@ export async function adminListReviewQueue({
     if (keys.length === 0) return { rows: [], count: 0 }; // an empty IN() would match everything
     query = query.in('lookup_key', keys);
   }
+  if (hasBarcode === 'yes') query = query.ilike('lookup_key', 'barcode:%');
+  else if (hasBarcode === 'no') query = query.not('lookup_key', 'ilike', 'barcode:%');
+  const digits = barcode.replace(/\D/g, '');
+  if (digits) {
+    const ids = await productIdsWithBarcode(digits);
+    if (ids.length === 0) return { rows: [], count: 0 };
+    query = query.in('id', ids);
+  }
 
   const { data, error, count } = await query;
   if (error) throw new Error(error.message);
-  return { rows: data || [], count: count || 0 };
+  const rows = data || [];
+
+  // Each row's barcode: its own key's, or one approved in Barcode matches.
+  const linked = new Map();
+  const linkKeys = rows.filter((r) => !r.lookup_key.startsWith('barcode:')).map((r) => r.lookup_key);
+  if (linkKeys.length) {
+    const { data: links } = await supabase.from('barcode_links').select('lookup_key, barcode').eq('status', 'approved').in('lookup_key', linkKeys);
+    for (const l of links || []) if (!linked.has(l.lookup_key)) linked.set(l.lookup_key, l.barcode);
+  }
+  return {
+    rows: rows.map((r) => ({ ...r, barcode: r.lookup_key.startsWith('barcode:') ? r.lookup_key.slice('barcode:'.length) : linked.get(r.lookup_key) || null })),
+    count: count || 0,
+  };
+}
+
+// Products whose key holds these digits, or that a (not rejected) Barcode
+// matches link ties them to.
+async function productIdsWithBarcode(digits) {
+  const { data: links } = await supabase.from('barcode_links').select('lookup_key').ilike('barcode', `%${digits}%`).neq('status', 'rejected').limit(200);
+  const keys = [...new Set((links || []).map((l) => l.lookup_key))];
+  const [byKey, byLink] = await Promise.all([
+    supabase.from('product_reports').select('id').ilike('lookup_key', `barcode:%${digits}%`).limit(200),
+    keys.length ? supabase.from('product_reports').select('id').in('lookup_key', keys) : { data: [] },
+  ]);
+  if (byKey.error) throw new Error(byKey.error.message);
+  return [...new Set([...(byKey.data || []), ...(byLink.data || [])].map((r) => r.id))];
 }
 
 /** How many products sit in each review tab -- for the tab counts. */

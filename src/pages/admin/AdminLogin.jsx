@@ -13,7 +13,7 @@ export default function AdminLogin() {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate('/admin/products', { replace: true });
+      if (data.session) navigate('/admin/dashboard', { replace: true });
     });
   }, [navigate]);
 
@@ -31,7 +31,7 @@ export default function AdminLogin() {
       );
       return;
     }
-    navigate('/admin/products', { replace: true });
+    navigate('/admin/dashboard', { replace: true });
   };
 
   return (
