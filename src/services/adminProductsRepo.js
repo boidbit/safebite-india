@@ -216,40 +216,6 @@ export async function adminDeleteProduct(id, productName = null) {
 }
 
 /**
- * Lightweight full-catalog fetch for duplicate detection -- id, name,
- * brand and just enough of the report to judge which candidate in a
- * group is worth keeping (has a photo / real nutrition data). PostgREST
- * caps a single request's rows, so this pages through everything
- * rather than trusting one big .select() to return it all.
- */
-export async function adminListAllProductsLight() {
-  requireSupabase();
-  const PAGE = 1000;
-  const all = [];
-  // Pulls only the specific JSON paths needed (not the whole report --
-  // that includes the full per-ingredient breakdown, which across
-  // 3000+ rows is the difference between a few seconds and tens of
-  // seconds for a scan nothing here actually needs that much data for.
-  const SELECT = 'id, product_name, lookup_key, updated_at, brand:report->brand, score:report->overallScore, image_url:report->imageUrl, nutrition_panel:report->nutritionPanel, real_nutrients:report->realNutrients';
-  for (let offset = 0; ; offset += PAGE) {
-    const { data, error } = await supabase.from('product_reports').select(SELECT).range(offset, offset + PAGE - 1);
-    if (error) throw new Error(error.message);
-    all.push(...data.map((row) => ({
-      id: row.id,
-      productName: row.product_name,
-      lookupKey: row.lookup_key,
-      updatedAt: row.updated_at,
-      brand: row.brand || null,
-      score: row.score ?? null,
-      hasImage: Boolean(row.image_url),
-      hasNutrition: Boolean(row.nutrition_panel || row.real_nutrients),
-    })));
-    if (data.length < PAGE) break;
-  }
-  return all;
-}
-
-/**
  * Every barcode-sourced product's id/name/brand/barcode -- feeds the
  * "Barcode check" tool (AdminBarcodeCheck.jsx), which resolves each
  * barcode's GS1 country prefix client-side (gs1CountryPrefixes.js).
@@ -278,11 +244,3 @@ export async function adminListAllBarcodeProductsLight() {
   return all;
 }
 
-/** Deletes every id in `removeIds`, keeping `keepId` -- one merge, logged as one entry. */
-export async function adminMergeProducts(keepId, removeIds, productName) {
-  requireSupabase();
-  if (removeIds.length === 0) return;
-  const { error } = await supabase.from('product_reports').delete().in('id', removeIds);
-  if (error) throw new Error(error.message);
-  logActivity({ action: 'merge', targetType: 'product', targetId: keepId, productName, details: { removedIds: removeIds } });
-}

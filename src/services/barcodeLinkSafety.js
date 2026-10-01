@@ -21,7 +21,9 @@ const SKIP_WORDS = new Set(['the', 'a', 'an']);
 
 /** First real word of a brand: "Sunfeast Farmlite" and "Sunfeast, ITC" -> "sunfeast". */
 export function brandKey(brand) {
-  const words = (brand || '').toLowerCase().split(',')[0].split(/[^a-z0-9]+/).filter((w) => w && !SKIP_WORDS.has(w));
+  // Accents folded first: "Nestlé" -> "nestle", not "nestl".
+  const plain = (brand || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const words = plain.split(',')[0].split(/[^a-z0-9]+/).filter((w) => w && !SKIP_WORDS.has(w));
   return words[0] || null;
 }
 

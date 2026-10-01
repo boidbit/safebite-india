@@ -402,8 +402,15 @@ export default function Home() {
       }
 
       if (mode === 'barcode') {
-        const key = barcodeKey(barcodeValue);
-        const cached = await getCachedReport(key);
+        let key = barcodeKey(barcodeValue);
+        let cached = await getCachedReport(key);
+        // Hidden as a duplicate (Admin > Duplicates) -- its barcode was moved
+        // to the copy that was kept, so open that one instead.
+        if (cached?.reviewStatus === 'rejected') {
+          const keptKey = await getLinkedLookupKey(barcodeValue);
+          const kept = keptKey ? await getCachedReport(keptKey) : null;
+          if (kept) { cached = kept; key = keptKey; }
+        }
         if (cached) {
           cached.lookupKey = key;
           const id = saveToHistory(cached, mode);
