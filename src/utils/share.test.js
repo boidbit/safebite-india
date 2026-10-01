@@ -13,7 +13,7 @@ test('a shared report links to the public web app, never a local device address'
   // Inside the Android app window.location is a capacitor/localhost
   // address the recipient could never open.
   const url = productShareUrl('3f1c-uuid');
-  assert.equal(url, 'https://talibmohd0099.github.io/safebite-india/#/p/3f1c-uuid');
+  assert.equal(url, 'https://boidbit.github.io/safebite-india/#/p/3f1c-uuid');
 });
 
 test('the message carries the product, score, verdict, top two concerns and the link', () => {

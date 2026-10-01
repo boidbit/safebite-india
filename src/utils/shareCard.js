@@ -188,7 +188,7 @@ export async function renderShareCardImage({ productName, score, verdictLabel, e
     ctx.fillText('Scanned with FoodGuard India', cx, CARD_HEIGHT - 82);
     ctx.font = `600 30px ${FONT}`;
     ctx.fillStyle = '#1e8e3e';
-    ctx.fillText('talibmohd0099.github.io/safebite-india', cx, CARD_HEIGHT - 40);
+    ctx.fillText('boidbit.github.io/safebite-india', cx, CARD_HEIGHT - 40);
 
     return await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
   } catch {
