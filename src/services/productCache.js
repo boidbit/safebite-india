@@ -157,11 +157,41 @@ export async function getLinkedLookupKey(barcode) {
  * they're worth showing above live database results.
  */
 export async function searchCachedProducts(query, { limit = 5 } = {}) {
-  if (!isSupabaseConfigured) return [];
+  return (await searchProductsPage(query, { limit })).items;
+}
 
+/**
+ * Ranked product search (supabase/product_search_migration.sql): every
+ * word matched on its own and in any order, close spellings accepted,
+ * whole-name and popular products first, poorly named ones last. Falls back
+ * to the old exact-text match if that function isn't installed yet.
+ * @returns {Promise<{ items: Array, total: number }>}
+ */
+export async function searchProductsPage(query, { limit = 20, offset = 0 } = {}) {
+  if (!isSupabaseConfigured) return { items: [], total: 0 };
   const cleaned = (query || '').trim();
-  if (cleaned.length < 2) return [];
+  if (cleaned.length < 2) return { items: [], total: 0 };
 
+  const { data, error } = await supabase.rpc('search_products', { q: cleaned, max_results: limit, skip: offset });
+  if (!error && Array.isArray(data)) {
+    return {
+      items: data.map((row) => ({
+        lookupKey: row.lookup_key,
+        productName: row.product_name,
+        brand: row.brand || null,
+        score: typeof row.score === 'number' ? row.score : null,
+        verdict: row.verdict || null,
+        imageUrl: row.image_url || null,
+      })),
+      total: Number(data[0]?.total || 0),
+    };
+  }
+  const items = offset === 0 ? await exactTextSearch(cleaned, limit) : [];
+  return { items, total: items.length };
+}
+
+// The original search: the typed text, as typed, inside the name or brand.
+async function exactTextSearch(cleaned, limit) {
   // Escape LIKE wildcards so a typed "%" searches for a literal "%"
   // instead of silently matching everything. Also strip "," and "()" --
   // this value now sits inside an unquoted .or() filter string below,

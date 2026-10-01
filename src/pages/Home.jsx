@@ -1194,6 +1194,16 @@ export default function Home() {
                 </button>
               ))}
 
+              {/* Only the top 5 fit here -- the rest are on their own page. */}
+              {suggestions.cached.length >= 5 && (
+                <button
+                  onClick={() => navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`)}
+                  className="tap-scale w-full text-left px-4 py-2.5 text-sm font-semibold text-green-700 dark:text-green-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                >
+                  {t('searchSeeAll')} →
+                </button>
+              )}
+
               {suggestions.off.map((item, i) => (
                 <button
                   key={item.code}

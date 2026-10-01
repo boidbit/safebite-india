@@ -36,6 +36,7 @@ import Privacy from './pages/Privacy';
 import MyIntake from './pages/MyIntake';
 import Category from './pages/Category';
 import PopularSearches from './pages/PopularSearches';
+import SearchResults from './pages/SearchResults';
 import News from './pages/News';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminGuard from './pages/admin/AdminGuard';
@@ -229,6 +230,7 @@ function AppShell() {
           <Route path="/browse" element={<Navigate to="/" replace />} />
           <Route path="/category/:id" element={<Category />} />
           <Route path="/popular" element={<PopularSearches />} />
+          <Route path="/search" element={<SearchResults />} />
           <Route path="/news" element={<News />} />
           <Route path="/submit-product" element={<SubmitProduct />} />
           <Route path="/admin" element={<AdminLogin />} />
