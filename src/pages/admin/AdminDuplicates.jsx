@@ -29,6 +29,7 @@ const VIEWS = [
   { id: 'scoreGap', label: 'Scores differ (5+)' },
   { id: 'sameBarcode', label: 'Clear duplicates (one barcode or none)' },
   { id: 'brand', label: 'Brand looks wrong' },
+  { id: 'noSize', label: 'Pack size missing' },
 ];
 const SORTS = [
   { id: 'copies', label: 'Most copies' },
@@ -250,7 +251,8 @@ export default function AdminDuplicates() {
       .filter((g) => view === 'all'
         || (view === 'scoreGap' && gapOf(g) > 5)
         || (view === 'sameBarcode' && g.distinctBarcodes <= 1)
-        || (view === 'brand' && g.products.some((p) => p.profile.brandLooksWrong)))
+        || (view === 'brand' && g.products.some((p) => p.profile.brandLooksWrong))
+        || (view === 'noSize' && g.someSizeUnknown))
       .sort((a, b) => (sort === 'gap' ? gapOf(b) - gapOf(a)
         : sort === 'scans' ? b.products.reduce((n, p) => n + p.scanCount, 0) - a.products.reduce((n, p) => n + p.scanCount, 0)
         : b.products.length - a.products.length));

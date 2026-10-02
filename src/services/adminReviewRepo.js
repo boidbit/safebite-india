@@ -65,6 +65,7 @@ async function lookupKeysWithOpenProblems() {
  * @param {number} [opts.scoreMax]
  * @param {''|'yes'|'no'} [opts.hasImage]
  * @param {''|'yes'|'no'} [opts.hasNutrition]
+ * @param {''|'yes'|'no'} [opts.hasPackSize] - report.packSize filled in (empty text counts as missing)
  * @param {boolean} [opts.problemsOnly] - only products with an open data issue or user flag
  * @param {number} [opts.addedWithinDays] - created in the last N days
  * @param {string} [opts.barcode] - digits; matches a barcode in the product's key
@@ -85,6 +86,7 @@ export async function adminListReviewQueue({
   scoreMax = null,
   hasImage = '',
   hasNutrition = '',
+  hasPackSize = '',
   problemsOnly = false,
   addedWithinDays = null,
   barcode = '',
@@ -121,6 +123,8 @@ export async function adminListReviewQueue({
   else if (hasImage === 'no') query = query.is('report->>imageUrl', null);
   if (hasNutrition === 'yes') query = query.not('report->nutrientsPer100', 'is', null);
   else if (hasNutrition === 'no') query = query.is('report->nutrientsPer100', null);
+  if (hasPackSize === 'yes') query = query.not('report->>packSize', 'is', null).neq('report->>packSize', '');
+  else if (hasPackSize === 'no') query = query.or('report->>packSize.is.null,report->>packSize.eq.');
   if (typeof addedWithinDays === 'number' && addedWithinDays > 0) {
     query = query.gte('created_at', new Date(Date.now() - addedWithinDays * 86400000).toISOString());
   }

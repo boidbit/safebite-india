@@ -50,7 +50,7 @@ const SORT_OPTIONS = [
 
 const INITIAL_FILTERS = {
   status: DEFAULT_REVIEW_TAB, search: '', brand: '', foodType: '', categoryId: '', source: '',
-  scoreMin: '', scoreMax: '', hasImage: '', hasNutrition: '', problemsOnly: false,
+  scoreMin: '', scoreMax: '', hasImage: '', hasNutrition: '', hasPackSize: '', problemsOnly: false,
   addedWithinDays: '', barcode: '', hasBarcode: '', sort: 'newest',
 };
 
@@ -142,6 +142,7 @@ export default function AdminProducts() {
           scoreMax: f.scoreMax !== '' ? Number(f.scoreMax) : null,
           hasImage: f.hasImage,
           hasNutrition: f.hasNutrition,
+          hasPackSize: f.hasPackSize,
           problemsOnly: f.problemsOnly,
           addedWithinDays: f.addedWithinDays !== '' ? Number(f.addedWithinDays) : null,
           barcode: f.barcode,
@@ -312,6 +313,7 @@ export default function AdminProducts() {
         </Field>
         <Field label="Photo" className="min-w-[120px]">{select('hasImage', [['', 'Any'], ['yes', 'Has photo'], ['no', 'No photo']])}</Field>
         <Field label="Nutrition" className="min-w-[130px]">{select('hasNutrition', [['', 'Any'], ['yes', 'Has nutrition'], ['no', 'No nutrition']])}</Field>
+        <Field label="Pack size" className="min-w-[140px]">{select('hasPackSize', [['', 'Any'], ['yes', 'Has pack size'], ['no', 'No pack size']])}</Field>
         <Field label="Scanned barcode" className="min-w-[150px]">{select('hasBarcode', [['', 'Any'], ['yes', 'Barcode product'], ['no', 'Not a barcode product']])}</Field>
         <Field label="Added" className="min-w-[130px]">{select('addedWithinDays', [['', 'Any time'], ['1', 'Last 24 hours'], ['7', 'Last 7 days'], ['30', 'Last 30 days']])}</Field>
         <Field label="Sort" className="min-w-[160px]">{select('sort', SORT_OPTIONS.map((s) => [s.id, s.label]))}</Field>
