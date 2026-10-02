@@ -10,7 +10,7 @@ import { saveToHistory, getScoreColor } from '../utils/storage';
 import { CATEGORIES } from '../data/categories';
 import ProductImage from '../components/ProductImage';
 import LoadingScreen from '../components/LoadingScreen';
-import { randomLoadDelayMs, waitForMinimum } from '../utils/loadingPace';
+import { randomLoadDelayMs, waitForMinimum, remainingBudgetMs } from '../utils/loadingPace';
 import { useLoaderFinish } from '../hooks/useLoaderFinish';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -64,7 +64,7 @@ export default function Category() {
     cached.lookupKey = item.lookupKey;
     const historyId = saveToHistory(cached, 'search');
     await waitForMinimum(startedAt, minMs);
-    await finishLoader();
+    await finishLoader(remainingBudgetMs(startedAt));
     navigate(`/result/${historyId}`);
   };
 

@@ -1,16 +1,25 @@
 // src/utils/loadingPace.js
 //
-// A report that's already saved opens in a fraction of a second, which
-// feels abrupt -- like nothing happened. This gives every "open a report"
-// moment a natural pace: a randomised minimum time on the loading screen
-// (mostly about 1-1.5s, sometimes up to 2.5s). A report that genuinely
-// takes longer to build isn't delayed any further.
+// Opening a report that's already saved: long enough that the loading ring
+// reads as "checked", never so long it feels slow -- the whole thing, from
+// tap to the report, fits in OPEN_BUDGET_MS. A short random minimum on the
+// loading screen (so an instant fetch isn't an abrupt flash), then the ring
+// gets whatever time is left of the budget to sprint to 100%. A report that
+// genuinely takes longer to build isn't delayed at all. The budget sits well
+// under a second: fetching the report (~400 ms) is inside it, opening the
+// report page (~150-200 ms) comes after it.
 
-/** Random minimum loading time in ms: ~55% 1.0-1.5s, ~35% 1.5-2.0s, ~10% 2.0-2.5s. */
+/** Tap-to-report budget for an already-saved report, in ms. */
+export const OPEN_BUDGET_MS = 700;
+
+/** Random minimum loading time in ms: 250-350. */
 export function randomLoadDelayMs(random = Math.random) {
-  const roll = random();
-  const [lo, hi] = roll < 0.55 ? [1000, 1500] : roll < 0.9 ? [1500, 2000] : [2000, 2500];
-  return Math.round(lo + random() * (hi - lo));
+  return Math.round(250 + random() * 100);
+}
+
+/** What's left of the budget since `startedAt` -- the ring's time to finish. */
+export function remainingBudgetMs(startedAt, now = Date.now()) {
+  return OPEN_BUDGET_MS - (now - startedAt);
 }
 
 /** Resolves once `minMs` have passed since `startedAt` (immediately if they already have). */

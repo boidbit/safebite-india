@@ -38,7 +38,9 @@ export default function LoadingScreen({ finishing = false, onFinished }) {
   useEffect(() => {
     const progressTimer = setInterval(() => {
       setProgress((p) => {
-        if (finishingRef.current) return Math.min(100, p + 6);
+        // A quick sprint: from where a saved report usually is (~5%) to
+        // 100% in about 250 ms, inside loadingPace's open budget.
+        if (finishingRef.current) return Math.min(100, p + 25);
         return p < MAX_SIMULATED_PROGRESS ? p + 1 : p;
       });
     }, (STEP_DURATION_MS * STEPS.length) / MAX_SIMULATED_PROGRESS);
@@ -56,7 +58,7 @@ export default function LoadingScreen({ finishing = false, onFinished }) {
   // Landed on 100%: hold a beat so it reads as "complete", then hand over.
   useEffect(() => {
     if (!finishing || progress < 100) return undefined;
-    const t = setTimeout(() => onFinished?.(), 380);
+    const t = setTimeout(() => onFinished?.(), 100);
     return () => clearTimeout(t);
   }, [finishing, progress, onFinished]);
 

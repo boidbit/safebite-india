@@ -29,8 +29,7 @@ export default function About() {
   const steps = [
     { step: '1', title: t('aboutStep1Title'), desc: t('aboutStep1Desc') },
     { step: '2', title: t('aboutStep2Title'), desc: t('aboutStep2Desc') },
-    { step: '3', title: t('aboutStep3Title'), desc: t('aboutStep3Desc') },
-    { step: '4', title: t('aboutStep4Title'), desc: t('aboutStep4Desc') },
+    { step: '3', title: t('aboutStep4Title'), desc: t('aboutStep4Desc') },
   ];
 
   const tiers = [
@@ -149,10 +148,6 @@ export default function About() {
           <li className="flex items-start gap-2">
             <span>🇪🇺</span>
             <span>{renderBold(t('aboutSourceEu'))}</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span>🤖</span>
-            <span>{renderBold(t('aboutSourceAi'))}</span>
           </li>
         </ul>
       </div>

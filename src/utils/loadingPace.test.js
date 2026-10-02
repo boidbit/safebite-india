@@ -1,20 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomLoadDelayMs, waitForMinimum } from './loadingPace.js';
+import { randomLoadDelayMs, waitForMinimum, remainingBudgetMs, OPEN_BUDGET_MS } from './loadingPace.js';
 
-test('delay is always between 1.0s and 2.5s', () => {
+test('delay is always between 0.25s and 0.35s', () => {
   for (let i = 0; i < 2000; i++) {
     const ms = randomLoadDelayMs();
-    assert.ok(ms >= 1000 && ms <= 2500, String(ms));
+    assert.ok(ms >= 250 && ms <= 350, String(ms));
   }
+  assert.equal(randomLoadDelayMs(() => 0), 250);
+  assert.equal(randomLoadDelayMs(() => 1), 350);
 });
 
-test('most delays are short, a few are long', () => {
-  const samples = Array.from({ length: 4000 }, () => randomLoadDelayMs());
-  const short = samples.filter((ms) => ms < 1500).length / samples.length;
-  const long = samples.filter((ms) => ms >= 2000).length / samples.length;
-  assert.ok(short > 0.45 && short < 0.65, `short share ${short}`);
-  assert.ok(long > 0.04 && long < 0.16, `long share ${long}`);
+test('the minimum leaves room in the one-second budget for the ring to finish', () => {
+  assert.ok(OPEN_BUDGET_MS < 1000);
+  assert.ok(OPEN_BUDGET_MS - randomLoadDelayMs(() => 1) >= 300);
+});
+
+test('remainingBudgetMs counts down from the budget and goes negative once spent', () => {
+  assert.equal(remainingBudgetMs(1000, 1000), OPEN_BUDGET_MS);
+  assert.equal(remainingBudgetMs(1000, 1400), OPEN_BUDGET_MS - 400);
+  assert.ok(remainingBudgetMs(1000, 2500) < 0);
 });
 
 test('waitForMinimum does not wait when the minimum has already passed', async () => {

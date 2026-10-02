@@ -11,7 +11,7 @@ import { getTodaysTotals } from '../services/intakeLog';
 import { saveToHistory, getScoreColor } from '../utils/storage';
 import LoadingScreen from '../components/LoadingScreen';
 import ProductStripCard from '../components/ProductStripCard';
-import { randomLoadDelayMs, waitForMinimum } from '../utils/loadingPace';
+import { randomLoadDelayMs, waitForMinimum, remainingBudgetMs } from '../utils/loadingPace';
 import { useLoaderFinish } from '../hooks/useLoaderFinish';
 import ProductImage from '../components/ProductImage';
 import { CATEGORIES } from '../data/categories';
@@ -103,8 +103,9 @@ export default function Home() {
   const [sectionsLoading, setSectionsLoading] = useState(() => !homeSnapshot);
   const [loading, setLoading] = useState(false);
   // A saved report opens almost instantly, which feels abrupt -- keep the
-  // loading screen up for a natural, randomised minimum (1-2.5s) before
-  // opening it. A report that really takes longer isn't delayed further.
+  // loading screen up a short random minimum (0.3-0.4s), then let the ring
+  // finish in what's left of a one-second budget (loadingPace.js). A report
+  // that really takes longer isn't delayed further.
   const { finishing, finishLoader, onFinished, resetFinish } = useLoaderFinish();
   const loadStartRef = useRef(0);
   const loadMinMsRef = useRef(0);
@@ -117,7 +118,7 @@ export default function Home() {
   const goToResult = async (id) => {
     await waitForMinimum(loadStartRef.current, loadMinMsRef.current);
     // The ring sprints to 100% and hands over to the score ring.
-    await finishLoader();
+    await finishLoader(remainingBudgetMs(loadStartRef.current));
     navigate(`/result/${id}`);
   };
   const [error, setError] = useState('');
