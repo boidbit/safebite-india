@@ -16,6 +16,7 @@ import { adminInboxCounts } from '../../services/adminDashboardRepo';
 const SECTIONS = [
   { id: 'dashboard', label: 'Dashboard', to: '/admin/dashboard', tabs: [{ to: '/admin/dashboard' }] },
   { id: 'products', label: 'Products', to: '/admin/products', tabs: [{ to: '/admin/products' }] },
+  { id: 'home', label: 'Home screen', to: '/admin/home-features', tabs: [{ to: '/admin/home-features' }] },
   {
     id: 'inbox', label: 'Inbox', to: '/admin/flags',
     tabs: [

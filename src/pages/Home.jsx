@@ -20,6 +20,15 @@ import { getTodaysFact } from '../services/dailyFactRepo';
 import BarcodeScanner, { isBarcodeScanSupported, readBarcodeFromImage } from '../components/BarcodeScanner';
 import { useFamily } from '../contexts/FamilyContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { getHomeFeatures } from '../services/homeFeaturesRepo';
+import ShockReel from '../components/home/ShockReel';
+import LooksHealthyStrip from '../components/home/LooksHealthyStrip';
+import GuessGame from '../components/home/GuessGame';
+
+// Whether the last visit had a shock reel -- so the first paint can hold
+// its space with a skeleton instead of the hero jumping taller once it loads.
+const REEL_HINT_KEY = 'foodguard-home-has-reel';
+const hadReelLastTime = () => { try { return localStorage.getItem(REEL_HINT_KEY) === '1'; } catch { return false; } };
 
 // A plain pulsing placeholder block -- shared shape for every home
 // screen section's skeleton, so a section always reserves the same
@@ -76,6 +85,9 @@ export default function Home() {
   const [recentlyAdded, setRecentlyAdded] = useState(() => homeSnapshot?.recent ?? []);
   const [spotlight, setSpotlight] = useState(() => homeSnapshot?.spot ?? { best: null, worst: null });
   const [stats, setStats] = useState(() => homeSnapshot?.stats ?? null);
+  // Admin-picked hook sections (Admin > Home screen): the shock reel, the
+  // "Looks healthy, but…" flip cards and the guess game's pool.
+  const [features, setFeatures] = useState(() => homeSnapshot?.features ?? { shock: [], healthy: [], guess: [] });
   // Local-only, read fresh every time Home mounts (e.g. Back from a
   // report just logged against) -- no network involved, so no skeleton
   // needed. Only ever rendered when there's actually something logged
@@ -137,13 +149,16 @@ export default function Home() {
       safe(getDailySpotlight(), { best: null, worst: null }),
       safe(getCatalogStats(), null),
       safe(getTodaysFact(), null),
-    ]).then(([popular, recent, spot, catStats, fact]) => {
-      homeSnapshot = { popular, recent, spot, stats: catStats, fact };
+      safe(getHomeFeatures(), { shock: [], healthy: [], guess: [] }),
+    ]).then(([popular, recent, spot, catStats, fact, picks]) => {
+      homeSnapshot = { popular, recent, spot, stats: catStats, fact, features: picks };
       setPopularTerms(popular);
       setRecentlyAdded(recent);
       setSpotlight(spot);
       setStats(catStats);
       setDailyFact(fact);
+      setFeatures(picks);
+      try { localStorage.setItem(REEL_HINT_KEY, picks.shock.length ? '1' : '0'); } catch { /* private mode */ }
       setSectionsLoading(false);
     });
   }, []);
@@ -748,6 +763,14 @@ export default function Home() {
                 <span><span className="font-bold text-white">{stats.total.toLocaleString()}</span> {t('homeStatsCheckedSuffix')}</span>
               </p>
             )}
+            {/* The hook: well-known products, scored in front of you. */}
+            {searchQuery.trim().length === 0 && (sectionsLoading
+              ? hadReelLastTime() && <div className="relative shimmer-light mt-3 h-[300px] rounded-[22px]" />
+              : features.shock.length > 0 && (
+                <div className="relative">
+                  <ShockReel items={features.shock} onOpen={openCachedSuggestion} onScan={openBarcodeScan} />
+                </div>
+              ))}
           </div>
 
           {/* Search bar -- an obvious text field: solid outline, one icon,
@@ -900,6 +923,15 @@ export default function Home() {
                 </button>
               </div>
             </div>
+          )}
+
+          {/* "Looks healthy, but…" and the guess game -- admin-picked, so
+              they only appear once someone has chosen products for them. */}
+          {searchQuery.trim().length === 0 && !sectionsLoading && features.healthy.length > 0 && (
+            <LooksHealthyStrip items={features.healthy} onOpen={openCachedSuggestion} />
+          )}
+          {searchQuery.trim().length === 0 && !sectionsLoading && features.guess.length > 0 && (
+            <GuessGame pool={features.guess} onOpen={openCachedSuggestion} />
           )}
 
           {/* Today's picks -- one high scorer, one low scorer, both real
