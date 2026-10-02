@@ -1,11 +1,13 @@
 // src/pages/Result.jsx
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { getHistoryById, updateHistoryProductName, refreshHistoryEntry, saveToHistory, getScoreColor, getIngredientSeverity } from '../utils/storage';
 import { getCachedReport, getSaferAlternatives, getSimilarProducts, saveReport, getReportIdByLookupKey } from '../services/productCache';
 import { buildProductShareText, productShareUrl } from '../utils/share';
 import ShareSheet from '../components/ShareSheet';
+import AtAGlance from '../components/AtAGlance';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { renderShareCardImage } from '../utils/shareCard';
 import headerIcon from '../assets/header-icon.png';
 import { analyzeText } from '../services/analyzeText';
@@ -202,28 +204,6 @@ function SegmentedControl({ value, onChange, options }) {
   );
 }
 
-// A compact card for "Watch out for" / "Good things" -- sized to sit
-// side by side so both read in one glance instead of two separate
-// full-width scrolls.
-function ListCard({ title, dotColor, items }) {
-  return (
-    <div className="rounded-[14px] p-3.5" style={{ background: 'var(--bg-card)' }}>
-      <p className="flex items-center gap-1.5 text-[14px] font-semibold mb-2.5" style={{ color: 'var(--label-1)' }}>
-        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dotColor }} />
-        {title}
-      </p>
-      <ul className="space-y-1.5">
-        {items.map((item, i) => (
-          <li key={i} className="text-[13px] leading-snug pl-3 relative" style={{ color: 'var(--label-1)' }}>
-            <span className="absolute left-0 top-[7px] w-1 h-1 rounded-full" style={{ background: 'var(--label-3)' }} />
-            {item}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 export default function Result() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -260,8 +240,32 @@ export default function Result() {
   const [shareReportId, setShareReportId] = useState(null);
   const [shareImageBlob, setShareImageBlob] = useState(null);
   const [showShare, setShowShare] = useState(false);
-  // "What this adds up to" opens on one line; week/month/year on a tap.
+  // "What this adds up to": week/month/year tiles and the rest on a tap.
   const [addsOpen, setAddsOpen] = useState(false);
+  // "Refresh analysis" re-runs the AI on the label -- an admin tool, so only
+  // shown to a signed-in admin session (the admin panel's own login).
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    supabase.auth.getSession().then(({ data }) => setIsAdmin(Boolean(data?.session))).catch(() => {});
+  }, []);
+
+  // The mini bar (product + score) shows once the score card has scrolled
+  // up under the app's sticky header.
+  const scoreEndRef = useRef(null);
+  const [showMiniBar, setShowMiniBar] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  useEffect(() => {
+    const el = scoreEndRef.current;
+    if (!el) return undefined;
+    const h = document.querySelector('header')?.offsetHeight || 0;
+    setHeaderHeight(h);
+    const observer = new IntersectionObserver(([entry]) => {
+      setShowMiniBar(!entry.isIntersecting && entry.boundingClientRect.top < h);
+    }, { rootMargin: `-${h}px 0px 0px 0px` });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [result]);
 
   useEffect(() => {
     const data = getHistoryById(id);
@@ -659,6 +663,35 @@ export default function Result() {
     .map((ing) => ({ ingredient: ing, tier: tiers.find((t) => t.key === severityOf(ing)) }))
     .sort((a, b) => (TIER_RANK[a.tier.key] - TIER_RANK[b.tier.key]) || ((b.ingredient.penalty || 0) - (a.ingredient.penalty || 0)));
 
+  // The quick health check (dailyHabitCheck): one serving's share of a
+  // day's limit as a bar -- or, for a limit set as a share of energy, the
+  // amount and WHO's guidance -- with the link to the full breakdown.
+  const habitRow = habitDisplay && (
+    <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--fill)' }}>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span className="text-[13px] font-semibold capitalize" style={{ color: 'var(--label-1)' }}>
+          ⚡ {t('quickHealthCheck')} · {habitDisplay.nutrientLabel}
+        </span>
+        <span className="text-[13.5px] font-bold tabular-nums" style={{ color: habitDisplay.isEnergyRelative ? 'var(--label-1)' : habitDisplay.percent >= 50 ? 'var(--v-poor)' : 'var(--v-moderate)' }}>
+          {habitDisplay.isEnergyRelative ? `${habitDisplay.displayAmount}${habitDisplay.unit}` : `${habitDisplay.percent}%`}
+        </span>
+      </div>
+      {!habitDisplay.isEnergyRelative && (
+        <div className="h-2 rounded-full overflow-hidden mb-1.5" style={{ background: 'var(--bg-card)' }}>
+          <div className="h-full rounded-full" style={{ width: `${Math.min(100, habitDisplay.percent)}%`, background: habitDisplay.percent >= 50 ? 'var(--v-poor)' : 'var(--v-moderate)' }} />
+        </div>
+      )}
+      <p className="text-[12px] leading-snug" style={{ color: 'var(--label-2)' }}>
+        {habitDisplay.isEnergyRelative
+          ? habitDisplay.whoGuidance
+          : t('habitBarCaption', { percent: habitDisplay.percent, nutrient: habitDisplay.nutrientLabel, servingText: habitDisplay.servingText })}
+      </p>
+      <button onClick={() => setShowHabitModal(true)} className="tap-scale text-[12.5px] font-semibold mt-1.5" style={{ color: 'var(--tint)' }}>
+        {t('habitSeeMore')} →
+      </button>
+    </div>
+  );
+
   // "11 of 26 raise a flag": the 11 is a link to them, in the colour of the
   // worst one -- red for harmful, orange for concerning, amber for processed.
   const worstFlagTier = tiers.find((tier) => tier.key !== 'Fine' && tier.count > 0);
@@ -668,6 +701,11 @@ export default function Result() {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       document.getElementById('ingredient-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }));
+  };
+  // An "At a glance" row: that ingredient's card in the Ingredients tab, flashed.
+  const openIngredient = (ingredient) => {
+    setView('ingredients');
+    setTimeout(() => jumpToIngredient(ingredients.indexOf(ingredient)), 60);
   };
   const flaggedSentence = (() => {
     const [before, after] = t('someFlagged', { flagged: '\u0001', total: ingredients.length }).split('\u0001');
@@ -682,63 +720,36 @@ export default function Result() {
     );
   })();
 
-  // "What this adds up to", closed: the most concerning nutrient as one
-  // line ("≈ 4.3 teaspoons of added sugar in one 57g pack"), the rest named
-  // after it. Without a projection, the quick health check's own line.
-  const addsSummary = (() => {
-    if (nutrientProjection) {
-      const { serving, items } = nutrientProjection;
-      const [top, ...rest] = items;
-      return {
-        line: t(`addsOneLine_${top.key}`, {
-          tsp: top.teaspoonsPerServing,
-          kind: t(top.isAddedSugar ? 'sugarKindAdded' : 'sugarKindPlain'),
-          grams: serving.grams,
-          unit: serving.unit,
-          per: t(serving.source === 'pack' ? 'addsPerPack' : 'addsPerServing'),
-        }),
-        also: rest.length ? t('addsAlso', { list: rest.map((i) => `${t(`addsTab${i.key[0].toUpperCase()}${i.key.slice(1)}`)} ${t('addsTabTsp', { tsp: i.teaspoonsPerServing })}`).join(' · ') }) : '',
-      };
-    }
-    if (habitDisplay) {
-      return {
-        line: habitDisplay.isEnergyRelative
-          ? t('habitAmountCaption', { amount: habitDisplay.displayAmount, unit: habitDisplay.unit, nutrient: habitDisplay.nutrientLabel, servingText: habitDisplay.servingText })
-          : t('habitBarCaption', { percent: habitDisplay.percent, nutrient: habitDisplay.nutrientLabel, servingText: habitDisplay.servingText }),
-        also: '',
-      };
-    }
-    return null;
-  })();
-
   return (
     <div className="page-in max-w-[560px] mx-auto pb-24" style={{ background: 'var(--bg-grouped)' }}>
       {burst && <ResultBurst id={id} score={score} handoff={burst.handoff} onDone={() => setBurst(null)} />}
 
-      {/* Nav */}
-      <button
-        onClick={() => navigate('/')}
-        className="tap-scale inline-flex items-center gap-1.5 px-4 pt-3 pb-1 text-[17px]"
-        style={{ color: 'var(--tint)' }}
-      >
-        <svg viewBox="0 0 12 20" fill="none" className="w-3 h-5">
-          <path d="M10 2L2 10l8 8" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        {t('backToScan')}
-      </button>
-
-      {/* Title -- the pack on the left, what it is on the right, so the
-          photo doesn't sit alone in the middle of an empty row. */}
-      <div className={`px-5 pt-1 pb-5 ${result.imageUrl ? 'flex items-start gap-4' : ''}`}>
+      {/* Header, compact: back, the pack, then brand · pack size over the
+          name -- one row instead of a back row, a centred photo and a chip.
+          The pack size (not a "Packaged Food" label every product here would
+          share) tells two sizes of one product apart. */}
+      <div className="flex items-start gap-3 pl-2 pr-4 pt-3 pb-4">
+        <button
+          onClick={() => navigate('/')}
+          aria-label={t('backToScan')}
+          className="tap-scale flex-shrink-0 w-9 h-9 mt-0.5 rounded-full flex items-center justify-center"
+          style={{ color: 'var(--tint)' }}
+        >
+          <svg viewBox="0 0 12 20" fill="none" className="w-3 h-5" aria-hidden="true">
+            <path d="M10 2L2 10l8 8" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
         {result.imageUrl && (
-          <div className="flex-shrink-0 rounded-[18px] p-2" style={{ background: 'var(--bg-card)', boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
-            <ProductImage src={result.imageUrl} size={104} />
+          <div className="flex-shrink-0 rounded-[16px] p-1.5" style={{ background: 'var(--bg-card)', boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+            <ProductImage src={result.imageUrl} size={80} />
           </div>
         )}
-        <div className={`min-w-0 ${result.imageUrl ? 'flex-1 pt-1' : ''}`}>
-          {result.brand && !editingName && (
-            <p className="text-[13px] font-semibold mb-0.5" style={{ color: 'var(--label-2)' }}>
-              {result.brand.toUpperCase()}
+        <div className="min-w-0 flex-1 pt-0.5">
+          {!editingName && (result.brand || result.packSize?.trim()) && (
+            <p className="text-[12.5px] font-semibold mb-0.5 truncate" style={{ color: 'var(--label-2)' }}>
+              {result.brand ? result.brand.toUpperCase() : ''}
+              {result.brand && result.packSize?.trim() ? ' · ' : ''}
+              {result.packSize?.trim() ? `📦 ${result.packSize.trim()}` : ''}
             </p>
           )}
 
@@ -754,45 +765,53 @@ export default function Result() {
                   if (e.key === 'Escape') setEditingName(false);
                 }}
                 placeholder={t('enterProductName')}
-                className={`flex-1 min-w-0 ${result.imageUrl ? 'text-[21px]' : 'text-[26px]'} font-bold tracking-tight bg-transparent border-b-2 focus:outline-none`}
+                className="flex-1 min-w-0 text-[19px] font-bold tracking-tight bg-transparent border-b-2 focus:outline-none"
                 style={{ color: 'var(--label-1)', borderColor: 'var(--tint)' }}
               />
-              <button onClick={saveName} className="text-[17px]" style={{ color: 'var(--tint)' }} aria-label="Save name">{t('done')}</button>
+              <button onClick={saveName} className="text-[16px]" style={{ color: 'var(--tint)' }} aria-label="Save name">{t('done')}</button>
             </div>
           ) : (
-            <h1 className={`${result.imageUrl ? 'text-[21px] leading-[1.2]' : 'text-[26px] leading-[1.15]'} font-bold tracking-tight flex items-start gap-2 mb-2`} style={{ color: 'var(--label-1)' }}>
-              <span className="min-w-0 break-words">{result.productName || 'Unknown Product'}</span>
+            <h1 className="text-[19px] leading-[1.25] font-bold tracking-tight" style={{ color: 'var(--label-1)' }}>
+              <span className="break-words">{result.productName || 'Unknown Product'}</span>
               <button
                 onClick={startEditingName}
-                className={`text-[14px] flex-shrink-0 ${result.imageUrl ? 'mt-1' : 'mt-1.5'}`}
-                style={{ color: 'var(--tint)' }}
-                aria-label="Edit product name"
+                className="tap-scale inline-flex align-middle ml-1.5 w-6 h-6 -mt-0.5 rounded-full items-center justify-center"
+                style={{ color: 'var(--label-3)' }}
+                aria-label={t('edit')}
+                title={t('edit')}
               >
-                {t('edit')}
+                <svg viewBox="0 0 20 20" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M13.5 3.5l3 3L7 16H4v-3l9.5-9.5z" />
+                </svg>
               </button>
             </h1>
           )}
 
           {nameSuggested && !editingName && (
-            <p className="text-[12.5px] mb-1.5" style={{ color: 'var(--label-3)' }}>{t('nameSuggestedNote')}</p>
+            <p className="text-[12px] mt-1" style={{ color: 'var(--label-3)' }}>{t('nameSuggestedNote')}</p>
           )}
-
-          {/* The pack size, not a "Packaged Food" label every product here
-              would share -- it tells two sizes of one product apart. */}
-          {result.productName === 'Unknown Product' && !editingName ? (
-            <p className="text-[13px]" style={{ color: 'var(--v-poor)' }}>
-              {t('unknownProductHint')}
-            </p>
-          ) : result.packSize?.trim() && (
-            <span
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
-              style={{ background: 'var(--fill)', color: 'var(--label-2)' }}
-            >
-              📦 {result.packSize.trim()}
-            </span>
+          {result.productName === 'Unknown Product' && !editingName && (
+            <p className="text-[12.5px] mt-1" style={{ color: 'var(--v-poor)' }}>{t('unknownProductHint')}</p>
           )}
         </div>
       </div>
+
+      {/* Once the score card has scrolled away: a slim bar under the app
+          header with the product and its score, so a long report never
+          loses which product it's about. */}
+      {showMiniBar && (
+        <div className="fixed left-0 right-0 z-30 page-in" style={{ top: headerHeight }}>
+          <div className="max-w-[560px] mx-auto px-4 py-2 flex items-center gap-2.5" style={{ background: 'var(--bg-grouped)', borderBottom: '1px solid var(--separator)' }}>
+            {result.imageUrl && <ProductImage src={result.imageUrl} size={28} />}
+            <p className="flex-1 min-w-0 text-[14px] font-semibold truncate" style={{ color: 'var(--label-1)' }}>{result.productName}</p>
+            {!result.isInfantFormula && (
+              <span className="flex-shrink-0 text-[12.5px] font-bold px-2.5 py-0.5 rounded-full" style={{ background: scoreColors.bg, color: scoreColors.color }}>
+                {score} · {verdictLabel}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Allergen Center -- deliberately OUTSIDE the score card below (a
           different card, different colour language, ahead of it in
@@ -882,8 +901,8 @@ export default function Result() {
                   ? t('nothingFlagged', { count: ingredients.length })
                   : flaggedSentence}
             </p>
-            {/* Web only -- not in the Android app. */}
-            {result.ingredientsText && !isNativeApp() && (
+            {/* Signed-in admins only, and web only -- not in the Android app. */}
+            {result.ingredientsText && isAdmin && !isNativeApp() && (
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
@@ -958,6 +977,8 @@ export default function Result() {
         )}
       </div>
       )}
+
+      <div ref={scoreEndRef} aria-hidden="true" />
 
       {/* Personal FoodGuard -- the same scanned product, re-evaluated
           against a specific family member's selected priorities. The
@@ -1128,61 +1149,54 @@ export default function Result() {
         ]}
       />
 
-      {/* Breakdown — tapping a tile jumps to the Ingredients tab filtered to that category */}
-      {view === 'overview' && ingredients.length > 0 && (
+      {/* Summary */}
+      {view === 'overview' && displaySummary && (
         <>
-          <SectionHeader>{t('sectionBreakdown')}</SectionHeader>
-          <div className="mx-4 grid grid-cols-4 gap-2">
-            {tiers.map((tier) => {
-              const active = filter === tier.key;
-              return (
-                <button
-                  key={tier.key}
-                  onClick={() => {
-                    setFilter(tier.key);
-                    setView('ingredients');
-                  }}
-                  className="tap-scale rounded-[14px] py-3 px-1 text-center transition-colors"
-                  style={{
-                    background: active ? tier.color : 'var(--bg-card)',
-                    color: active ? '#fff' : 'var(--label-1)',
-                  }}
+          <SectionHeader>{t('sectionSummary')}</SectionHeader>
+          <Group>
+            <div className="flex gap-3 items-start px-4 py-3.5">
+              <span
+                className="w-9 h-9 rounded-[10px] flex-shrink-0 flex items-center justify-center text-[16px]"
+                style={{ background: 'var(--tint-bg)' }}
+              >
+                📄
+              </span>
+              <div className="min-w-0 pt-1">
+                <p
+                  className={`text-[15px] leading-relaxed ${!summaryExpanded && displaySummary.length > 100 ? 'line-clamp-2' : ''}`}
+                  style={{ color: 'var(--label-1)' }}
                 >
-                  <span
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-bold mx-auto mb-1.5"
-                    style={{ background: active ? 'rgba(255,255,255,0.25)' : tier.bg, color: active ? '#fff' : tier.color }}
+                  {displaySummary}
+                </p>
+                {displaySummary.length > 100 && (
+                  <button
+                    onClick={() => setSummaryExpanded((v) => !v)}
+                    className="tap-scale text-[13px] font-semibold mt-1"
+                    style={{ color: 'var(--tint)' }}
                   >
-                    {tier.icon}
-                  </span>
-                  <span className="block text-[20px] font-bold leading-none tracking-tight" style={{ color: active ? '#fff' : tier.color }}>
-                    {tier.count}
-                  </span>
-                  <span className="block text-[11px] mt-1" style={{ color: active ? '#fff' : 'var(--label-2)' }}>
-                    {tier.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                    {summaryExpanded ? t('readLess') : t('readMore')}
+                  </button>
+                )}
+              </div>
+            </div>
+          </Group>
         </>
       )}
 
-      {/* Flags + Positives — side by side when both exist, so "at a
-          glance" actually reads as one glance rather than two scrolls.
-          Skipped for infant formula -- this is "what pulled the general
-          food score up/down" framing, which doesn't apply once that
-          score isn't being shown at all. */}
-      {view === 'overview' && !result.isInfantFormula && (result.flags?.length > 0 || result.positives?.length > 0) && (
+      {/* What's in it: severity bar, the worst ingredients (tap to open),
+          and the good points -- one card (AtAGlance.jsx). The general-food
+          framing is skipped for infant formula. */}
+      {view === 'overview' && !result.isInfantFormula && ingredients.length > 0 && (
         <>
           <SectionHeader>{t('sectionAtAGlance')}</SectionHeader>
-          <div className={`grid gap-2.5 mx-4 ${result.flags?.length > 0 && result.positives?.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            {result.flags?.length > 0 && (
-              <ListCard title={t('watchOutFor')} dotColor="var(--v-poor)" items={displayFlags} />
-            )}
-            {result.positives?.length > 0 && (
-              <ListCard title={t('goodThings')} dotColor="var(--v-good)" items={displayPositives} />
-            )}
-          </div>
+          <AtAGlance
+            tiers={tiers}
+            factors={mainFactors}
+            positives={displayPositives}
+            onOpenIngredient={openIngredient}
+            onOpenAll={openFlagged}
+            t={t}
+          />
         </>
       )}
 
@@ -1244,110 +1258,27 @@ export default function Result() {
           winner/loser comparison between regulated infant-nutrition
           products, exactly the kind of general-food judgment this
           category is deliberately kept out of. */}
-      {/* "What this adds up to" -- one line until tapped ("≈ 4.3 teaspoons
-          of added sugar in one 57g pack"); open, the quick health check
-          (its share of a day's limit) and the week/month/year picture.
-          Pure quantity from the label, never a claim about anyone's body. */}
-      {view === 'overview' && addsSummary && (
+      {/* "What this adds up to": the spoons in one serving, the year at the
+          chosen frequency and the quick health check (the daily habit
+          check, its own link to the full breakdown) always in view; the
+          week/month/year tiles, yearly packets and notes on a tap. Pure
+          quantity from the label, never a claim about anyone's body. */}
+      {view === 'overview' && (nutrientProjection || habitDisplay) && (
         <>
           <SectionHeader>🥄 {t('addsUpTitle')}</SectionHeader>
           <Group>
-            <button
-              onClick={() => setAddsOpen((open) => !open)}
-              aria-expanded={addsOpen}
-              className="tap-scale w-full flex items-center gap-3 px-4 py-3.5 text-left"
-            >
-              <span className="flex-1 min-w-0">
-                <span className="block text-[15px] font-bold leading-snug" style={{ color: 'var(--label-1)' }}>{addsSummary.line}</span>
-                {addsSummary.also && (
-                  <span className="block text-[12.5px] mt-0.5" style={{ color: 'var(--label-2)' }}>{addsSummary.also}</span>
-                )}
-              </span>
-              <span className="flex-shrink-0 flex items-center gap-1 text-[12.5px] font-semibold" style={{ color: 'var(--tint)' }}>
-                {addsOpen ? t('addsHide') : t('addsShowMore')}
-                <svg viewBox="0 0 12 8" className={`w-3 h-2 transition-transform ${addsOpen ? 'rotate-180' : ''}`} fill="none" aria-hidden="true">
-                  <path d="M1 1.5l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </span>
-            </button>
-            {addsOpen && (
-              <div className="page-in" style={{ borderTop: '1px solid var(--separator)' }}>
-                {habitDisplay && (
-                  <div className="px-4 pt-3.5 pb-1">
-                    <p className="text-[12px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--label-3)' }}>⚡ {t('quickHealthCheck')}</p>
-                    {habitDisplay.isEnergyRelative ? (
-                      // No personalised %: WHO's real limit for this one is a
-                      // share of energy intake, not a flat number -- see
-                      // ENERGY_RELATIVE_LIMIT_KEYS.
-                      <>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[14px] font-semibold capitalize" style={{ color: 'var(--label-1)' }}>{habitDisplay.nutrientLabel}</span>
-                          <span className="text-[14px] font-bold" style={{ color: 'var(--label-1)' }}>{habitDisplay.displayAmount}{habitDisplay.unit}</span>
-                        </div>
-                        <p className="text-[12px] leading-relaxed" style={{ color: 'var(--label-3)' }}>{habitDisplay.whoGuidance}</p>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[14px] font-semibold capitalize" style={{ color: 'var(--label-1)' }}>{habitDisplay.nutrientLabel}</span>
-                          <span className="text-[14px] font-bold" style={{ color: habitDisplay.percent >= 50 ? 'var(--v-poor)' : 'var(--v-moderate)' }}>{habitDisplay.percent}%</span>
-                        </div>
-                        <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--fill)' }}>
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${Math.min(100, habitDisplay.percent)}%`, background: habitDisplay.percent >= 50 ? 'var(--v-poor)' : 'var(--v-moderate)' }}
-                          />
-                        </div>
-                      </>
-                    )}
-                    <button onClick={() => setShowHabitModal(true)} className="tap-scale text-[13px] font-semibold mt-2" style={{ color: 'var(--tint)' }}>
-                      {t('habitSeeMore')} →
-                    </button>
-                  </div>
-                )}
-                {nutrientProjection && (
-                  <NutrientAddsUp
-                    projection={nutrientProjection}
-                    t={t}
-                    onShowAlternatives={!result.isInfantFormula && rankedAlternatives.length > 0 ? scrollToAlternatives : null}
-                  />
-                )}
-              </div>
+            {nutrientProjection ? (
+              <NutrientAddsUp
+                projection={nutrientProjection}
+                t={t}
+                onShowAlternatives={!result.isInfantFormula && rankedAlternatives.length > 0 ? scrollToAlternatives : null}
+                showDetails={addsOpen}
+                onToggleDetails={() => setAddsOpen((open) => !open)}
+                habitRow={habitRow}
+              />
+            ) : (
+              <div className="px-4 py-3.5">{habitRow}</div>
             )}
-          </Group>
-        </>
-      )}
-
-      {/* Summary */}
-      {view === 'overview' && displaySummary && (
-        <>
-          <SectionHeader>{t('sectionSummary')}</SectionHeader>
-          <Group>
-            <div className="flex gap-3 items-start px-4 py-3.5">
-              <span
-                className="w-9 h-9 rounded-[10px] flex-shrink-0 flex items-center justify-center text-[16px]"
-                style={{ background: 'var(--tint-bg)' }}
-              >
-                📄
-              </span>
-              <div className="min-w-0 pt-1">
-                <p
-                  className={`text-[15px] leading-relaxed ${!summaryExpanded && displaySummary.length > 100 ? 'line-clamp-2' : ''}`}
-                  style={{ color: 'var(--label-1)' }}
-                >
-                  {displaySummary}
-                </p>
-                {displaySummary.length > 100 && (
-                  <button
-                    onClick={() => setSummaryExpanded((v) => !v)}
-                    className="tap-scale text-[13px] font-semibold mt-1"
-                    style={{ color: 'var(--tint)' }}
-                  >
-                    {summaryExpanded ? t('readLess') : t('readMore')}
-                  </button>
-                )}
-              </div>
-            </div>
           </Group>
         </>
       )}

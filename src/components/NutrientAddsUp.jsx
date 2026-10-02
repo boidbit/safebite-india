@@ -140,7 +140,28 @@ function ServingDetail({ item, t, color, serving }) {
   );
 }
 
-export default function NutrientAddsUp({ projection, t, onShowAlternatives }) {
+// The year at the chosen frequency, as one big line: "3.6 kg of sugar a
+// year" -- kg of sugar/salt, litres of oil; grams when it's under 0.1.
+function YearHeadline({ item, yearly, color, t }) {
+  const amount = yearAmount(item.key, yearly);
+  const small = amount < 0.1;
+  return (
+    <p className="mt-3 flex items-baseline flex-wrap gap-x-1.5" style={{ color: 'var(--label-1)' }}>
+      <span className="text-[26px] font-extrabold leading-none tabular-nums" style={{ color }}>
+        {small ? Math.round(yearly.grams) : amount}
+      </span>
+      <span className="text-[15px] font-bold">
+        {t(`${small ? 'addsYearUnitSmall' : 'addsYearUnit'}_${item.key}`)}
+      </span>
+      <span className="text-[12.5px]" style={{ color: 'var(--label-3)' }}>{t('addsAtThisRate')}</span>
+    </p>
+  );
+}
+
+// `habitRow` (the quick health check, from Result.jsx) sits in the always-
+// visible part; `showDetails` opens the week/month/year tiles, the yearly
+// packets, the cut-down tip and the notes.
+export default function NutrientAddsUp({ projection, t, onShowAlternatives, showDetails = true, onToggleDetails, habitRow }) {
   const { serving, items } = projection;
   const [perWeek, setPerWeek] = useState(7);
   const [activeKey, setActiveKey] = useState(items[0].key);
@@ -198,23 +219,6 @@ export default function NutrientAddsUp({ projection, t, onShowAlternatives }) {
         </div>
       )}
 
-      {/* Frequency toggle -- shared by every tab; the realistic "how often" is the user's call */}
-      <div className="flex gap-1.5 mb-3.5">
-        {FREQUENCIES.map((f) => {
-          const active = perWeek === f.perWeek;
-          return (
-            <button
-              key={f.perWeek}
-              onClick={() => setPerWeek(f.perWeek)}
-              className="tap-scale flex-1 px-2 py-1.5 rounded-full text-[12px] font-semibold"
-              style={{ background: active ? look.color : 'var(--fill)', color: active ? '#fff' : 'var(--label-2)' }}
-            >
-              {t(f.key)}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Where the serving came from is always stated -- an estimate is
           never presented as if the label said it (see servingResolver.js) */}
       <p className="text-[13px] flex items-center flex-wrap gap-1.5" style={{ color: 'var(--label-2)' }}>
@@ -232,6 +236,43 @@ export default function NutrientAddsUp({ projection, t, onShowAlternatives }) {
         <ServingDetail item={item} t={t} color={look.color} serving={serving} />
       </div>
 
+      <YearHeadline item={item} yearly={yearly} color={look.color} t={t} />
+
+      {/* Frequency toggle -- shared by every tab; the realistic "how often" is the user's call */}
+      <div className="flex gap-1.5 mt-3">
+        {FREQUENCIES.map((f) => {
+          const active = perWeek === f.perWeek;
+          return (
+            <button
+              key={f.perWeek}
+              onClick={() => setPerWeek(f.perWeek)}
+              className="tap-scale flex-1 px-2 py-1.5 rounded-full text-[12px] font-semibold"
+              style={{ background: active ? look.color : 'var(--fill)', color: active ? '#fff' : 'var(--label-2)' }}
+            >
+              {t(f.key)}
+            </button>
+          );
+        })}
+      </div>
+
+      {habitRow && <div className="mt-3.5">{habitRow}</div>}
+
+      {onToggleDetails && (
+        <button
+          onClick={onToggleDetails}
+          aria-expanded={showDetails}
+          className="tap-scale w-full mt-3 flex items-center justify-center gap-1 text-[13px] font-semibold"
+          style={{ color: 'var(--tint)' }}
+        >
+          {showDetails ? t('addsHide') : t('addsShowMore')}
+          <svg viewBox="0 0 12 8" className={`w-3 h-2 transition-transform ${showDetails ? 'rotate-180' : ''}`} fill="none" aria-hidden="true">
+            <path d="M1 1.5l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
+
+      {showDetails && (
+      <div className="page-in">
       {/* What it adds up to */}
       <div className="flex gap-2 mt-3.5">
         <PeriodTile color={look.color} unitLabel={t('sugarTspShort')} label={t('sugarWeek')} {...totals.week} />
@@ -289,6 +330,8 @@ export default function NutrientAddsUp({ projection, t, onShowAlternatives }) {
         {serving.source === 'standard' && `${t('sugarEstimateNote', { grams: serving.grams, unit: serving.unit })} `}
         {t(look.whoKey)} {t('sugarDisclaimer')}
       </p>
+      </div>
+      )}
     </div>
   );
 }
