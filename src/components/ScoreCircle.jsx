@@ -51,8 +51,9 @@ export default function ScoreCircle({ score, size = 'large', showLabel = false, 
   }, [clamped]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const liveColors = getScoreColor(liveValue);
-  const svgSize = size === 'xl' ? 144 : size === 'large' ? 112 : 64;
-  const strokeWidth = size === 'xl' ? 11 : size === 'large' ? 9 : 6;
+  // 'medium' (88px) counts up like 'large', for cards too narrow for 112px.
+  const svgSize = size === 'xl' ? 144 : size === 'large' ? 112 : size === 'medium' ? 88 : 64;
+  const strokeWidth = size === 'xl' ? 11 : size === 'large' ? 9 : size === 'medium' ? 8 : 6;
   const radius = svgSize / 2 - strokeWidth;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (liveValue / 100) * circumference;
@@ -88,13 +89,13 @@ export default function ScoreCircle({ score, size = 'large', showLabel = false, 
 
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span
-            className={`${size === 'xl' ? 'text-5xl' : size === 'large' ? 'text-4xl' : 'text-xl'} font-bold leading-none tracking-tight tabular-nums`}
+            className={`${size === 'xl' ? 'text-5xl' : size === 'large' ? 'text-4xl' : size === 'medium' ? 'text-3xl' : 'text-xl'} font-bold leading-none tracking-tight tabular-nums`}
             style={{ color: liveColors.color }}
           >
             {Math.round(liveValue)}
           </span>
-          {(size === 'large' || size === 'xl') && (
-            <span className="text-xs mt-1" style={{ color: 'var(--label-2)' }}>
+          {(size === 'large' || size === 'xl' || size === 'medium') && (
+            <span className={`${size === 'medium' ? 'text-[10px] mt-0.5' : 'text-xs mt-1'}`} style={{ color: 'var(--label-2)' }}>
               out of 100
             </span>
           )}

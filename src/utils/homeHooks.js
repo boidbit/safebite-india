@@ -69,9 +69,48 @@ export function judgeGuess(guess, actual) {
   return { level, diff, higher: actual > guess };
 }
 
-/** Today's slice of a pool -- the same all day, the next items tomorrow. */
-export function dailySlice(pool, count, daySeed) {
-  if (!pool.length) return [];
-  const start = (daySeed * count) % pool.length;
-  return Array.from({ length: Math.min(count, pool.length) }, (_, i) => pool[(start + i) % pool.length]);
+// Which approved products each section draws from on its own, before
+// anything an admin adds: a surprise for the reel, a health word in the
+// name with a low score for "Looks healthy, but…", anything for the game.
+const AUTO_RULES = {
+  shock: (p) => p.score < 45, // Poor or worse -- a "Moderate" 49 is no surprise
+  healthy: (p) => p.score < 55 && Boolean(detectClaim(p.productName)),
+  guess: () => true,
+};
+// An admin's pick comes up this many times as often as an automatic one.
+export const ADMIN_WEIGHT = 3;
+
+/**
+ * One section's candidates: the approved pool through that section's rule,
+ * plus the admin's picks (weighted up, and kept even outside the rule),
+ * minus anything the admin switched off for it.
+ * @param {Array<{ lookupKey, productName, score }>} pool
+ * @param {Array<{ kind, lookup_key, active, hook?, claim? }>} picks - every pick, on or off
+ * @returns {Array<{ lookupKey, weight, hook, claim }>}
+ */
+export function sectionCandidates(pool, picks, kind) {
+  const mine = picks.filter((p) => p.kind === kind);
+  const off = new Set(mine.filter((p) => !p.active).map((p) => p.lookup_key));
+  const out = new Map();
+  for (const p of pool) {
+    if (!off.has(p.lookupKey) && AUTO_RULES[kind](p)) out.set(p.lookupKey, { lookupKey: p.lookupKey, weight: 1, hook: null, claim: null });
+  }
+  for (const p of mine) {
+    if (p.active) out.set(p.lookup_key, { lookupKey: p.lookup_key, weight: ADMIN_WEIGHT, hook: p.hook || null, claim: p.claim || null });
+  }
+  return [...out.values()];
+}
+
+/** Up to `n` items drawn at random without repeats, heavier weights more likely. */
+export function weightedSample(items, n, rand = Math.random) {
+  const left = [...items];
+  const out = [];
+  while (out.length < n && left.length) {
+    const total = left.reduce((sum, it) => sum + (it.weight || 1), 0);
+    let r = rand() * total;
+    let i = 0;
+    while (i < left.length - 1 && (r -= left[i].weight || 1) >= 0) i++;
+    out.push(left.splice(i, 1)[0]);
+  }
+  return out;
 }

@@ -1,7 +1,7 @@
 // src/utils/homeHooks.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectClaim, cleanFlags, hookLine, judgeGuess, dailySlice } from './homeHooks.js';
+import { detectClaim, cleanFlags, hookLine, judgeGuess, sectionCandidates, weightedSample, ADMIN_WEIGHT } from './homeHooks.js';
 
 const t = (key, vars = {}) => `${key}${Object.entries(vars).map(([k, v]) => `|${k}=${v}`).join('')}`;
 
@@ -37,11 +37,43 @@ test('judgeGuess grades by distance and says which way the real score lay', () =
   assert.equal(judgeGuess(20, 90).higher, true);
 });
 
-test('dailySlice is stable for a day and moves on the next', () => {
-  const pool = ['a', 'b', 'c', 'd', 'e'];
-  assert.deepEqual(dailySlice(pool, 3, 10), dailySlice(pool, 3, 10));
-  assert.notDeepEqual(dailySlice(pool, 3, 10), dailySlice(pool, 3, 11));
-  assert.equal(dailySlice(pool, 3, 7).length, 3);
-  assert.deepEqual(dailySlice(['x'], 3, 4), ['x']);
-  assert.deepEqual(dailySlice([], 3, 4), []);
+const pool = [
+  { lookupKey: 'maggi', productName: 'Maggi Masala Noodles', score: 42 },
+  { lookupKey: 'marie', productName: 'Sugar Free Marie', score: 37 },
+  { lookupKey: 'atta', productName: 'Multigrain Atta', score: 100 },
+  { lookupKey: 'dew', productName: 'Mountain Dew', score: 64 },
+];
+
+test('sectionCandidates applies each section’s rule to the approved pool', () => {
+  const keys = (kind, picks = []) => sectionCandidates(pool, picks, kind).map((c) => c.lookupKey).sort();
+  assert.deepEqual(keys('shock'), ['maggi', 'marie']);
+  assert.deepEqual(keys('healthy'), ['marie']); // a health word AND a low score
+  assert.deepEqual(keys('guess'), ['atta', 'dew', 'maggi', 'marie']);
+});
+
+test('admin picks are weighted up, kept outside the rule, and switched-off ones are left out', () => {
+  const picks = [
+    { kind: 'shock', lookup_key: 'dew', active: true, hook: 'Sugar bomb' }, // 64: outside the shock rule, kept
+    { kind: 'shock', lookup_key: 'maggi', active: false }, // switched off
+    { kind: 'guess', lookup_key: 'marie', active: false }, // only off for the game
+  ];
+  const shock = sectionCandidates(pool, picks, 'shock');
+  assert.deepEqual(shock.map((c) => c.lookupKey).sort(), ['dew', 'marie']);
+  assert.deepEqual(shock.find((c) => c.lookupKey === 'dew'), { lookupKey: 'dew', weight: ADMIN_WEIGHT, hook: 'Sugar bomb', claim: null });
+  assert.ok(!sectionCandidates(pool, picks, 'guess').some((c) => c.lookupKey === 'marie'));
+  assert.ok(sectionCandidates(pool, picks, 'healthy').some((c) => c.lookupKey === 'marie'));
+});
+
+test('weightedSample draws without repeats and favours heavier items', () => {
+  const items = [{ lookupKey: 'a', weight: 1 }, { lookupKey: 'b', weight: 1 }, { lookupKey: 'c', weight: 3 }];
+  const once = weightedSample(items, 3);
+  assert.deepEqual(once.map((i) => i.lookupKey).sort(), ['a', 'b', 'c']);
+  assert.equal(weightedSample(items, 5).length, 3);
+  assert.deepEqual(weightedSample([], 2), []);
+  // rand() = 0.99 lands in the last (heaviest) item's share.
+  assert.equal(weightedSample(items, 1, () => 0.99)[0].lookupKey, 'c');
+  assert.equal(weightedSample(items, 1, () => 0)[0].lookupKey, 'a');
+  let heavy = 0;
+  for (let i = 0; i < 2000; i++) if (weightedSample(items, 1)[0].lookupKey === 'c') heavy++;
+  assert.ok(heavy > 1000 && heavy < 1400, `c drawn ${heavy}/2000, expected ~1200`);
 });

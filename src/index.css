@@ -523,8 +523,10 @@ body {
 
 /* "Looks healthy, but…" flip cards. */
 .flip-card { perspective: 1000px; }
+/* Both faces share one grid cell, so a card is as tall as its taller face
+   -- sized by what's on it, not a fixed height with empty space. */
 .flip-inner {
-  position: relative;
+  display: grid;
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
@@ -532,8 +534,7 @@ body {
 }
 .flip-card.flipped .flip-inner { transform: rotateY(180deg); }
 .flip-face {
-  position: absolute;
-  inset: 0;
+  grid-area: 1 / 1;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   border-radius: 20px;

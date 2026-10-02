@@ -149,7 +149,9 @@ export default function Home() {
       safe(getDailySpotlight(), { best: null, worst: null }),
       safe(getCatalogStats(), null),
       safe(getTodaysFact(), null),
-      safe(getHomeFeatures(), { shock: [], healthy: [], guess: [] }),
+      // Drawn at random once per app open -- coming Back from a report keeps
+      // the same products rather than reshuffling the reel mid-glance.
+      homeSnapshot?.features ?? safe(getHomeFeatures(), { shock: [], healthy: [], guess: [] }),
     ]).then(([popular, recent, spot, catStats, fact, picks]) => {
       homeSnapshot = { popular, recent, spot, stats: catStats, fact, features: picks };
       setPopularTerms(popular);
@@ -925,13 +927,13 @@ export default function Home() {
             </div>
           )}
 
-          {/* "Looks healthy, but…" and the guess game -- admin-picked, so
-              they only appear once someone has chosen products for them. */}
+          {/* "Looks healthy, but…" and the guess game -- random approved
+              products (plus admin picks), different on every open. */}
           {searchQuery.trim().length === 0 && !sectionsLoading && features.healthy.length > 0 && (
             <LooksHealthyStrip items={features.healthy} onOpen={openCachedSuggestion} />
           )}
           {searchQuery.trim().length === 0 && !sectionsLoading && features.guess.length > 0 && (
-            <GuessGame pool={features.guess} onOpen={openCachedSuggestion} />
+            <GuessGame candidates={features.guess} onOpen={openCachedSuggestion} />
           )}
 
           {/* Today's picks -- one high scorer, one low scorer, both real

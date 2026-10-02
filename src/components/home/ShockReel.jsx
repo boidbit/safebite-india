@@ -1,7 +1,8 @@
 // src/components/home/ShockReel.jsx
 //
-// The top of the home screen: well-known products an admin picked (Admin >
-// Home screen), shown one at a time like stories. Each one is "read" first
+// The top of the home screen: low-scoring approved products, a different
+// random five every time the app opens (Admin > Home screen picks come up
+// more often), shown one at a time like stories. Each one is "read" first
 // -- a laser line runs down the pack while the ring waits on "?" -- then the
 // score ring fills, the verdict lands and the hook line rises in. The
 // question the reel leaves behind is the point: "and what does MINE score?",

@@ -1,10 +1,11 @@
 // src/pages/admin/AdminHomeFeatures.jsx
 //
-// Admin > Home screen: which products the app's home screen hooks people
-// with -- the shock reel at the top, the "Looks healthy, but…" flip cards
-// and the guess game's pool (see src/components/home/). Picked by hand on
-// purpose: these name real brands in the app's most visible spot, so only a
-// product whose label and score someone has checked should be here.
+// Admin > Home screen: steering the home screen's hook sections -- the shock
+// reel, the "Looks healthy, but…" flip cards and the guess game (see
+// src/components/home/). Each already draws at random from every APPROVED
+// product (homeFeaturesRepo.js); a product added here comes up three times as
+// often, even outside that section's own rule, and one switched off here
+// never shows in that section.
 //
 // Each pick can carry its own one-line hook; left empty, the card shows the
 // line the app writes from the report (shown here as the placeholder).
@@ -17,13 +18,13 @@ import { hookLine } from '../../utils/homeHooks';
 import { useLanguage } from '../../contexts/LanguageContext';
 import {
   adminListHomeFeatures, adminAddHomeFeature, adminUpdateHomeFeature, adminRemoveHomeFeature,
-  adminMoveHomeFeature, adminSearchFeatureCandidates, adminSuggestHomeFeatures,
+  adminSearchFeatureCandidates, adminSuggestHomeFeatures,
 } from '../../services/homeFeaturesRepo';
 
 const KINDS = [
-  { id: 'shock', label: 'Shock reel', hint: 'Top of the home screen, one at a time like stories. Pick well-known products whose score surprises — 4 to 8 works best.' },
-  { id: 'healthy', label: 'Looks healthy, but…', hint: 'Flip cards. Products whose name sells health (Multigrain, Digestive, Protein…) but score low. The claim word is what the front of the card shows.' },
-  { id: 'guess', label: 'Guess the score', hint: '3 a day from this pool, rotating. Mix well-known products of every score — a game where everything is red stops being a game.' },
+  { id: 'shock', label: 'Shock reel', hint: 'Top of the home screen: 5 at random each time the app opens, from approved products scoring under 45 (Poor or worse). Add well-known products here to see them more often.' },
+  { id: 'healthy', label: 'Looks healthy, but…', hint: 'Flip cards: 6 at random each open, from approved products with a health word in the name (Multigrain, Sugar Free, Protein…) scoring under 55. The claim word is what the front of the card shows.' },
+  { id: 'guess', label: 'Guess the score', hint: 'Endless game: a random approved product each round, any score. Products added here come up more often.' },
 ];
 
 function Score({ score }) {
@@ -114,7 +115,7 @@ export default function AdminHomeFeatures() {
         <a href="#/" target="_blank" rel="noreferrer" className="text-[13px] font-semibold" style={{ color: 'var(--tint)' }}>See the home screen ↗</a>
       </div>
       <p className="text-[12.5px] mb-4" style={{ color: 'var(--label-3)' }}>
-        The products the app's home screen leads with. Only products that are live in the app show; a section with nothing picked doesn't appear at all.
+        Every section already shows random approved products — different on every open and every phone. Products you add here come up 3× more often (even outside the section's rule); untick “Showing” to keep a product out of that section entirely.
       </p>
 
       <div className="flex gap-1.5 flex-wrap mb-3">
@@ -131,22 +132,17 @@ export default function AdminHomeFeatures() {
       {/* Current picks */}
       <div className="rounded-[14px] mb-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--separator)' }}>
         <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderBottom: '1px solid var(--separator)' }}>
-          <span className="text-[13px] font-bold" style={{ color: 'var(--label-1)' }}>In this section</span>
-          <span className="text-[12px]" style={{ color: 'var(--label-3)' }}>{picks ? `${liveCount} showing in the app` : ''}</span>
+          <span className="text-[13px] font-bold" style={{ color: 'var(--label-1)' }}>Your picks for this section</span>
+          <span className="text-[12px]" style={{ color: 'var(--label-3)' }}>{picks ? `${liveCount} boosted · ${(picks || []).filter((p) => !p.active).length} kept out` : ''}</span>
         </div>
         {picks === null && <p className="px-4 py-4 text-[13px]" style={{ color: 'var(--label-3)' }}>Loading…</p>}
-        {picks?.length === 0 && !error && <p className="px-4 py-6 text-[13px] text-center" style={{ color: 'var(--label-3)' }}>Nothing picked yet — add products below.</p>}
-        {picks?.map((pick, i) => {
+        {picks?.length === 0 && !error && <p className="px-4 py-6 text-[13px] text-center" style={{ color: 'var(--label-3)' }}>No picks — the section shows random approved products on its own. Add products below to boost them.</p>}
+        {picks?.map((pick) => {
           const card = pick.card;
           const hidden = !card || !['live', 'approved'].includes(pick.reviewStatus);
           const autoLine = card ? hookLine({ ...card, hook: null }, t) : '';
           return (
-            <div key={pick.id} className="px-4 py-3 flex gap-3 items-start" style={{ borderBottom: '1px solid var(--separator)', opacity: pick.active ? 1 : 0.5 }}>
-              <div className="flex flex-col items-center gap-1 pt-1">
-                <button disabled={busy || i === 0} onClick={() => run(() => adminMoveHomeFeature(picks, i, -1))} className="tap-scale text-[13px] w-7 h-6 rounded-[6px]" style={{ background: 'var(--fill)', opacity: i === 0 ? 0.3 : 1 }} aria-label="Move up">↑</button>
-                <span className="text-[11px] font-bold" style={{ color: 'var(--label-3)' }}>{i + 1}</span>
-                <button disabled={busy || i === picks.length - 1} onClick={() => run(() => adminMoveHomeFeature(picks, i, 1))} className="tap-scale text-[13px] w-7 h-6 rounded-[6px]" style={{ background: 'var(--fill)', opacity: i === picks.length - 1 ? 0.3 : 1 }} aria-label="Move down">↓</button>
-              </div>
+            <div key={pick.id} className="px-4 py-3 flex gap-3 items-start" style={{ borderBottom: '1px solid var(--separator)', background: pick.active ? undefined : 'var(--v-poor-bg)' }}>
               <ProductImage src={card?.imageUrl} size={56} expandable={false} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -156,7 +152,7 @@ export default function AdminHomeFeatures() {
                 </div>
                 {hidden && (
                   <p className="text-[11.5px] mt-0.5" style={{ color: 'var(--v-poor)' }}>
-                    {card ? 'Not live in the app — approve it in Products, or it won’t show here.' : 'This product no longer exists.'}
+                    {card ? 'Not live in the app — approve it in Products, or it won’t show.' : 'This product no longer exists.'}
                   </p>
                 )}
                 <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: kind === 'healthy' ? '140px 1fr' : '1fr' }}>
@@ -180,10 +176,22 @@ export default function AdminHomeFeatures() {
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                <label className="flex items-center gap-1.5 text-[12px] font-semibold cursor-pointer" style={{ color: 'var(--label-2)' }}>
-                  <input type="checkbox" checked={pick.active} disabled={busy} onChange={(e) => run(() => adminUpdateHomeFeature(pick.id, { active: e.target.checked }))} />
-                  Showing
-                </label>
+                {/* On: comes up 3x as often. Off: never shows in this section. */}
+                <div className="flex rounded-[8px] overflow-hidden text-[12px] font-semibold" style={{ border: '1px solid var(--separator)' }}>
+                  {[[true, 'Boost'], [false, 'Keep out']].map(([value, label]) => (
+                    <button
+                      key={label}
+                      disabled={busy || pick.active === value}
+                      onClick={() => run(() => adminUpdateHomeFeature(pick.id, { active: value }))}
+                      className="px-2.5 py-1"
+                      style={pick.active === value
+                        ? { background: value ? 'var(--v-good)' : 'var(--v-poor)', color: '#fff' }
+                        : { background: 'var(--bg-card)', color: 'var(--label-2)' }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <a href={card?.reportId ? `#/p/${card.reportId}` : undefined} target="_blank" rel="noreferrer" className="text-[12px]" style={{ color: 'var(--label-2)' }}>View ↗</a>
                 <button disabled={busy} onClick={() => window.confirm(`Remove "${card?.productName || pick.product_name}" from ${meta.label}?`) && run(() => adminRemoveHomeFeature(pick))} className="tap-scale text-[12px] font-semibold" style={{ color: 'var(--v-poor)' }}>
                   Remove
@@ -213,7 +221,7 @@ export default function AdminHomeFeatures() {
             </button>
           </div>
           <p className="text-[12px] mb-1" style={{ color: 'var(--label-3)' }}>
-            {kind === 'shock' && 'Most-scanned products scoring under 50.'}
+            {kind === 'shock' && 'Most-scanned products scoring under 45.'}
             {kind === 'healthy' && 'Most-scanned products with a health word in the name, scoring under 55.'}
             {kind === 'guess' && 'Most-scanned products, any score.'}
             {' '}Check the label and score before adding.

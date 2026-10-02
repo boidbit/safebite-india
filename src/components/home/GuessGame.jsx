@@ -1,32 +1,33 @@
 // src/components/home/GuessGame.jsx
 //
-// "Guess the score": three products a day from the admin's pool. Slide to
-// guess, lock it, and the real score's ring fills next to yours -- confetti
-// for a bullseye, a shake when it's way off. Teaches how the score reads
-// without a single line of explanation, and the daily set plus a streak is
-// a reason to come back tomorrow.
+// "Guess the score", always on the home screen and never "done": slide to
+// guess, lock it, the real score's ring fills next to yours -- confetti for
+// a bullseye, a shake when it's way off -- then the next product, drawn at
+// random from every approved product (admin picks come up more often). The
+// next one loads while you play this one, so Next is instant. Teaches how the
+// score reads without a line of explanation.
 //
-// Kept on this phone only (localStorage): today's answers, the streak, the
-// last day finished. Nothing is sent anywhere.
-import { useMemo, useState } from 'react';
+// Kept on this phone only (localStorage): how many played, how many landed
+// within 15, the current and best run of those, and the last products seen
+// so they don't come straight back. Nothing is sent anywhere.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ScoreCircle from '../ScoreCircle';
 import ProductImage from '../ProductImage';
 import { getScoreColor } from '../../utils/storage';
-import { judgeGuess, dailySlice } from '../../utils/homeHooks';
+import { judgeGuess, weightedSample } from '../../utils/homeHooks';
+import { getHomeCard } from '../../services/homeFeaturesRepo';
 import { PUBLIC_APP_URL, whatsappShareUrl } from '../../utils/share';
 import { useLanguage } from '../../contexts/LanguageContext';
 
-const ROUNDS = 3;
-const STORE_KEY = 'foodguard-guess-game';
+const STORE_KEY = 'foodguard-guess-stats';
+const RECENT_LIMIT = 40;
+const CLOSE = 15;
 
-// Local calendar day, so "today" turns over at the person's own midnight.
-const dayNumber = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
-
-function loadState() {
-  try { return JSON.parse(localStorage.getItem(STORE_KEY) || 'null') || {}; } catch { return {}; }
+function loadStats() {
+  try { return { played: 0, close: 0, run: 0, best: 0, recent: [], ...JSON.parse(localStorage.getItem(STORE_KEY) || '{}') }; } catch { return { played: 0, close: 0, run: 0, best: 0, recent: [] }; }
 }
-function saveState(state) {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* private mode */ }
+function saveStats(stats) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(stats)); } catch { /* private mode */ }
 }
 
 const FACES = [[25, '🤢'], [45, '😬'], [65, '😐'], [85, '🙂'], [101, '🤩']];
@@ -53,48 +54,72 @@ function Confetti() {
   ));
 }
 
-export default function GuessGame({ pool, onOpen }) {
+export default function GuessGame({ candidates, onOpen }) {
   const { t } = useLanguage();
-  const today = dayNumber();
-  const rounds = useMemo(() => dailySlice(pool, ROUNDS, today), [pool, today]);
-  const [store, setStore] = useState(() => {
-    const s = loadState();
-    return s.day === today ? s : { ...s, day: today, answers: [] };
-  });
-  const [round, setRound] = useState(() => Math.min(store.answers?.length || 0, rounds.length));
+  const [stats, setStats] = useState(loadStats);
+  const [item, setItem] = useState(null);
   const [guess, setGuess] = useState(50);
   const [locked, setLocked] = useState(false);
-  const [replay, setReplay] = useState(false);
+  const upcoming = useRef(null); // the next round's card, loading in the background
+  const seen = useRef(new Set(stats.recent));
 
-  if (!rounds.length) return null;
-  const answers = store.answers || [];
-  const finished = round >= rounds.length;
-  const item = rounds[Math.min(round, rounds.length - 1)];
-  const answer = locked ? judgeGuess(guess, item.score) : null;
+  // A random candidate not seen lately (all seen: start over), as a live card.
+  const draw = async () => {
+    for (let tries = 0; tries < 4; tries++) {
+      let fresh = candidates.filter((c) => !seen.current.has(c.lookupKey));
+      if (!fresh.length) { seen.current.clear(); fresh = candidates; }
+      const [pick] = weightedSample(fresh, 1);
+      if (!pick) return null;
+      seen.current.add(pick.lookupKey);
+      const card = await getHomeCard(pick).catch(() => null);
+      if (card) {
+        if (card.imageUrl) new Image().src = card.imageUrl;
+        return card;
+      }
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    draw().then((card) => {
+      if (cancelled) return;
+      setItem(card);
+      upcoming.current = draw();
+    });
+    return () => { cancelled = true; };
+  }, [candidates]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!candidates.length) return null;
+  const answer = locked && item ? judgeGuess(guess, item.score) : null;
   const guessColors = getScoreColor(guess);
-  const closeCount = answers.filter((a) => Math.abs(a.guess - a.actual) <= 15).length;
 
   const lock = () => {
     setLocked(true);
-    if (replay) return;
-    const nextAnswers = [...answers, { key: item.lookupKey, guess, actual: item.score }];
-    let next = { ...store, answers: nextAnswers };
-    if (nextAnswers.length >= rounds.length && store.lastDone !== today) {
-      const streak = store.lastDone === today - 1 ? (store.streak || 0) + 1 : 1;
-      next = { ...next, lastDone: today, streak, best: Math.max(store.best || 0, streak) };
-    }
-    setStore(next);
-    saveState(next);
+    const { diff } = judgeGuess(guess, item.score);
+    const close = diff <= CLOSE;
+    const run = close ? stats.run + 1 : 0;
+    const next = {
+      played: stats.played + 1,
+      close: stats.close + (close ? 1 : 0),
+      run,
+      best: Math.max(stats.best, run),
+      recent: [...seen.current].slice(-RECENT_LIMIT),
+    };
+    setStats(next);
+    saveStats(next);
   };
 
-  const nextRound = () => {
+  const nextRound = async () => {
+    const card = await (upcoming.current || draw());
     setLocked(false);
     setGuess(50);
-    setRound((r) => r + 1);
+    setItem(card);
+    upcoming.current = draw();
   };
 
   const share = async () => {
-    const text = t('guessShareText', { correct: closeCount, total: rounds.length, link: PUBLIC_APP_URL });
+    const text = t('guessShareText', { correct: stats.close, total: stats.played, link: PUBLIC_APP_URL });
     if (navigator.share) {
       try { await navigator.share({ text }); return; } catch { /* cancelled -- fall through to WhatsApp */ }
     }
@@ -104,41 +129,28 @@ export default function GuessGame({ pool, onOpen }) {
   return (
     <div className="mb-6 rounded-[22px] p-4 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
       <div className="flex items-start justify-between gap-2 mb-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-[17px] font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">🎯 {t('guessTitle')}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('guessSubtitle')}</p>
         </div>
-        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          {!finished && <span className="text-[11px] font-bold text-slate-400">{t('guessRound', { n: round + 1, total: rounds.length })}</span>}
-          {store.streak > 1 && store.lastDone >= today - 1 && (
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'var(--v-poor-bg)', color: 'var(--v-poor)' }}>
-              {t('guessStreak', { days: store.streak })}
+        {stats.played > 0 && (
+          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'var(--v-good-bg)', color: 'var(--v-very-healthy)' }}>
+              {t('guessTally', { close: stats.close, played: stats.played })}
             </span>
-          )}
-        </div>
+            {stats.run > 1 && (
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'var(--v-poor-bg)', color: 'var(--v-poor)' }}>
+                {t('guessRun', { n: stats.run })}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {finished ? (
-        <div className="text-center py-2">
-          <div className="flex justify-center gap-2 mb-3">
-            {answers.map((a) => {
-              const level = judgeGuess(a.guess, a.actual).level;
-              return <span key={a.key} className="text-2xl">{level === 'bullseye' ? '🎯' : level === 'close' ? '✅' : level === 'off' ? '🤏' : '😮'}</span>;
-            })}
-          </div>
-          <p className="text-[15px] font-bold text-slate-800 dark:text-slate-100">{t('guessDone', { correct: closeCount, total: rounds.length })}</p>
-          <p className="text-xs text-slate-400 mt-1">{t('guessComeBack')}</p>
-          <div className="flex gap-2 mt-4">
-            <button onClick={share} className="tap-scale flex-1 py-2.5 rounded-xl bg-green-600 text-white text-[13px] font-bold">
-              {t('guessShare')} 💬
-            </button>
-            <button
-              onClick={() => { setReplay(true); setRound(0); setLocked(false); setGuess(50); }}
-              className="tap-scale px-4 py-2.5 rounded-xl text-[13px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
-            >
-              {t('guessPlayAgain')}
-            </button>
-          </div>
+      {!item ? (
+        <div>
+          <div className="flex items-center gap-3"><div className="shimmer w-[72px] h-[72px] rounded-2xl" /><div className="shimmer h-4 flex-1 rounded-full" /></div>
+          <div className="shimmer h-[150px] rounded-2xl mt-4" />
         </div>
       ) : (
         <div key={item.lookupKey} className={`page-in ${answer?.level === 'way' ? 'guess-shake' : ''}`}>
@@ -200,9 +212,14 @@ export default function GuessGame({ pool, onOpen }) {
                   {t('guessWhy', { score: item.score })} →
                 </button>
                 <button onClick={nextRound} className="tap-scale flex-1 py-2.5 rounded-xl bg-green-600 text-white text-[13px] font-bold">
-                  {round + 1 >= rounds.length ? t('guessFinish') : `${t('guessNext')} →`}
+                  {t('guessNext')} →
                 </button>
               </div>
+              {stats.played >= 3 && (
+                <button onClick={share} className="tap-scale w-full mt-2 py-2 text-[12.5px] font-semibold" style={{ color: 'var(--tint)' }}>
+                  💬 {t('guessShare')}
+                </button>
+              )}
             </>
           )}
         </div>
