@@ -47,13 +47,16 @@ import { estimateQuantities } from './quantityEstimator.js';
 export async function analyzeText(rawText, productName, brand, offIngredients, imageUrl, nutrientsInfo, packSize) {
   // Only for parsing -- the caller keeps showing the user their real,
   // original scanned/typed text regardless of what happens here.
-  let textToParse = rawText;
+  let { ingredients: parsed, allergens } = parseLabel(rawText);
   if (!isBracketBalanced(rawText)) {
+    // Gemini's repair is only taken when it reads at least as much as the
+    // parser's own recovery did -- nothing checks that a repair kept every
+    // word, and one that drops some would lose those ingredients for good
+    // (saved reports with 3 of a label's 15 ingredients exist).
     const repaired = await repairLabelPunctuation(rawText);
-    if (repaired) textToParse = repaired;
+    const fromRepair = repaired ? parseLabel(repaired) : null;
+    if (fromRepair && fromRepair.ingredients.length >= parsed.length) ({ ingredients: parsed, allergens } = fromRepair);
   }
-
-  const { ingredients: parsed, allergens } = parseLabel(textToParse);
 
   if (parsed.length === 0) {
     throw new Error("Couldn't find any recognizable ingredients in that text. Please check and try again.");

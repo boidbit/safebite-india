@@ -473,3 +473,67 @@ test('vitamin expansion does not swallow ordinary words that follow a vitamin', 
   const names = parseIngredients('Sugar, Vitamin C and Dextrose, Salt').map((i) => i.displayName);
   assert.deepEqual(names, ['Sugar', 'Vitamin C', 'Dextrose', 'Salt']);
 });
+
+// A scanned Krack Jack label: "RAISING AGENTS [" never closes and OCR read
+// two closing brackets as "1" -- only Maida, oil and sugar were scored.
+test('recovers code lists whose closing bracket is missing or read as "1"', () => {
+  const label = 'REFINED WHEAT FLOUR (MAIDA), REFINED OILS (PALMOLEIN AND PALM), SUGAR (19.1%), RAISING AGENTS [503( ii ), 500(ii) ,341(1), INVERT SUGAR SYRUP, IODISED SALT(0.9%), YEAST, ACIDITY REGULATORS [ 270, 296 1, FLOUR TREATMENT AGENTS [223, 1101(ii), 1100(1)1, EMULSIFIER OF VEGETABLE ORIGIN [472e]';
+  const result = parseIngredients(label);
+  const names = result.map((i) => i.displayName);
+  for (const name of ['Invert Sugar Syrup', 'Iodised Salt', 'Yeast']) assert.ok(names.includes(name), `${name} should be extracted`);
+  const codes = result.map((i) => i.insCode).filter(Boolean);
+  for (const code of ['503(ii)', '500(ii)', '341(i)', '270', '296', '223', '1101(ii)', '1100(i)', '472e']) assert.ok(codes.includes(code), `INS ${code} should be extracted`);
+  assert.equal(byName(result, 'Acidity Regulators (INS 296)')?.insCode, '296');
+});
+
+test('a well-formed mixed list in brackets is not closed early', () => {
+  const names = parseIngredients('Sugar, Acidity Regulator (330, Sodium Citrate), Salt').map((i) => i.displayName);
+  assert.ok(names.includes('Sodium Citrate'));
+  assert.ok(names.includes('Salt'));
+});
+
+test('a declared flavour is one ingredient, whatever the bracket lists', () => {
+  const names = (t) => parseIngredients(t).map((i) => i.displayName);
+  assert.deepEqual(names('Sugar, artificial flavouring substances (cocoa, vanilla), Salt'), ['Sugar', 'Artificial Flavouring Substances', 'Salt']);
+  assert.deepEqual(
+    names('Sugar, FLAVOURS (NATURE IDENTICAL AND ARTIFICIAL FLAVOURING SUBSTANCES - CHOCOLATE AND VANILLA), Water'),
+    ['Sugar', 'Nature Identical and Artificial Flavouring Substances', 'Water'],
+  );
+  assert.deepEqual(
+    names('Milk Solids, Flavours (Natural, Nature Identical and Artificial Flavouring Substances)'),
+    ['Milk Solids', 'Natural, Nature Identical and Artificial Flavouring Substances'],
+  );
+  assert.deepEqual(names('Sugar, Added Flavours (Artificial (Vanilla & Butter) Flavouring Substances)'), ['Sugar', 'Artificial Flavouring Substances']);
+});
+
+test('a flavour falls back to the library\'s plain entry for its most concerning kind', () => {
+  const [flavour] = parseIngredients('Nature identical and artificial flavouring substances (honey, saffron)');
+  assert.deepEqual(flavour.lookupKeys, ['nature identical and artificial flavouring substances', 'artificial flavouring substances', 'nature identical flavouring substances']);
+});
+
+test('flavour handling leaves groups, enhancers and code-named flavours alone', () => {
+  const seasoning = parseIngredients('Seasoning (Salt, Sugar, Nature Identical Flavouring Substances, Spices)').map((i) => i.displayName);
+  assert.deepEqual(seasoning, ['Salt', 'Sugar', 'Nature Identical Flavouring Substances', 'Spices']);
+  const enhancers = parseIngredients('Flavour Enhancers (627, 631)').map((i) => i.insCode);
+  assert.deepEqual(enhancers, ['627', '631']);
+  // A missing comma: the cream filling after the flavour is still read.
+  const filling = parseIngredients('Flavours (Milk, Vanillin) Cream Filling (Sugar, Palm Oil)').map((i) => i.displayName);
+  assert.ok(filling.includes('Palm Oil'));
+});
+
+test('a flavour bracket that never closes still lets the rest of the label through', () => {
+  const names = parseIngredients('Malt extract, sugar, artificial flavouring substances (milk caramel, emulsifiers (322, 471), raising agent [500(ii)], iodized salt.').map((i) => i.displayName);
+  assert.ok(names.includes('Artificial Flavouring Substances'));
+  assert.ok(names.includes('Iodized Salt'));
+});
+
+test('bare and described codes inside a group are kept, named after the group', () => {
+  const result = parseIngredients('Dark Compound [Sugar, Edible Vegetable Fat (Hydrogenated), Cocoa Solids & Emulsifiers (492, 322 (i) - Lecithin of Soya Origin)]');
+  assert.equal(byName(result, 'Emulsifiers (INS 492)')?.insCode, '492');
+  assert.equal(byName(result, 'Lecithin Of Soya Origin (INS 322(i))')?.insCode, '322(i)');
+});
+
+test('numbers outside the INS range are not read as additive codes', () => {
+  const result = parseIngredients('Sugar, Notes (2000 - calories a day is used for general nutrition advice, 4500)');
+  assert.ok(!result.some((i) => i.insCode === '2000' || i.insCode === '4500'));
+});

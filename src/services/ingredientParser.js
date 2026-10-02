@@ -255,7 +255,8 @@ function codeRegex(flags = '') {
 /** Normalize a code into a consistent form: "503(ii)", "472e", "322". */
 function normalizeCode(digits, sub, letter) {
   let code = digits;
-  if (sub) code += `(${sub.toLowerCase()})`;
+  // INS sub-numbers are roman; "341(1)", "500(11)" are OCR's reading of (i), (ii).
+  if (sub) code += `(${/^1{1,3}$/.test(sub) ? 'i'.repeat(sub.length) : sub.toLowerCase()})`;
   if (letter) code += letter.toLowerCase();
   return code;
 }
@@ -320,15 +321,64 @@ function decodeHtmlEntities(text) {
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
 }
 
+// One additive code as labels print it, prefix and sub-number included:
+// "INS 503(ii)", "500 (ii)", "503( ii )", "341(1)", "472e", "E-322".
+const CODE_ITEM = '(?:(?:ins|e)\\s*[-–]?\\s*)?\\d{3,4}(?:\\s*\\(\\s*[ivx\\d]+\\s*\\))?[a-z]?';
+
+// The same dropped-closer repair as MISSING_CODE_LIST_CLOSER_RE, widened
+// to "[" groups, sub-numbers like "(1)" and "( ii )", and INS prefixes --
+// a real scanned Krack Jack label: "RAISING AGENTS [503( ii ), 500(ii)
+// ,341(1), INVERT SUGAR SYRUP, IODISED SALT, ..." never closes its "[",
+// so everything after it (invert syrup, salt, yeast, nine additives) was
+// one blob and only Maida, oil and sugar were scored. Only run on text
+// whose brackets don't balance: on a well-formed label "(330, Sodium
+// Citrate)" is a real mixed list, and closing it after 330 would break it.
+const OPEN_CODE_LIST_RE = new RegExp(
+  `([(\\[])(\\s*${CODE_ITEM}(?:\\s*,\\s*${CODE_ITEM})*)\\s*,\\s*(?=(?!(?:ins|e)\\s*[-–]?\\s*\\d)[A-Z][A-Z\\s]{2,}[\\s(,])`,
+  'gi',
+);
+
+// OCR reads a closing "]" or ")" as "1": "ACIDITY REGULATORS [ 270, 296 1,"
+// and "FLOUR TREATMENT AGENTS [223, 1101(ii), 1100(1)1," on the same Krack
+// Jack scan. A lone "1" right after a code, at the end of an entry, inside
+// a bracket that's still open, is that closer.
+const OCR_CLOSER_RE = /(\d{3,4}(?:\s*\(\s*[ivx\d]+\s*\))?)\s?1(?=\s*(?:[,.;]|$))/gi;
+
+function repairOcrClosers(text) {
+  return text.replace(OCR_CLOSER_RE, (whole, code, offset) => {
+    const stack = [];
+    for (const ch of text.slice(0, offset)) {
+      if (OPENERS.includes(ch)) stack.push(ch);
+      else if (CLOSERS.includes(ch)) stack.pop();
+    }
+    return stack.length ? `${code}${BRACKET_PAIR[stack[stack.length - 1]]}` : whole;
+  });
+}
+
 /**
  * Repairs the label-transcription defects above -- all no-ops (nothing
  * to match) on well-formed text, so this is safe to run unconditionally
  * before any real parsing happens.
  */
 function repairRunOnCategories(text) {
-  return decodeHtmlEntities(text)
+  let out = decodeHtmlEntities(text)
+    // OCR reads the capital I of "Iodised" as l or 1: "lodised Salt", "1ODIZED SALT".
+    .replace(/\b[l1](odi[sz]ed)\b/gi, 'I$1')
     .replace(MISSING_CODE_LIST_CLOSER_RE, '($1), ')
     .replace(MISSING_COMMA_AFTER_BRACKET_RE, ', $1');
+  if (!isBracketBalanced(out)) {
+    out = repairOcrClosers(out)
+      .replace(OPEN_CODE_LIST_RE, (whole, opener, list) => `${opener}${list}${BRACKET_PAIR[opener]}, `);
+  }
+  return out;
+}
+
+// "Nature identical and artificial flavouring substances", "Natural &
+// Nature Identical Flavours": one flavour, the "and" joins its kinds.
+const FLAVOUR_KIND_END_RE = /(?:^|\s)(?:natural|nature[\s-]*identical|natural[\s-]*identical|artificial|synthetic)$/;
+const FLAVOUR_KIND_START_RE = /^(?:natural|nature[\s-]*identical|artificial|synthetic|flavou?r)/;
+function joinsFlavourKinds(before, after) {
+  return FLAVOUR_KIND_END_RE.test(before) && FLAVOUR_KIND_START_RE.test(after) && /flavou?r/.test(after.split(/[,;.]/)[0]);
 }
 
 /**
@@ -401,7 +451,7 @@ export function splitTopLevel(rawText) {
         // more this way.
         const before = current.trim().toLowerCase();
         const after = text.slice(i + 5).toLowerCase();
-        if (before.endsWith('spices') && after.startsWith('condiments')) {
+        if ((before.endsWith('spices') && after.startsWith('condiments')) || joinsFlavourKinds(before, after)) {
           current += text.slice(i, i + 5);
           i += 4;
           continue;
@@ -411,6 +461,10 @@ export function splitTopLevel(rawText) {
         continue;
       }
       if (ch === '&') {
+        if (joinsFlavourKinds(current.trim().toLowerCase(), text.slice(i + 1).trim().toLowerCase())) {
+          current += ch;
+          continue;
+        }
         flush();
         continue;
       }
@@ -776,6 +830,77 @@ const VITAMIN_LIST_RE = new RegExp(
   `\\b(vitamins?)\\s*[(\\[]?\\s*(${VITAMIN_LETTER}(?:\\s*(?:,|&|\\band\\b)\\s*${VITAMIN_LETTER}\\b)+)\\s*[)\\]]?`,
   'gi',
 );
+// A declared flavour: "Flavours (Nature Identical and Artificial Flavouring
+// Substances - Chocolate and Vanilla)", "artificial flavouring substances
+// (cocoa, vanilla)", "Added Flavours (Artificial (Vanilla & Butter)
+// Flavouring Substances)". Read as anything else these went wrong three
+// ways across 250+ saved products: a comma in the bracket made "Cocoa" and
+// "Vanilla" two ingredients and dropped the flavouring itself, a long one
+// ran past looksLikeIngredientName's 8 words and vanished, and the rest
+// became one-off names ("Artificial Flavours Chocolate") the library never
+// matches. "Flavour Enhancers (627, 631)" are additives, not flavourings.
+// The whole outside-the-brackets text is a flavour declaration and nothing
+// else -- "Flavours (Milk, Chocolate, Vanillin) Cream Fillings (30%):
+// Sugar, ..." (a missing comma) has a cream filling after it.
+const FLAVOUR_ONLY_RE = /^(?:(?:added|permitted|natural|nature[\s-]*identical|artificial|synthetic|and|&)\s+)*flavou?r(?:s|ing)?(?:\s+(?:substances?|agents?))?\s*[:\-–]?$/i;
+const FLAVOURING_PHRASE_RE = /\bflavou?ring\s+(?:substances?|agents?)\b/i;
+
+/** The flavour ingredient this entry declares, or null when it isn't one. */
+function flavourEntry(text) {
+  if (/enhancer/i.test(text)) return null;
+  // "Natural Flavors (E160b)" names an additive code -- that's the code's entry.
+  const bracket = findLastBracketGroup(text);
+  if (bracket && parseCodeList(bracket.inner)) return null;
+  // Only the words outside brackets say what the entry IS -- "Seasoning
+  // (Salt, ..., Nature Identical Flavouring Substances)" is a seasoning.
+  // A bracket that never closes runs to the end: "Chocolate Chips (5%)
+  // (Sugar, ..., Artificial Flavouring Substance (Vanillin)." is chips.
+  let outside = '';
+  let depth = 0;
+  for (const ch of text) {
+    if (OPENERS.includes(ch)) depth++;
+    else if (CLOSERS.includes(ch)) depth = Math.max(0, depth - 1);
+    else if (depth === 0) outside += ch;
+  }
+  outside = outside.replace(/\s+/g, ' ').trim();
+  const isFlavour = (FLAVOURING_PHRASE_RE.test(outside) && !outside.includes(':') && outside.split(' ').length <= 12)
+    || (FLAVOUR_ONLY_RE.test(outside) && (/[([{]/.test(text) || text.split(/\s+/).length > 8));
+  if (!isFlavour) return null;
+
+  const kinds = [];
+  if (/\bnatural\b(?![\s-]*identical)/i.test(text)) kinds.push('Natural');
+  if (/\bnatur(?:e|al)[\s-]*identical\b/i.test(text)) kinds.push('Nature Identical');
+  if (/\b(?:artificial|synthetic)\b/i.test(text)) kinds.push('Artificial');
+  const joined = kinds.length > 1 ? `${kinds.slice(0, -1).join(', ')} and ${kinds[kinds.length - 1]}` : kinds[0];
+  const name = joined ? `${joined} Flavouring Substances` : 'Added Flavours';
+  // Most concerning kind first: the library's plain entries for each are
+  // what a combined name falls back to.
+  const fallbacks = [
+    kinds.includes('Artificial') && 'artificial flavouring substances',
+    kinds.includes('Nature Identical') && 'nature identical flavouring substances',
+    kinds.includes('Natural') && 'natural flavours',
+  ].filter(Boolean);
+  return {
+    displayName: name,
+    canonicalName: normalizeName(name),
+    lookupKeys: [...new Set([normalizeName(name), ...fallbacks])],
+    insCode: null,
+    percentage: extractPercentage(text).percentage,
+    categoryHint: 'flavour',
+    // A bracket that never closes may hold the rest of the label
+    // ("... (milk caramel, malted milk, emulsifiers (322, 471), iodized
+    // salt."), so the caller still reads what's inside.
+    unclosed: depth > 0,
+  };
+}
+
+const ADDITIVE_CATEGORY_RE = /\b(?:agents?|regulators?|emulsifi?ers?|stabili[sz]ers?|preservatives?|colou?rs?|antioxidants?|thickeners?|humectants?|sweeteners?|improvers?|enhancers?|conditioners?|sequestrants?)$/i;
+
+// "322 (i) - Lecithin of Soya Origin", "E471: Mono- and diglycerides" --
+// a code with its own description. parseCodeList rejects the words, and
+// with no "INS" in front the code was never read as one.
+const DESCRIBED_CODE_RE = /^(?:(?:ins|e)\s*[-–]?\s*)?(\d{3,4})\s*(?:\(\s*([ivx\d]+)\s*\))?\s*([a-z])?\s*[-–:]\s*([a-z].*)$/i;
+
 export function expandVitaminShorthand(text) {
   return String(text || '').replace(VITAMIN_LIST_RE, (whole, word, list) => {
     const letters = list.split(/\s*(?:,|&|\band\b)\s*/i).map((l) => l.trim()).filter(Boolean);
@@ -816,7 +941,7 @@ export function parseIngredients(labelText) {
   // matter (sugar, flavour enhancers, HVP) -- so they get parsed as
   // their own entries instead of being hidden inside a generic wrapper
   // name that never gets researched with any awareness of what's in it.
-  const processEntry = (rawEntry, groupId = null, inheritedPercentage = null) => {
+  const processEntry = (rawEntry, groupId = null, inheritedPercentage = null, parentHint = null) => {
     // A standalone footnote like "#(D-GLUCOSE, LEVULOSE)" explains an
     // ingredient listed above — it isn't an ingredient in its own right.
     // Only true when the marker has NOTHING but a bracket after it,
@@ -836,6 +961,42 @@ export function parseIngredients(labelText) {
       .replace(/\s+([)\]}])/g, '$1');
     const cleaned = stripNoisePrefix(entry);
     if (!cleaned) return;
+
+    // Bare codes as their own entry -- "492" and "503(ii)" inside
+    // "Emulsifiers (492, 322 (i) - Lecithin...)", where the bracket isn't a
+    // pure code list. Without "INS" in front they were dropped as noise.
+    // They take the group's own name ("Emulsifiers") as their category.
+    const codeLabel = (code) => (parentHint ? `${titleCase(parentHint)} (INS ${code})` : `INS ${code}`);
+    // Real INS numbers run 100-1599; "2000 calories", "4500" are OCR or prose.
+    const realCode = (code) => { const n = parseInt(code, 10); return n >= 100 && n <= 1599; };
+    const ownCodes = parseCodeList(cleaned);
+    if (ownCodes && ownCodes.every(realCode)) {
+      for (const code of ownCodes) {
+        add({ displayName: codeLabel(code), canonicalName: `ins ${code}`, lookupKeys: [`ins ${code}`], insCode: code, percentage: null, categoryHint: parentHint ? parentHint.toLowerCase() : null }, groupId);
+      }
+      return;
+    }
+    const described = cleaned.match(DESCRIBED_CODE_RE);
+    if (described && realCode(described[1])) {
+      const code = normalizeCode(described[1], described[2], described[3]);
+      const description = described[4].replace(/[()[\]{}]/g, ' ').replace(/\s+/g, ' ').trim();
+      add({
+        displayName: `${titleCase(description)} (INS ${code})`,
+        canonicalName: `ins ${code}`,
+        lookupKeys: [`ins ${code}`, normalizeName(description)],
+        insCode: code,
+        percentage: null,
+        categoryHint: parentHint ? parentHint.toLowerCase() : null,
+      }, groupId);
+      return;
+    }
+
+    const flavour = flavourEntry(cleaned);
+    if (flavour) {
+      const { unclosed, ...item } = flavour;
+      add({ ...item, percentage: item.percentage ?? inheritedPercentage }, groupId);
+      if (!unclosed) return;
+    }
 
     // "RAISING AGENTS [INS 503(ii), 500(ii)]" -> one entry per code.
     const bracket = findLastBracketGroup(cleaned);
@@ -929,8 +1090,13 @@ export function parseIngredients(labelText) {
         // it's already inherited from a real outer parent, every
         // sibling correctly reuses that same one.
         const childGroup = groupId || newGroupId();
+        // The group's own name, when it's an additive category ("Emulsifiers",
+        // "Raising Agents") -- names the bare codes inside. "Vegetarian Cake
+        // (Water, ..., 471)" isn't one: those stay plain "INS 471".
+        const label = cleaned.slice(0, compound.start).replace(/[([{].*$/, '').replace(/[\s:\-–]+$/, '').trim();
+        const hint = ADDITIVE_CATEGORY_RE.test(label) && label.split(/\s+/).length <= 4 ? label : null;
         for (const subEntry of subEntries) {
-          processEntry(subEntry, childGroup, perMemberPercentage);
+          processEntry(subEntry, childGroup, perMemberPercentage, hint);
         }
       }
       return;
