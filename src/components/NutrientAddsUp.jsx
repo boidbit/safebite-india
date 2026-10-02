@@ -241,7 +241,7 @@ export default function NutrientAddsUp({ projection, t, onShowAlternatives, show
           on every tab, not only Sugar's, so it's never one tap out of sight. */}
       {onOpenBodyStory && sugarItem && (
         <button
-          onClick={() => onOpenBodyStory({ key: 'sugar', teaspoons: sugarItem.teaspoonsPerServing, grams: sugarItem.gramsPerServing, servingGrams: serving.grams, unit: serving.unit })}
+          onClick={() => onOpenBodyStory({ key: 'sugar', teaspoons: sugarItem.teaspoonsPerServing, grams: sugarItem.gramsPerServing, servingGrams: serving.grams, unit: serving.unit, perWeek })}
           className="tap-scale mt-2.5 inline-flex items-center gap-2 pl-1.5 pr-3.5 py-1.5 rounded-full text-[13px] font-bold"
           style={{ background: `rgba(${LOOK.sugar.rgb}, 0.12)`, color: LOOK.sugar.color }}
         >
