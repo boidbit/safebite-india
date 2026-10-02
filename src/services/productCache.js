@@ -310,8 +310,11 @@ export async function getPopularSearchTerms(limit = 8) {
 /**
  * The most recently added products -- home screen's "Recently added"
  * feed, so the app has something fresh to show even to a visitor who
- * never types a search. Ordered by when we saved the report, not by
- * when the product itself was manufactured.
+ * never types a search. Ordered by when the product went live in the app
+ * (approved), not when it was saved: a scraped product waits days in the
+ * review queue, and ordering by save time buried every one approved today
+ * under that day's scans. 'live' products (published before review
+ * existed) have no approval time and come after.
  */
 export async function getRecentlyAddedProducts(limit = 10) {
   if (!isSupabaseConfigured) return [];
@@ -320,6 +323,7 @@ export async function getRecentlyAddedProducts(limit = 10) {
     .from('product_reports')
     .select('lookup_key, product_name, report, created_at')
     .in('review_status', VISIBLE_REVIEW_STATUSES)
+    .order('reviewed_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
     .limit(limit);
 
