@@ -81,6 +81,12 @@ test('"100%"/"no added sugar" names with no split are skipped -- that sugar is t
   }
 });
 
+test('a "100%" that isn\'t about sugar ("100% VEG", "100% eggless") doesn\'t hide the sugar', () => {
+  for (const productName of ['CAKE 100% VEG Gobbles fruity fun', 'Swiss Roll 100% Vegetarian', 'Choco Cake 100% Eggless']) {
+    assert.ok(buildSugarProjection({ ...base, foodType: 'sweet-snack', realNutrientsServingGrams: 60, realNutrientsServingUnit: 'g', productName, nutrientsPer100: { addedSugarG: 26 } }), productName);
+  }
+});
+
 test('without a split, a normal sweetened product is still shown -- just not called "added" sugar', () => {
   const p = buildSugarProjection({ ...base, nutrientsPer100: { addedSugarG: 12 } });
   assert.equal(p.gramsPerServing, 24);

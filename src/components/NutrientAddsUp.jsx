@@ -166,6 +166,7 @@ export default function NutrientAddsUp({ projection, t, onShowAlternatives, show
   const [perWeek, setPerWeek] = useState(7);
   const [activeKey, setActiveKey] = useState(items[0].key);
   const item = items.find((i) => i.key === activeKey) || items[0];
+  const sugarItem = items.find((i) => i.key === 'sugar');
   const look = LOOK[item.key];
 
   const totals = accumulate(item.key, item.gramsPerServing, perWeek);
@@ -236,15 +237,16 @@ export default function NutrientAddsUp({ projection, t, onShowAlternatives, show
         <ServingDetail item={item} t={t} color={look.color} serving={serving} />
       </div>
 
-      {/* The body story for this nutrient, where there is one (sugar so far). */}
-      {onOpenBodyStory && item.key === 'sugar' && (
+      {/* The sugar body story, whenever this product has sugar to show --
+          on every tab, not only Sugar's, so it's never one tap out of sight. */}
+      {onOpenBodyStory && sugarItem && (
         <button
-          onClick={() => onOpenBodyStory({ key: item.key, teaspoons: item.teaspoonsPerServing, grams: item.gramsPerServing, servingGrams: serving.grams, unit: serving.unit })}
+          onClick={() => onOpenBodyStory({ key: 'sugar', teaspoons: sugarItem.teaspoonsPerServing, grams: sugarItem.gramsPerServing, servingGrams: serving.grams, unit: serving.unit })}
           className="tap-scale mt-2.5 inline-flex items-center gap-2 pl-1.5 pr-3.5 py-1.5 rounded-full text-[13px] font-bold"
-          style={{ background: `rgba(${look.rgb}, 0.12)`, color: look.color }}
+          style={{ background: `rgba(${LOOK.sugar.rgb}, 0.12)`, color: LOOK.sugar.color }}
         >
-          <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px]" style={{ background: look.color }} aria-hidden="true">▶</span>
-          {t('bsOpen')}
+          <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px]" style={{ background: LOOK.sugar.color }} aria-hidden="true">▶</span>
+          {t('bsOpenSugar')}
         </button>
       )}
 

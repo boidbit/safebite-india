@@ -54,7 +54,9 @@ const isSweetenerProduct = (name, foodType) =>
 // Names that say the sugar in them is the food's own (fruit, milk)
 // rather than added -- only matters when the label gives no separate
 // added-sugar figure to tell the two apart (see below).
-const NATURAL_SUGAR_NAME_RE = /(\b100\s*%|\bno added sugar|\bwithout added sugar|\bzero added sugar|\bunsweetened\b)/i;
+// A "100%" that says nothing about sugar -- "CAKE 100% VEG Gobbles", "100%
+// whole wheat" -- doesn't count; it hid a cake's 16 g of sugar a serving.
+const NATURAL_SUGAR_NAME_RE = /(\b100\s*%(?!\s*(?:pure\s+)?(?:veg|vegetarian|eggless|atta|whole|wheat|millet|oats?|ragi)\b)|\bno added sugar|\bwithout added sugar|\bzero added sugar|\bunsweetened\b)/i;
 
 // A ready-to-drink with more sugar than this per 100ml isn't real --
 // Coke is ~10.6g, sweetened juices ~12-14g. Live: a Mogu Mogu at 32g/100ml
