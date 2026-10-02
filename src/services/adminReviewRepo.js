@@ -73,7 +73,12 @@ async function lookupKeysWithOpenProblems() {
  *   product's barcode lives there)
  * @param {''|'yes'|'no'} [opts.hasBarcode] - whether the key itself is a barcode
  * @param {keyof SORTS} [opts.sort]
- * @returns rows, each with `barcode` (its key's, or an approved match's) or null
+ * @param {number} [opts.limit] - rows per page; Infinity for every match
+ * @returns rows, each with `barcode` (its key's, or an approved match's) or
+ *   null, and a slim `report` ({ brand, overallScore, foodType,
+ *   nutrientsPer100 }) -- the photo and ingredients come from
+ *   adminProductThumb, since a report with its photo inlined runs to 100 KB+
+ *   and 25 of them made the list take seconds.
  */
 export async function adminListReviewQueue({
   status = DEFAULT_REVIEW_TAB,
@@ -97,66 +102,139 @@ export async function adminListReviewQueue({
 } = {}) {
   requireSupabase();
   const order = SORTS[sort] || SORTS.newest;
-  let query = supabase
-    .from('product_reports')
-    .select('id, lookup_key, source, product_name, ingredients_text, report, review_status, reviewed_at, created_at, updated_at', { count: 'exact' })
-    .order(order.column, { ascending: order.ascending, nullsFirst: false })
-    .order('id', { ascending: true }) // stable paging when the sort column ties
-    .range(offset, offset + limit - 1);
-
-  const tab = REVIEW_TABS[status] || REVIEW_TABS[DEFAULT_REVIEW_TAB];
-  if (tab.statuses) query = query.in('review_status', tab.statuses);
-  if (tab.source) query = query.eq('source', tab.source);
-  if (tab.notSource) query = query.neq('source', tab.notSource);
-
-  if (search.trim()) query = query.ilike('product_name', `%${search.trim()}%`);
-  if (brand.trim()) query = query.ilike('report->>brand', `%${brand.trim()}%`);
-  if (foodType === '__none') query = query.is('report->>foodType', null);
-  else if (foodType) query = query.eq('report->>foodType', foodType);
-  if (source) query = query.eq('source', source);
-  if (categoryKeywords?.length) {
-    query = query.or(categoryKeywords.map((k) => `product_name.ilike.%${k}%`).join(','));
-  }
-  if (typeof scoreMin === 'number') query = query.gte('report->overallScore', scoreMin);
-  if (typeof scoreMax === 'number') query = query.lte('report->overallScore', scoreMax);
-  if (hasImage === 'yes') query = query.not('report->>imageUrl', 'is', null);
-  else if (hasImage === 'no') query = query.is('report->>imageUrl', null);
-  if (hasNutrition === 'yes') query = query.not('report->nutrientsPer100', 'is', null);
-  else if (hasNutrition === 'no') query = query.is('report->nutrientsPer100', null);
-  if (hasPackSize === 'yes') query = query.not('report->>packSize', 'is', null).neq('report->>packSize', '');
-  else if (hasPackSize === 'no') query = query.or('report->>packSize.is.null,report->>packSize.eq.');
-  if (typeof addedWithinDays === 'number' && addedWithinDays > 0) {
-    query = query.gte('created_at', new Date(Date.now() - addedWithinDays * 86400000).toISOString());
-  }
-  if (problemsOnly) {
-    const keys = await lookupKeysWithOpenProblems();
-    if (keys.length === 0) return { rows: [], count: 0 }; // an empty IN() would match everything
-    query = query.in('lookup_key', keys);
-  }
-  if (hasBarcode === 'yes') query = query.ilike('lookup_key', 'barcode:%');
-  else if (hasBarcode === 'no') query = query.not('lookup_key', 'ilike', 'barcode:%');
+  const problemKeys = problemsOnly ? await lookupKeysWithOpenProblems() : null;
+  if (problemKeys && problemKeys.length === 0) return { rows: [], count: 0 }; // an empty IN() would match everything
   const digits = barcode.replace(/\D/g, '');
-  if (digits) {
-    const ids = await productIdsWithBarcode(digits);
-    if (ids.length === 0) return { rows: [], count: 0 };
-    query = query.in('id', ids);
-  }
+  const barcodeIds = digits ? await productIdsWithBarcode(digits) : null;
+  if (barcodeIds && barcodeIds.length === 0) return { rows: [], count: 0 };
+  // Fixed once, so every chunk of "All" asks about the same moment.
+  const addedSince = typeof addedWithinDays === 'number' && addedWithinDays > 0
+    ? new Date(Date.now() - addedWithinDays * 86400000).toISOString()
+    : null;
 
-  const { data, error, count } = await query;
-  if (error) throw new Error(error.message);
-  const rows = data || [];
+  // Step one finds the page's ids (and the total) without reading any
+  // report; step two reads only the small fields the list shows. A fresh
+  // query per chunk: a builder is mutable, so chunks fetched side by side
+  // can't share one.
+  const build = () => {
+    let query = supabase
+      .from('product_reports')
+      .select('id', { count: 'exact' })
+      .order(order.column, { ascending: order.ascending, nullsFirst: false })
+      .order('id', { ascending: true }); // stable paging when the sort column ties
+
+    const tab = REVIEW_TABS[status] || REVIEW_TABS[DEFAULT_REVIEW_TAB];
+    if (tab.statuses) query = query.in('review_status', tab.statuses);
+    if (tab.source) query = query.eq('source', tab.source);
+    if (tab.notSource) query = query.neq('source', tab.notSource);
+
+    if (search.trim()) query = query.ilike('product_name', `%${search.trim()}%`);
+    if (brand.trim()) query = query.ilike('report->>brand', `%${brand.trim()}%`);
+    if (foodType === '__none') query = query.is('report->>foodType', null);
+    else if (foodType) query = query.eq('report->>foodType', foodType);
+    if (source) query = query.eq('source', source);
+    if (categoryKeywords?.length) {
+      query = query.or(categoryKeywords.map((k) => `product_name.ilike.%${k}%`).join(','));
+    }
+    if (typeof scoreMin === 'number') query = query.gte('report->overallScore', scoreMin);
+    if (typeof scoreMax === 'number') query = query.lte('report->overallScore', scoreMax);
+    if (hasImage === 'yes') query = query.not('report->>imageUrl', 'is', null);
+    else if (hasImage === 'no') query = query.is('report->>imageUrl', null);
+    if (hasNutrition === 'yes') query = query.not('report->nutrientsPer100', 'is', null);
+    else if (hasNutrition === 'no') query = query.is('report->nutrientsPer100', null);
+    if (hasPackSize === 'yes') query = query.not('report->>packSize', 'is', null).neq('report->>packSize', '');
+    else if (hasPackSize === 'no') query = query.or('report->>packSize.is.null,report->>packSize.eq.');
+    if (addedSince) query = query.gte('created_at', addedSince);
+    if (problemKeys) query = query.in('lookup_key', problemKeys);
+    if (hasBarcode === 'yes') query = query.ilike('lookup_key', 'barcode:%');
+    else if (hasBarcode === 'no') query = query.not('lookup_key', 'ilike', 'barcode:%');
+    if (barcodeIds) query = query.in('id', barcodeIds);
+    return query;
+  };
+
+  // The first chunk of ids also brings the total; "All" then fetches the
+  // rest a thousand at a time (the API's own cap), side by side.
+  const pageEnd = Number.isFinite(limit) ? offset + limit : Infinity;
+  const first = await build().range(offset, Math.min(pageEnd, offset + 1000) - 1);
+  if (first.error) throw new Error(first.error.message);
+  const count = first.count || 0;
+  const end = Math.min(pageEnd, count);
+  const starts = [];
+  for (let from = offset + 1000; from < end; from += 1000) starts.push(from);
+  const rest = await inParallel(starts, async (from) => {
+    const { data, error } = await build().range(from, Math.min(end, from + 1000) - 1);
+    if (error) throw new Error(error.message);
+    return data || [];
+  });
+  const ids = [first.data || [], ...rest].flat().map((r) => r.id);
+
+  const byId = new Map();
+  const chunks = [];
+  for (let i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200));
+  await inParallel(chunks, async (chunk) => {
+    const { data, error } = await supabase
+      .from('product_reports')
+      .select('id, lookup_key, source, product_name, review_status, reviewed_at, created_at, updated_at, '
+        + 'brand:report->>brand, overallScore:report->overallScore, foodType:report->>foodType, nutrientsPer100:report->nutrientsPer100')
+      .in('id', chunk);
+    if (error) throw new Error(error.message);
+    for (const r of data || []) byId.set(r.id, r);
+  });
+  const rows = ids.map((id) => byId.get(id)).filter(Boolean).map(({ brand, overallScore, foodType, nutrientsPer100, ...r }) => ({
+    ...r,
+    report: { brand, overallScore, foodType, nutrientsPer100 },
+  }));
 
   // Each row's barcode: its own key's, or one approved in Barcode matches.
   const linked = new Map();
   const linkKeys = rows.filter((r) => !r.lookup_key.startsWith('barcode:')).map((r) => r.lookup_key);
-  if (linkKeys.length) {
-    const { data: links } = await supabase.from('barcode_links').select('lookup_key, barcode').eq('status', 'approved').in('lookup_key', linkKeys);
+  const keyChunks = [];
+  for (let i = 0; i < linkKeys.length; i += 100) keyChunks.push(linkKeys.slice(i, i + 100));
+  await inParallel(keyChunks, async (keys) => {
+    const { data: links } = await supabase.from('barcode_links').select('lookup_key, barcode').eq('status', 'approved').in('lookup_key', keys);
     for (const l of links || []) if (!linked.has(l.lookup_key)) linked.set(l.lookup_key, l.barcode);
-  }
+  });
   return {
     rows: rows.map((r) => ({ ...r, barcode: r.lookup_key.startsWith('barcode:') ? r.lookup_key.slice('barcode:'.length) : linked.get(r.lookup_key) || null })),
     count: count || 0,
   };
+}
+
+// Runs fn over every item, six requests at a time; results in input order.
+async function inParallel(items, fn, width = 6) {
+  const out = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(width, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  }));
+  return out;
+}
+
+/** One list row's photo and ingredient count -- loaded when the row is on screen. */
+export async function adminProductThumb(id) {
+  requireSupabase();
+  const { data, error } = await supabase
+    .from('product_reports')
+    .select('imageUrl:report->>imageUrl, ingredients:report->ingredients')
+    .eq('id', id)
+    .single();
+  if (error) throw new Error(error.message);
+  return { imageUrl: data.imageUrl || null, ingredientCount: Array.isArray(data.ingredients) ? data.ingredients.length : 0 };
+}
+
+/** The whole row, for an edit made from the list (cropping the photo). */
+export async function adminGetProductRow(id) {
+  requireSupabase();
+  const { data, error } = await supabase
+    .from('product_reports')
+    .select('id, lookup_key, source, product_name, ingredients_text, report')
+    .eq('id', id)
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 // Products whose key holds these digits, or that a (not rejected) Barcode

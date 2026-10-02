@@ -11,13 +11,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import AdminLayout from './AdminLayout';
 import PhotoCropModal from './PhotoCropModal';
-import { adminListReviewQueue, adminReviewCounts, adminSetReviewStatus, REVIEW_TABS, DEFAULT_REVIEW_TAB } from '../../services/adminReviewRepo';
+import { adminListReviewQueue, adminReviewCounts, adminSetReviewStatus, adminProductThumb, adminGetProductRow, REVIEW_TABS, DEFAULT_REVIEW_TAB } from '../../services/adminReviewRepo';
 import { adminDeleteProduct, adminUpdateProduct } from '../../services/adminProductsRepo';
 import { getScoreColor } from '../../utils/storage';
 import { CATEGORY_KEYWORDS } from '../../data/categoryKeywords';
 import { FOOD_TYPES } from '../../services/foodType';
 
-const PAGE_SIZE = 25;
+const PAGE_SIZES = [25, 50, 100, 'all'];
 const FILTER_DEBOUNCE_MS = 400;
 const SOURCES = ['blinkit', 'barcode', 'search', 'image', 'text'];
 
@@ -51,8 +51,9 @@ const SORT_OPTIONS = [
 const INITIAL_FILTERS = {
   status: DEFAULT_REVIEW_TAB, search: '', brand: '', foodType: '', categoryId: '', source: '',
   scoreMin: '', scoreMax: '', hasImage: '', hasNutrition: '', hasPackSize: '', problemsOnly: false,
-  addedWithinDays: '', barcode: '', hasBarcode: '', sort: 'newest',
+  addedWithinDays: '', barcode: '', hasBarcode: '', sort: 'newest', pageSize: 25,
 };
+const sizeOf = (f) => (f.pageSize === 'all' ? Infinity : Number(f.pageSize) || 25);
 
 // Kept across opening a product and coming back.
 const FILTERS_STORAGE_KEY = 'foodguard-admin-products-list';
@@ -101,6 +102,84 @@ function Field({ label, children, className = '' }) {
 
 const GRID = '28px 64px 2.4fr 1fr 1fr 0.8fr 0.7fr 1.05fr 70px 200px';
 
+// A row's photo and ingredient count, fetched once the row scrolls into
+// view -- photos are stored inside the report (often as a data URL), so
+// loading them with the list made every page a megabyte or more.
+const thumbCache = new Map();
+function useRowThumb(id) {
+  const ref = useRef(null);
+  const [thumb, setThumb] = useState(() => thumbCache.get(id) || null);
+  useEffect(() => {
+    if (thumbCache.has(id)) return undefined; // already in state from the cache
+    const el = ref.current;
+    if (!el) return undefined;
+    let cancelled = false;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      observer.disconnect();
+      adminProductThumb(id)
+        .then((t) => { thumbCache.set(id, t); if (!cancelled) setThumb(t); })
+        .catch(() => { if (!cancelled) setThumb({ imageUrl: null, ingredientCount: null }); });
+    }, { rootMargin: '300px' });
+    observer.observe(el);
+    return () => { cancelled = true; observer.disconnect(); };
+  }, [id]);
+  return [ref, thumb];
+}
+
+function ProductRow({ row, isSelected, onToggle, busy, onStatus, onCrop, onDelete }) {
+  const [ref, thumb] = useRowThumb(row.id);
+  const r = row.report || {};
+  const imageUrl = thumb?.imageUrl;
+  const product = [{ id: row.id, productName: row.product_name }];
+  return (
+    <div ref={ref} className="grid gap-3 px-4 py-2.5 items-center text-[13.5px]" style={{ gridTemplateColumns: GRID, borderBottom: '1px solid var(--separator)', background: isSelected ? 'var(--tint-bg)' : undefined }}>
+      <input type="checkbox" checked={isSelected} onChange={() => onToggle(row.id)} aria-label={`Select ${row.product_name}`} />
+      <button
+        onClick={() => imageUrl && onCrop({ ...row, imageUrl })}
+        title={imageUrl ? 'Crop photo' : thumb ? 'No photo' : 'Loading photo'}
+        className="tap-scale w-14 h-14 rounded-[8px] overflow-hidden flex items-center justify-center"
+        style={{ background: 'var(--fill)', cursor: imageUrl ? 'pointer' : 'default' }}
+      >
+        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" className="w-full h-full object-cover" /> : thumb ? <span style={{ fontSize: 20 }}>🍽️</span> : null}
+      </button>
+      <div className="min-w-0">
+        <p className="font-semibold truncate" style={{ color: 'var(--label-1)' }}>{row.product_name || 'Unnamed product'}</p>
+        <p className="text-[11px] truncate" style={{ color: 'var(--label-3)' }}>
+          {row.barcode ? <span className="font-mono">{row.barcode} · </span> : 'no barcode · '}
+          {typeof thumb?.ingredientCount === 'number' ? `${thumb.ingredientCount} ingredients` : '… ingredients'}{r.nutrientsPer100 ? ' · nutrition' : ' · no nutrition'}
+        </p>
+      </div>
+      <span className="truncate" style={{ color: 'var(--label-2)' }}>{r.brand || '—'}</span>
+      <ScorePill score={r.overallScore} />
+      <span className="text-[12.5px]" style={{ color: 'var(--label-2)' }}>{r.foodType || '—'}</span>
+      <span className="text-[12.5px]" style={{ color: 'var(--label-2)' }}>{row.source}</span>
+      <StatusPill status={row.review_status} />
+      <span className="text-[12px]" style={{ color: 'var(--label-3)' }}>
+        {row.created_at ? new Date(row.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'}
+      </span>
+      <div className="flex items-center gap-2.5 justify-end">
+        <Link to={`/admin/products/${row.id}/edit`} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--tint)' }}>Edit</Link>
+        {row.review_status !== 'approved' && (
+          <button disabled={busy} onClick={() => onStatus(product, 'approved')} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--v-good)' }}>Approve</button>
+        )}
+        {row.review_status !== 'rejected' && (
+          <button disabled={busy} onClick={() => window.confirm(`Reject "${row.product_name}"? It'll stay out of the app.`) && onStatus(product, 'rejected')} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--v-poor)' }}>Reject</button>
+        )}
+        <details className="relative">
+          <summary className="tap-scale list-none cursor-pointer text-[15px] px-1" style={{ color: 'var(--label-3)' }} title="More">⋯</summary>
+          <div className="absolute right-0 top-6 z-10 min-w-[140px] rounded-[10px] py-1 shadow-lg" style={{ background: 'var(--bg-card)', border: '1px solid var(--separator)' }}>
+            <a href={`#/p/${row.id}`} target="_blank" rel="noreferrer" className="block px-3 py-1.5 text-[13px]" style={{ color: 'var(--label-1)' }}>View in app ↗</a>
+            <Link to={`/admin/products/${row.id}/history`} className="block px-3 py-1.5 text-[13px]" style={{ color: 'var(--label-1)' }}>History</Link>
+            {imageUrl && <button onClick={() => onCrop({ ...row, imageUrl })} className="block w-full text-left px-3 py-1.5 text-[13px]" style={{ color: 'var(--label-1)' }}>Crop photo</button>}
+            <button onClick={() => onDelete(row.id, row.product_name)} className="block w-full text-left px-3 py-1.5 text-[13px]" style={{ color: 'var(--v-poor)' }}>Delete</button>
+          </div>
+        </details>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminProducts() {
   const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState(() => {
@@ -148,8 +227,8 @@ export default function AdminProducts() {
           barcode: f.barcode,
           hasBarcode: f.hasBarcode,
           sort: f.sort,
-          limit: PAGE_SIZE,
-          offset: pageValue * PAGE_SIZE,
+          limit: sizeOf(f),
+          offset: Number.isFinite(sizeOf(f)) ? pageValue * sizeOf(f) : 0,
         }),
         adminReviewCounts(),
       ]);
@@ -204,11 +283,11 @@ export default function AdminProducts() {
     }
   };
 
-  // The row already carries its full report -- only the photo changes.
+  // The list only holds a slim row -- read the whole one; only the photo changes.
   const handleCropped = async (dataUrl) => {
-    const row = croppingRow;
     setSavingCrop(true);
     try {
+      const row = await adminGetProductRow(croppingRow.id);
       await adminUpdateProduct(row.id, {
         lookupKey: row.lookup_key,
         source: row.source,
@@ -216,6 +295,7 @@ export default function AdminProducts() {
         ingredientsText: row.ingredients_text,
         report: { ...row.report, imageUrl: dataUrl },
       });
+      thumbCache.delete(row.id);
       setCroppingRow(null);
       await load(filters, page);
     } catch (err) {
@@ -234,8 +314,9 @@ export default function AdminProducts() {
   const allOnPageSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
   const toggleAll = () => setSelected(allOnPageSelected ? new Set() : new Set(rows.map((r) => r.id)));
 
-  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
-  const filtersActive = JSON.stringify({ ...filters, status: 'x', sort: 'x' }) !== JSON.stringify({ ...INITIAL_FILTERS, status: 'x', sort: 'x' });
+  const pageSize = sizeOf(filters);
+  const totalPages = Number.isFinite(pageSize) ? Math.max(1, Math.ceil(count / pageSize)) : 1;
+  const filtersActive = JSON.stringify({ ...filters, status: 'x', sort: 'x', pageSize: 'x' }) !== JSON.stringify({ ...INITIAL_FILTERS, status: 'x', sort: 'x', pageSize: 'x' });
   const select = (key, options) => (
     <select value={filters[key]} onChange={(e) => setFilter(key, e.target.value)} className="admin-field w-full px-3 py-2 rounded-[10px] text-[14px]">
       {options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -322,7 +403,7 @@ export default function AdminProducts() {
           Flagged or data issue
         </label>
         {filtersActive && (
-          <button onClick={() => setFilters({ ...INITIAL_FILTERS, status: filters.status, sort: filters.sort })} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--label-3)' }}>
+          <button onClick={() => setFilters({ ...INITIAL_FILTERS, status: filters.status, sort: filters.sort, pageSize: filters.pageSize })} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--label-3)' }}>
             Clear filters
           </button>
         )}
@@ -368,75 +449,50 @@ export default function AdminProducts() {
               <span>Added</span>
               <span></span>
             </div>
-            {rows.map((row) => {
-              const r = row.report || {};
-              const product = [{ id: row.id, productName: row.product_name }];
-              return (
-                <div key={row.id} className="grid gap-3 px-4 py-2.5 items-center text-[13.5px]" style={{ gridTemplateColumns: GRID, borderBottom: '1px solid var(--separator)', background: selected.has(row.id) ? 'var(--tint-bg)' : undefined }}>
-                  <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggle(row.id)} aria-label={`Select ${row.product_name}`} />
-                  <button
-                    onClick={() => r.imageUrl && setCroppingRow(row)}
-                    title={r.imageUrl ? 'Crop photo' : 'No photo'}
-                    className="tap-scale w-14 h-14 rounded-[8px] overflow-hidden flex items-center justify-center"
-                    style={{ background: 'var(--fill)', cursor: r.imageUrl ? 'pointer' : 'default' }}
-                  >
-                    {r.imageUrl ? <img src={r.imageUrl} alt="" className="w-full h-full object-cover" /> : <span style={{ fontSize: 20 }}>🍽️</span>}
-                  </button>
-                  <div className="min-w-0">
-                    <p className="font-semibold truncate" style={{ color: 'var(--label-1)' }}>{row.product_name || 'Unnamed product'}</p>
-                    <p className="text-[11px] truncate" style={{ color: 'var(--label-3)' }}>
-                      {row.barcode ? <span className="font-mono">{row.barcode} · </span> : 'no barcode · '}
-                      {(r.ingredients || []).length} ingredients{r.nutrientsPer100 ? ' · nutrition' : ' · no nutrition'}
-                    </p>
-                  </div>
-                  <span className="truncate" style={{ color: 'var(--label-2)' }}>{r.brand || '—'}</span>
-                  <ScorePill score={r.overallScore} />
-                  <span className="text-[12.5px]" style={{ color: 'var(--label-2)' }}>{r.foodType || '—'}</span>
-                  <span className="text-[12.5px]" style={{ color: 'var(--label-2)' }}>{row.source}</span>
-                  <StatusPill status={row.review_status} />
-                  <span className="text-[12px]" style={{ color: 'var(--label-3)' }}>
-                    {row.created_at ? new Date(row.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'}
-                  </span>
-                  <div className="flex items-center gap-2.5 justify-end">
-                    <Link to={`/admin/products/${row.id}/edit`} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--tint)' }}>Edit</Link>
-                    {row.review_status !== 'approved' && (
-                      <button disabled={busy} onClick={() => setStatus(product, 'approved')} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--v-good)' }}>Approve</button>
-                    )}
-                    {row.review_status !== 'rejected' && (
-                      <button disabled={busy} onClick={() => window.confirm(`Reject "${row.product_name}"? It'll stay out of the app.`) && setStatus(product, 'rejected')} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--v-poor)' }}>Reject</button>
-                    )}
-                    <details className="relative">
-                      <summary className="tap-scale list-none cursor-pointer text-[15px] px-1" style={{ color: 'var(--label-3)' }} title="More">⋯</summary>
-                      <div className="absolute right-0 top-6 z-10 min-w-[140px] rounded-[10px] py-1 shadow-lg" style={{ background: 'var(--bg-card)', border: '1px solid var(--separator)' }}>
-                        <a href={`#/p/${row.id}`} target="_blank" rel="noreferrer" className="block px-3 py-1.5 text-[13px]" style={{ color: 'var(--label-1)' }}>View in app ↗</a>
-                        <Link to={`/admin/products/${row.id}/history`} className="block px-3 py-1.5 text-[13px]" style={{ color: 'var(--label-1)' }}>History</Link>
-                        {r.imageUrl && <button onClick={() => setCroppingRow(row)} className="block w-full text-left px-3 py-1.5 text-[13px]" style={{ color: 'var(--label-1)' }}>Crop photo</button>}
-                        <button onClick={() => handleDelete(row.id, row.product_name)} className="block w-full text-left px-3 py-1.5 text-[13px]" style={{ color: 'var(--v-poor)' }}>Delete</button>
-                      </div>
-                    </details>
-                  </div>
-                </div>
-              );
-            })}
+            {rows.map((row) => (
+              <ProductRow
+                key={row.id}
+                row={row}
+                isSelected={selected.has(row.id)}
+                onToggle={toggle}
+                busy={busy}
+                onStatus={setStatus}
+                onCrop={setCroppingRow}
+                onDelete={handleDelete}
+              />
+            ))}
           </div>
         </div>
       )}
 
-      {!loading && count > PAGE_SIZE && (
-        <div className="flex items-center justify-between mt-4">
-          <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="tap-scale px-4 py-2 rounded-[10px] text-[13px] font-semibold" style={{ background: 'var(--fill)', color: 'var(--label-1)', opacity: page === 0 ? 0.4 : 1 }}>
-            ← Prev
-          </button>
-          <span className="text-[12px]" style={{ color: 'var(--label-3)' }}>Page {page + 1} of {totalPages}</span>
-          <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="tap-scale px-4 py-2 rounded-[10px] text-[13px] font-semibold" style={{ background: 'var(--fill)', color: 'var(--label-1)', opacity: page >= totalPages - 1 ? 0.4 : 1 }}>
-            Next →
-          </button>
+      {!loading && count > 0 && (
+        <div className="flex items-center justify-between gap-3 flex-wrap mt-4">
+          {count > pageSize ? (
+            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="tap-scale px-4 py-2 rounded-[10px] text-[13px] font-semibold" style={{ background: 'var(--fill)', color: 'var(--label-1)', opacity: page === 0 ? 0.4 : 1 }}>
+              ← Prev
+            </button>
+          ) : <span />}
+          <div className="flex items-center gap-3 flex-wrap justify-center">
+            {count > pageSize && <span className="text-[12px]" style={{ color: 'var(--label-3)' }}>Page {page + 1} of {totalPages}</span>}
+            <label className="flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--label-3)' }}>
+              Show
+              <select value={filters.pageSize} onChange={(e) => setFilter('pageSize', e.target.value === 'all' ? 'all' : Number(e.target.value))} className="admin-field px-2 py-1 rounded-[8px] text-[13px]">
+                {PAGE_SIZES.map((s) => <option key={s} value={s}>{s === 'all' ? `All (${count.toLocaleString()})` : s}</option>)}
+              </select>
+              per page
+            </label>
+          </div>
+          {count > pageSize ? (
+            <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="tap-scale px-4 py-2 rounded-[10px] text-[13px] font-semibold" style={{ background: 'var(--fill)', color: 'var(--label-1)', opacity: page >= totalPages - 1 ? 0.4 : 1 }}>
+              Next →
+            </button>
+          ) : <span />}
         </div>
       )}
 
       {croppingRow && (
         <PhotoCropModal
-          imageUrl={croppingRow.report?.imageUrl}
+          imageUrl={croppingRow.imageUrl}
           onCropped={handleCropped}
           onClose={() => !savingCrop && setCroppingRow(null)}
         />
