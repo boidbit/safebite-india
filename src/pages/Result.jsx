@@ -6,6 +6,8 @@ import { getHistoryById, updateHistoryProductName, refreshHistoryEntry, saveToHi
 import { getCachedReport, getSaferAlternatives, getSimilarProducts, saveReport, getReportIdByLookupKey, CATEGORY_POOL_SIZE } from '../services/productCache';
 import { buildProductShareText, productShareUrl } from '../utils/share';
 import ShareSheet from '../components/ShareSheet';
+import BodyStory from '../components/BodyStory';
+import { sugarStory } from '../components/body/sugarStory';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { renderShareCardImage } from '../utils/shareCard';
 import headerIcon from '../assets/header-icon.png';
@@ -262,6 +264,8 @@ export default function Result() {
   const [shareReportId, setShareReportId] = useState(null);
   const [shareImageBlob, setShareImageBlob] = useState(null);
   const [showShare, setShowShare] = useState(false);
+  // The "what happens in your body" story open, with this product's numbers.
+  const [bodyStory, setBodyStory] = useState(null);
   // "What this adds up to": week/month/year tiles and the rest on a tap.
   const [addsOpen, setAddsOpen] = useState(false);
   // "Refresh analysis" re-runs the AI on the label -- an admin tool, so only
@@ -1309,6 +1313,7 @@ export default function Result() {
                 showDetails={addsOpen}
                 onToggleDetails={() => setAddsOpen((open) => !open)}
                 habitRow={habitRow}
+                onOpenBodyStory={setBodyStory}
               />
             ) : (
               <div className="px-4 py-3.5">{habitRow}</div>
@@ -1594,6 +1599,10 @@ export default function Result() {
           -- the scoring system itself is unchanged, this is purely how
           it's explained. "Fine" ingredients are deliberately absent:
           this popup answers "why isn't it higher", not "what's okay". */}
+      {bodyStory?.key === 'sugar' && (
+        <BodyStory title={t('bsTitleSugar')} scenes={sugarStory(bodyStory)} onClose={() => setBodyStory(null)} t={t} />
+      )}
+
       {showShare && (
         <ShareSheet
           text={shareText}
