@@ -6,7 +6,6 @@ import { getHistoryById, updateHistoryProductName, refreshHistoryEntry, saveToHi
 import { getCachedReport, getSaferAlternatives, getSimilarProducts, saveReport, getReportIdByLookupKey } from '../services/productCache';
 import { buildProductShareText, productShareUrl } from '../utils/share';
 import ShareSheet from '../components/ShareSheet';
-import AtAGlance from '../components/AtAGlance';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { renderShareCardImage } from '../utils/shareCard';
 import headerIcon from '../assets/header-icon.png';
@@ -200,6 +199,28 @@ function SegmentedControl({ value, onChange, options }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// A compact card for "Watch out for" / "Good things" -- sized to sit
+// side by side so both read in one glance instead of two separate
+// full-width scrolls.
+function ListCard({ title, dotColor, items }) {
+  return (
+    <div className="rounded-[14px] p-3.5" style={{ background: 'var(--bg-card)' }}>
+      <p className="flex items-center gap-1.5 text-[14px] font-semibold mb-2.5" style={{ color: 'var(--label-1)' }}>
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dotColor }} />
+        {title}
+      </p>
+      <ul className="space-y-1.5">
+        {items.map((item, i) => (
+          <li key={i} className="text-[13px] leading-snug pl-3 relative" style={{ color: 'var(--label-1)' }}>
+            <span className="absolute left-0 top-[7px] w-1 h-1 rounded-full" style={{ background: 'var(--label-3)' }} />
+            {item}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -702,11 +723,6 @@ export default function Result() {
       document.getElementById('ingredient-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }));
   };
-  // An "At a glance" row: that ingredient's card in the Ingredients tab, flashed.
-  const openIngredient = (ingredient) => {
-    setView('ingredients');
-    setTimeout(() => jumpToIngredient(ingredients.indexOf(ingredient)), 60);
-  };
   const flaggedSentence = (() => {
     const [before, after] = t('someFlagged', { flagged: '\u0001', total: ingredients.length }).split('\u0001');
     return (
@@ -1183,23 +1199,6 @@ export default function Result() {
         </>
       )}
 
-      {/* What's in it: severity bar, the worst ingredients (tap to open),
-          and the good points -- one card (AtAGlance.jsx). The general-food
-          framing is skipped for infant formula. */}
-      {view === 'overview' && !result.isInfantFormula && ingredients.length > 0 && (
-        <>
-          <SectionHeader>{t('sectionAtAGlance')}</SectionHeader>
-          <AtAGlance
-            tiers={tiers}
-            factors={mainFactors}
-            positives={displayPositives}
-            onOpenIngredient={openIngredient}
-            onOpenAll={openFlagged}
-            t={t}
-          />
-        </>
-      )}
-
       {/* Real nutrition-panel numbers (Open Food Facts / Blinkit only,
           never estimated -- see report.realNutrients in analyzeText.js).
           Plain reference values, distinct from "Quick health check"
@@ -1339,6 +1338,66 @@ export default function Result() {
             {relatedNews.map((item) => (
               <NewsCard key={item.id} item={item} />
             ))}
+          </div>
+        </>
+      )}
+
+      {/* Breakdown and "at a glance" close the Overview -- the score card,
+          summary and nutrition come first. */}
+      {/* Breakdown — tapping a tile jumps to the Ingredients tab filtered to that category */}
+      {view === 'overview' && ingredients.length > 0 && (
+        <>
+          <SectionHeader>{t('sectionBreakdown')}</SectionHeader>
+          <div className="mx-4 grid grid-cols-4 gap-2">
+            {tiers.map((tier) => {
+              const active = filter === tier.key;
+              return (
+                <button
+                  key={tier.key}
+                  onClick={() => {
+                    setFilter(tier.key);
+                    setView('ingredients');
+                  }}
+                  className="tap-scale rounded-[14px] py-3 px-1 text-center transition-colors"
+                  style={{
+                    background: active ? tier.color : 'var(--bg-card)',
+                    color: active ? '#fff' : 'var(--label-1)',
+                  }}
+                >
+                  <span
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-bold mx-auto mb-1.5"
+                    style={{ background: active ? 'rgba(255,255,255,0.25)' : tier.bg, color: active ? '#fff' : tier.color }}
+                  >
+                    {tier.icon}
+                  </span>
+                  <span className="block text-[20px] font-bold leading-none tracking-tight" style={{ color: active ? '#fff' : tier.color }}>
+                    {tier.count}
+                  </span>
+                  <span className="block text-[11px] mt-1" style={{ color: active ? '#fff' : 'var(--label-2)' }}>
+                    {tier.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Flags + Positives — side by side when both exist, so "at a
+          glance" actually reads as one glance rather than two scrolls.
+          Skipped for infant formula -- this is "what pulled the general
+          food score up/down" framing, which doesn't apply once that
+          score isn't being shown at all. */}
+      {view === 'overview' && !result.isInfantFormula && (result.flags?.length > 0 || result.positives?.length > 0) && (
+        <>
+          <SectionHeader>{t('sectionAtAGlance')}</SectionHeader>
+          <div className={`grid gap-2.5 mx-4 ${result.flags?.length > 0 && result.positives?.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {result.flags?.length > 0 && (
+              <ListCard title={t('watchOutFor')} dotColor="var(--v-poor)" items={displayFlags} />
+            )}
+            {result.positives?.length > 0 && (
+              <ListCard title={t('goodThings')} dotColor="var(--v-good)" items={displayPositives} />
+            )}
           </div>
         </>
       )}

@@ -516,7 +516,6 @@ export const STRINGS = {
 
     watchOutFor: 'Watch out for',
     goodThings: 'Good things',
-    glanceMore: "{count} more",
 
     filterAll: 'All',
     noneInCategory: 'None in this category.',
@@ -1114,7 +1113,6 @@ export const STRINGS = {
 
     watchOutFor: 'इनसे सावधान रहें',
     goodThings: 'अच्छी बातें',
-    glanceMore: "और {count}",
 
     filterAll: 'सभी',
     noneInCategory: 'इस कैटेगरी में कुछ नहीं है।',
