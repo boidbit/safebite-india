@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STRINGS, interpolate } from '../i18n/strings.js';
-import { buildProductShareText, productShareUrl, whatsappShareUrl, PUBLIC_APP_URL } from './share.js';
+import { buildProductShareText, productShareUrl, whatsappShareUrl, xShareUrl, PUBLIC_APP_URL } from './share.js';
 
 const t = (key, vars) => interpolate(STRINGS.en[key], vars || {});
 
@@ -46,4 +46,8 @@ test('a product never saved to the shared cache shares the app itself instead of
 test('the WhatsApp link encodes the whole message, including line breaks and asterisks', () => {
   const url = whatsappShareUrl('*Bold* line\nnext & more');
   assert.equal(url, 'https://wa.me/?text=*Bold*%20line%0Anext%20%26%20more');
+});
+
+test('the X link drops WhatsApp’s *bold* marks and keeps the line breaks', () => {
+  assert.equal(xShareUrl('*Maggi* scored *48*\nsee more'), 'https://twitter.com/intent/tweet?text=Maggi%20scored%2048%0Asee%20more');
 });

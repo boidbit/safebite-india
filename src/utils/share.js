@@ -18,6 +18,12 @@ export function whatsappShareUrl(text) {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
+// X's compose box, pre-filled. The message's *bold* marks are WhatsApp
+// formatting -- on X they'd show as literal asterisks.
+export function xShareUrl(text) {
+  return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text.replace(/\*/g, ''))}`;
+}
+
 /**
  * The message itself. Takes `t` (the i18n function) so the wording
  * lives in strings.js with the rest of the app's copy. Flags are the

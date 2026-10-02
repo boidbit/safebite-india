@@ -4,7 +4,8 @@ import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { getHistoryById, updateHistoryProductName, refreshHistoryEntry, saveToHistory, getScoreColor, getIngredientSeverity } from '../utils/storage';
 import { getCachedReport, getSaferAlternatives, getSimilarProducts, saveReport, getReportIdByLookupKey } from '../services/productCache';
-import { buildProductShareText, productShareUrl, whatsappShareUrl } from '../utils/share';
+import { buildProductShareText, productShareUrl } from '../utils/share';
+import ShareSheet from '../components/ShareSheet';
 import { renderShareCardImage } from '../utils/shareCard';
 import headerIcon from '../assets/header-icon.png';
 import { analyzeText } from '../services/analyzeText';
@@ -258,6 +259,9 @@ export default function Result() {
   const [flagError, setFlagError] = useState('');
   const [shareReportId, setShareReportId] = useState(null);
   const [shareImageBlob, setShareImageBlob] = useState(null);
+  const [showShare, setShowShare] = useState(false);
+  // "What this adds up to" opens on one line; week/month/year on a tap.
+  const [addsOpen, setAddsOpen] = useState(false);
 
   useEffect(() => {
     const data = getHistoryById(id);
@@ -604,37 +608,9 @@ export default function Result() {
     flags: displayFlags || [],
     link: shareReportId ? productShareUrl(shareReportId) : null,
   }, t);
-  const whatsappHref = whatsappShareUrl(shareText);
-
-  // Fires the OS share sheet with the pre-generated score-card image
-  // (shareImageBlob) when the device supports sharing files -- WhatsApp
-  // is one of the apps offered there, same as any other. Deliberately
-  // synchronous: calling navigator.share() after an await no longer
-  // counts as "in response to a user gesture" on some browsers and gets
-  // silently blocked, which is exactly why the image itself was already
-  // generated ahead of time in the effect above rather than here.
-  // Falls back to downloading the picture plus opening the existing
-  // text-only wa.me link when file sharing isn't available (desktop
-  // browsers mainly) -- two actions from one tap, but still less
-  // friction than making someone choose only one.
-  const handleShareClick = () => {
-    if (shareImageBlob) {
-      const file = new File([shareImageBlob], 'foodguard-score.png', { type: 'image/png' });
-      if (navigator.canShare?.({ files: [file] })) {
-        navigator.share({ files: [file], text: shareText }).catch(() => {});
-        return;
-      }
-      const blobUrl = URL.createObjectURL(shareImageBlob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = 'foodguard-score.png';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-    }
-    window.open(whatsappHref, '_blank', 'noopener,noreferrer');
-  };
+  // The share sheet (ShareSheet.jsx) gets the pre-generated score-card
+  // picture (shareImageBlob, made in the effect above) so its buttons can
+  // hand it on synchronously from the tap.
   const displayStory = result.story && {
     ...result.story,
     ...(hi?.story || {}),
@@ -683,6 +659,58 @@ export default function Result() {
     .map((ing) => ({ ingredient: ing, tier: tiers.find((t) => t.key === severityOf(ing)) }))
     .sort((a, b) => (TIER_RANK[a.tier.key] - TIER_RANK[b.tier.key]) || ((b.ingredient.penalty || 0) - (a.ingredient.penalty || 0)));
 
+  // "11 of 26 raise a flag": the 11 is a link to them, in the colour of the
+  // worst one -- red for harmful, orange for concerning, amber for processed.
+  const worstFlagTier = tiers.find((tier) => tier.key !== 'Fine' && tier.count > 0);
+  const openFlagged = () => {
+    setFilter('all'); // "All" lists worst first, so the flagged ones lead
+    setView('ingredients');
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.getElementById('ingredient-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }));
+  };
+  const flaggedSentence = (() => {
+    const [before, after] = t('someFlagged', { flagged: '\u0001', total: ingredients.length }).split('\u0001');
+    return (
+      <>
+        {before}
+        <button onClick={openFlagged} className="tap-scale font-bold underline underline-offset-2" style={{ color: worstFlagTier?.color || 'var(--label-1)' }}>
+          {flaggedCount}
+        </button>
+        {after}
+      </>
+    );
+  })();
+
+  // "What this adds up to", closed: the most concerning nutrient as one
+  // line ("≈ 4.3 teaspoons of added sugar in one 57g pack"), the rest named
+  // after it. Without a projection, the quick health check's own line.
+  const addsSummary = (() => {
+    if (nutrientProjection) {
+      const { serving, items } = nutrientProjection;
+      const [top, ...rest] = items;
+      return {
+        line: t(`addsOneLine_${top.key}`, {
+          tsp: top.teaspoonsPerServing,
+          kind: t(top.isAddedSugar ? 'sugarKindAdded' : 'sugarKindPlain'),
+          grams: serving.grams,
+          unit: serving.unit,
+          per: t(serving.source === 'pack' ? 'addsPerPack' : 'addsPerServing'),
+        }),
+        also: rest.length ? t('addsAlso', { list: rest.map((i) => `${t(`addsTab${i.key[0].toUpperCase()}${i.key.slice(1)}`)} ${t('addsTabTsp', { tsp: i.teaspoonsPerServing })}`).join(' · ') }) : '',
+      };
+    }
+    if (habitDisplay) {
+      return {
+        line: habitDisplay.isEnergyRelative
+          ? t('habitAmountCaption', { amount: habitDisplay.displayAmount, unit: habitDisplay.unit, nutrient: habitDisplay.nutrientLabel, servingText: habitDisplay.servingText })
+          : t('habitBarCaption', { percent: habitDisplay.percent, nutrient: habitDisplay.nutrientLabel, servingText: habitDisplay.servingText }),
+        also: '',
+      };
+    }
+    return null;
+  })();
+
   return (
     <div className="page-in max-w-[560px] mx-auto pb-24" style={{ background: 'var(--bg-grouped)' }}>
       {burst && <ResultBurst id={id} score={score} handoff={burst.handoff} onDone={() => setBurst(null)} />}
@@ -699,16 +727,15 @@ export default function Result() {
         {t('backToScan')}
       </button>
 
-      {/* Title */}
-      <div className="px-5 pt-1 pb-5">
+      {/* Title -- the pack on the left, what it is on the right, so the
+          photo doesn't sit alone in the middle of an empty row. */}
+      <div className={`px-5 pt-1 pb-5 ${result.imageUrl ? 'flex items-start gap-4' : ''}`}>
         {result.imageUrl && (
-          <div className="flex justify-center mb-4">
-            <div className="rounded-[20px] p-3" style={{ background: 'var(--bg-card)', boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
-              <ProductImage src={result.imageUrl} size={132} />
-            </div>
+          <div className="flex-shrink-0 rounded-[18px] p-2" style={{ background: 'var(--bg-card)', boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+            <ProductImage src={result.imageUrl} size={104} />
           </div>
         )}
-        <div className="min-w-0">
+        <div className={`min-w-0 ${result.imageUrl ? 'flex-1 pt-1' : ''}`}>
           {result.brand && !editingName && (
             <p className="text-[13px] font-semibold mb-0.5" style={{ color: 'var(--label-2)' }}>
               {result.brand.toUpperCase()}
@@ -727,17 +754,17 @@ export default function Result() {
                   if (e.key === 'Escape') setEditingName(false);
                 }}
                 placeholder={t('enterProductName')}
-                className="flex-1 min-w-0 text-[26px] font-bold tracking-tight bg-transparent border-b-2 focus:outline-none"
+                className={`flex-1 min-w-0 ${result.imageUrl ? 'text-[21px]' : 'text-[26px]'} font-bold tracking-tight bg-transparent border-b-2 focus:outline-none`}
                 style={{ color: 'var(--label-1)', borderColor: 'var(--tint)' }}
               />
               <button onClick={saveName} className="text-[17px]" style={{ color: 'var(--tint)' }} aria-label="Save name">{t('done')}</button>
             </div>
           ) : (
-            <h1 className="text-[26px] leading-[1.15] font-bold tracking-tight flex items-start gap-2 mb-2" style={{ color: 'var(--label-1)' }}>
-              <span className="min-w-0">{result.productName || 'Unknown Product'}</span>
+            <h1 className={`${result.imageUrl ? 'text-[21px] leading-[1.2]' : 'text-[26px] leading-[1.15]'} font-bold tracking-tight flex items-start gap-2 mb-2`} style={{ color: 'var(--label-1)' }}>
+              <span className="min-w-0 break-words">{result.productName || 'Unknown Product'}</span>
               <button
                 onClick={startEditingName}
-                className="text-[14px] mt-1.5 flex-shrink-0"
+                className={`text-[14px] flex-shrink-0 ${result.imageUrl ? 'mt-1' : 'mt-1.5'}`}
                 style={{ color: 'var(--tint)' }}
                 aria-label="Edit product name"
               >
@@ -750,16 +777,18 @@ export default function Result() {
             <p className="text-[12.5px] mb-1.5" style={{ color: 'var(--label-3)' }}>{t('nameSuggestedNote')}</p>
           )}
 
+          {/* The pack size, not a "Packaged Food" label every product here
+              would share -- it tells two sizes of one product apart. */}
           {result.productName === 'Unknown Product' && !editingName ? (
             <p className="text-[13px]" style={{ color: 'var(--v-poor)' }}>
               {t('unknownProductHint')}
             </p>
-          ) : (
+          ) : result.packSize?.trim() && (
             <span
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
               style={{ background: 'var(--fill)', color: 'var(--label-2)' }}
             >
-              {t('packagedFood')}
+              📦 {result.packSize.trim()}
             </span>
           )}
         </div>
@@ -851,7 +880,7 @@ export default function Result() {
                 ? t('noIngredientsAnalyzed')
                 : flaggedCount === 0
                   ? t('nothingFlagged', { count: ingredients.length })
-                  : t('someFlagged', { flagged: flaggedCount, total: ingredients.length })}
+                  : flaggedSentence}
             </p>
             {/* Web only -- not in the Android app. */}
             {result.ingredientsText && !isNativeApp() && (
@@ -912,19 +941,18 @@ export default function Result() {
               </Link>
             </div>
 
-            {/* WhatsApp's own green, not the app tint -- people
-                recognise a share icon by its brand colour before they
-                read anything next to it. */}
+            {/* Opens the share sheet: WhatsApp, Instagram, X or the phone's own. */}
             <button
-              onClick={handleShareClick}
-              aria-label={t('shareOnWhatsApp')}
-              title={t('shareOnWhatsApp')}
-              className="tap-scale flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white"
-              style={{ background: '#25D366' }}
+              onClick={() => setShowShare(true)}
+              aria-label={t('shareTitle')}
+              title={t('shareTitle')}
+              className="tap-scale flex-shrink-0 flex items-center gap-1.5 pl-3 pr-3.5 h-9 rounded-full text-[13px] font-semibold text-white"
+              style={{ background: 'var(--tint)' }}
             >
-              <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]" fill="currentColor" aria-hidden="true">
-                <path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.64.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.67-1.62-.92-2.22-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.08 1.76-.72 2.01-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35zM12.05 21.8h-.01a9.8 9.8 0 0 1-5-1.37l-.36-.21-3.72.98 1-3.63-.24-.37a9.77 9.77 0 0 1-1.5-5.21c0-5.41 4.41-9.82 9.83-9.82 2.62 0 5.09 1.02 6.94 2.88a9.76 9.76 0 0 1 2.87 6.95c0 5.41-4.41 9.8-9.81 9.8zm8.36-18.17A11.75 11.75 0 0 0 12.05.2C5.5.2.17 5.53.17 12.08c0 2.09.55 4.14 1.6 5.94L.07 24.2l6.34-1.66a11.85 11.85 0 0 0 5.64 1.44h.01c6.54 0 11.87-5.33 11.87-11.88 0-3.17-1.24-6.16-3.48-8.4z" />
+              <svg viewBox="0 0 24 24" className="w-[17px] h-[17px]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                <path d="M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
               </svg>
+              {t('shareButton')}
             </button>
           </div>
         )}
@@ -943,22 +971,9 @@ export default function Result() {
           doesn't make. */}
       {!result.isInfantFormula && (
       <>
-      {profiles.length === 0 ? (
-        <div className="mx-4 mt-3 rounded-[14px] px-4 py-3.5 flex items-center gap-3" style={{ background: 'var(--bg-card)' }}>
-          <span className="text-[22px] flex-shrink-0">👪</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13.5px] font-bold" style={{ color: 'var(--label-1)' }}>
-              {t('personalMakeItPersonalTitle')}
-            </p>
-            <p className="text-[12.5px]" style={{ color: 'var(--label-2)' }}>
-              {t('personalMakeItPersonalBody')}
-            </p>
-          </div>
-          <Link to="/family" className="tap-scale text-[13px] font-semibold flex-shrink-0" style={{ color: 'var(--tint)' }}>
-            {t('familyCreateProfile')}
-          </Link>
-        </div>
-      ) : (
+      {/* No profiles yet: the "make it personal" prompt waits at the bottom
+          of the page, after the report itself. */}
+      {profiles.length > 0 && (
         <div className="mx-4 mt-3">
           <p className="text-[13px] font-semibold mb-2" style={{ color: 'var(--label-2)' }}>
             {t('familyWhoIsThisFor')}
@@ -1103,14 +1118,6 @@ export default function Result() {
         </div>
       )}
 
-      {result.hasEstimatedQuantities && (
-        <div className="mx-4 mt-3 rounded-[14px] px-4 py-3" style={{ background: 'var(--bg-card)' }}>
-          <p className="text-[13px] leading-relaxed" style={{ color: 'var(--label-2)' }}>
-            {t('estimatedQtyNote')}
-          </p>
-        </div>
-      )}
-
       <SegmentedControl
         value={view}
         onChange={setView}
@@ -1120,40 +1127,6 @@ export default function Result() {
           ...(result.story ? [{ value: 'story', label: t('tabStory') }] : []),
         ]}
       />
-
-      {/* Summary */}
-      {view === 'overview' && displaySummary && (
-        <>
-          <SectionHeader>{t('sectionSummary')}</SectionHeader>
-          <Group>
-            <div className="flex gap-3 items-start px-4 py-3.5">
-              <span
-                className="w-9 h-9 rounded-[10px] flex-shrink-0 flex items-center justify-center text-[16px]"
-                style={{ background: 'var(--tint-bg)' }}
-              >
-                📄
-              </span>
-              <div className="min-w-0 pt-1">
-                <p
-                  className={`text-[15px] leading-relaxed ${!summaryExpanded && displaySummary.length > 100 ? 'line-clamp-2' : ''}`}
-                  style={{ color: 'var(--label-1)' }}
-                >
-                  {displaySummary}
-                </p>
-                {displaySummary.length > 100 && (
-                  <button
-                    onClick={() => setSummaryExpanded((v) => !v)}
-                    className="tap-scale text-[13px] font-semibold mt-1"
-                    style={{ color: 'var(--tint)' }}
-                  >
-                    {summaryExpanded ? t('readLess') : t('readMore')}
-                  </button>
-                )}
-              </div>
-            </div>
-          </Group>
-        </>
-      )}
 
       {/* Breakdown — tapping a tile jumps to the Ingredients tab filtered to that category */}
       {view === 'overview' && ingredients.length > 0 && (
@@ -1258,74 +1231,6 @@ export default function Result() {
         </>
       )}
 
-      {/* Quick health check -- a de-emphasized, lower-down progress bar
-          (moved down from a near-score attention-grabbing teaser on
-          purpose) since the score/verdict above should stay the clear
-          priority on this page. Tapping "See what daily eating adds up
-          to" opens the same full math + short/medium/long-term modal as
-          before -- only the entry point moved, not the content. */}
-      {view === 'overview' && habitDisplay && (
-        <>
-          <SectionHeader>⚡ {t('quickHealthCheck')}</SectionHeader>
-          <Group>
-            <div className="px-4 py-3.5">
-              {habitDisplay.isEnergyRelative ? (
-                // No personalised %: WHO's real limit for this one is a
-                // share of energy intake, not a flat number -- see
-                // ENERGY_RELATIVE_LIMIT_KEYS. Shown as the plain amount
-                // plus WHO's actual guidance instead.
-                <>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[14px] font-semibold capitalize" style={{ color: 'var(--label-1)' }}>
-                      {habitDisplay.nutrientLabel}
-                    </span>
-                    <span className="text-[14px] font-bold" style={{ color: 'var(--label-1)' }}>
-                      {habitDisplay.displayAmount}{habitDisplay.unit}
-                    </span>
-                  </div>
-                  <p className="text-[13px] leading-relaxed" style={{ color: 'var(--label-2)' }}>
-                    {t('habitAmountCaption', { amount: habitDisplay.displayAmount, unit: habitDisplay.unit, nutrient: habitDisplay.nutrientLabel, servingText: habitDisplay.servingText })}
-                  </p>
-                  <p className="text-[12px] leading-relaxed mt-1.5" style={{ color: 'var(--label-3)' }}>
-                    {habitDisplay.whoGuidance}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[14px] font-semibold capitalize" style={{ color: 'var(--label-1)' }}>
-                      {habitDisplay.nutrientLabel}
-                    </span>
-                    <span className="text-[14px] font-bold" style={{ color: habitDisplay.percent >= 50 ? 'var(--v-poor)' : 'var(--v-moderate)' }}>
-                      {habitDisplay.percent}%
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--fill)' }}>
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${Math.min(100, habitDisplay.percent)}%`,
-                        background: habitDisplay.percent >= 50 ? 'var(--v-poor)' : 'var(--v-moderate)',
-                      }}
-                    />
-                  </div>
-                  <p className="text-[13px] leading-relaxed mt-2" style={{ color: 'var(--label-2)' }}>
-                    {t('habitBarCaption', { percent: habitDisplay.percent, nutrient: habitDisplay.nutrientLabel, servingText: habitDisplay.servingText })}
-                  </p>
-                </>
-              )}
-              <button
-                onClick={() => setShowHabitModal(true)}
-                className="tap-scale text-[13px] font-semibold mt-2"
-                style={{ color: 'var(--tint)' }}
-              >
-                {t('habitSeeMore')} →
-              </button>
-            </div>
-          </Group>
-        </>
-      )}
-
       {/* Safer alternatives (low score) or Similar products (everything
           else) -- moved below the point where the user has already seen
           why this product scored what it did (was right under the score
@@ -1339,17 +1244,110 @@ export default function Result() {
           winner/loser comparison between regulated infant-nutrition
           products, exactly the kind of general-food judgment this
           category is deliberately kept out of. */}
-      {/* "What this adds up to" (sugar / salt / fat) -- pure quantity from
-          the label, never a claim about what happens to anyone's body. */}
-      {view === 'overview' && nutrientProjection && (
+      {/* "What this adds up to" -- one line until tapped ("≈ 4.3 teaspoons
+          of added sugar in one 57g pack"); open, the quick health check
+          (its share of a day's limit) and the week/month/year picture.
+          Pure quantity from the label, never a claim about anyone's body. */}
+      {view === 'overview' && addsSummary && (
         <>
           <SectionHeader>🥄 {t('addsUpTitle')}</SectionHeader>
           <Group>
-            <NutrientAddsUp
-              projection={nutrientProjection}
-              t={t}
-              onShowAlternatives={!result.isInfantFormula && rankedAlternatives.length > 0 ? scrollToAlternatives : null}
-            />
+            <button
+              onClick={() => setAddsOpen((open) => !open)}
+              aria-expanded={addsOpen}
+              className="tap-scale w-full flex items-center gap-3 px-4 py-3.5 text-left"
+            >
+              <span className="flex-1 min-w-0">
+                <span className="block text-[15px] font-bold leading-snug" style={{ color: 'var(--label-1)' }}>{addsSummary.line}</span>
+                {addsSummary.also && (
+                  <span className="block text-[12.5px] mt-0.5" style={{ color: 'var(--label-2)' }}>{addsSummary.also}</span>
+                )}
+              </span>
+              <span className="flex-shrink-0 flex items-center gap-1 text-[12.5px] font-semibold" style={{ color: 'var(--tint)' }}>
+                {addsOpen ? t('addsHide') : t('addsShowMore')}
+                <svg viewBox="0 0 12 8" className={`w-3 h-2 transition-transform ${addsOpen ? 'rotate-180' : ''}`} fill="none" aria-hidden="true">
+                  <path d="M1 1.5l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+            </button>
+            {addsOpen && (
+              <div className="page-in" style={{ borderTop: '1px solid var(--separator)' }}>
+                {habitDisplay && (
+                  <div className="px-4 pt-3.5 pb-1">
+                    <p className="text-[12px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--label-3)' }}>⚡ {t('quickHealthCheck')}</p>
+                    {habitDisplay.isEnergyRelative ? (
+                      // No personalised %: WHO's real limit for this one is a
+                      // share of energy intake, not a flat number -- see
+                      // ENERGY_RELATIVE_LIMIT_KEYS.
+                      <>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[14px] font-semibold capitalize" style={{ color: 'var(--label-1)' }}>{habitDisplay.nutrientLabel}</span>
+                          <span className="text-[14px] font-bold" style={{ color: 'var(--label-1)' }}>{habitDisplay.displayAmount}{habitDisplay.unit}</span>
+                        </div>
+                        <p className="text-[12px] leading-relaxed" style={{ color: 'var(--label-3)' }}>{habitDisplay.whoGuidance}</p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[14px] font-semibold capitalize" style={{ color: 'var(--label-1)' }}>{habitDisplay.nutrientLabel}</span>
+                          <span className="text-[14px] font-bold" style={{ color: habitDisplay.percent >= 50 ? 'var(--v-poor)' : 'var(--v-moderate)' }}>{habitDisplay.percent}%</span>
+                        </div>
+                        <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--fill)' }}>
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${Math.min(100, habitDisplay.percent)}%`, background: habitDisplay.percent >= 50 ? 'var(--v-poor)' : 'var(--v-moderate)' }}
+                          />
+                        </div>
+                      </>
+                    )}
+                    <button onClick={() => setShowHabitModal(true)} className="tap-scale text-[13px] font-semibold mt-2" style={{ color: 'var(--tint)' }}>
+                      {t('habitSeeMore')} →
+                    </button>
+                  </div>
+                )}
+                {nutrientProjection && (
+                  <NutrientAddsUp
+                    projection={nutrientProjection}
+                    t={t}
+                    onShowAlternatives={!result.isInfantFormula && rankedAlternatives.length > 0 ? scrollToAlternatives : null}
+                  />
+                )}
+              </div>
+            )}
+          </Group>
+        </>
+      )}
+
+      {/* Summary */}
+      {view === 'overview' && displaySummary && (
+        <>
+          <SectionHeader>{t('sectionSummary')}</SectionHeader>
+          <Group>
+            <div className="flex gap-3 items-start px-4 py-3.5">
+              <span
+                className="w-9 h-9 rounded-[10px] flex-shrink-0 flex items-center justify-center text-[16px]"
+                style={{ background: 'var(--tint-bg)' }}
+              >
+                📄
+              </span>
+              <div className="min-w-0 pt-1">
+                <p
+                  className={`text-[15px] leading-relaxed ${!summaryExpanded && displaySummary.length > 100 ? 'line-clamp-2' : ''}`}
+                  style={{ color: 'var(--label-1)' }}
+                >
+                  {displaySummary}
+                </p>
+                {displaySummary.length > 100 && (
+                  <button
+                    onClick={() => setSummaryExpanded((v) => !v)}
+                    className="tap-scale text-[13px] font-semibold mt-1"
+                    style={{ color: 'var(--tint)' }}
+                  >
+                    {summaryExpanded ? t('readLess') : t('readMore')}
+                  </button>
+                )}
+              </div>
+            </div>
           </Group>
         </>
       )}
@@ -1443,7 +1441,7 @@ export default function Result() {
               per-tier header sections: severity is now shown on every
               row's own pill (see IngredientCard), so these chips only
               need to filter, not also explain the grouping below. */}
-          <div className="flex gap-2 overflow-x-auto px-4 pt-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+          <div id="ingredient-list" className="flex gap-2 overflow-x-auto px-4 pt-4 pb-1" style={{ scrollbarWidth: 'none', scrollMarginTop: 76 }}>
             <button
               onClick={() => setFilter('all')}
               className="tap-scale flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-semibold"
@@ -1519,8 +1517,32 @@ export default function Result() {
       {/* Swipeable cards (StoryCards.jsx) -- same story text, one idea per card. */}
       {view === 'story' && displayStory && <StoryCards story={displayStory} t={t} />}
 
-      {/* Verification + disclaimer */}
+      {/* Make it personal -- after the report, for someone with no family
+          profiles yet (with profiles, the chips sit under the score). */}
+      {!result.isInfantFormula && profiles.length === 0 && (
+        <div className="mx-4 mt-6 rounded-[14px] px-4 py-3.5 flex items-center gap-3" style={{ background: 'var(--bg-card)' }}>
+          <span className="text-[22px] flex-shrink-0">👪</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13.5px] font-bold" style={{ color: 'var(--label-1)' }}>
+              {t('personalMakeItPersonalTitle')}
+            </p>
+            <p className="text-[12.5px]" style={{ color: 'var(--label-2)' }}>
+              {t('personalMakeItPersonalBody')}
+            </p>
+          </div>
+          <Link to="/family" className="tap-scale text-[13px] font-semibold flex-shrink-0" style={{ color: 'var(--tint)' }}>
+            {t('familyCreateProfile')}
+          </Link>
+        </div>
+      )}
+
+      {/* Verification + disclaimer, and the estimated-quantities note with them */}
       <div className="px-5 pt-8 text-center">
+        {result.hasEstimatedQuantities && (
+          <p className="text-[12px] leading-relaxed mb-2" style={{ color: 'var(--label-3)' }}>
+            {t('estimatedQtyNote')}
+          </p>
+        )}
         <p className="text-[12px] leading-relaxed" style={{ color: 'var(--label-3)' }}>
           {t('crossChecked')}
         </p>
@@ -1562,6 +1584,16 @@ export default function Result() {
           -- the scoring system itself is unchanged, this is purely how
           it's explained. "Fine" ingredients are deliberately absent:
           this popup answers "why isn't it higher", not "what's okay". */}
+      {showShare && (
+        <ShareSheet
+          text={shareText}
+          link={shareReportId ? productShareUrl(shareReportId) : null}
+          imageBlob={shareImageBlob}
+          onClose={() => setShowShare(false)}
+          t={t}
+        />
+      )}
+
       {showScoreModal && (() => {
         const toggleRow = (key) => {
           setExpandedBreakdownRows((prev) => {
