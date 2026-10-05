@@ -36,8 +36,12 @@ name: Discover Open Food Facts Products
 # new account or credential.
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'
+  # PAUSED 5 Oct 2026: every Open Food Facts category was already finished, yet
+  # this kept running (each run loops for ~5h40m) and, with Generate Product
+  # Reports, sent thousands of requests a day to Supabase -- the free plan's
+  # egress and log limits were passed. To resume, uncomment these two lines.
+  # schedule:
+  #   - cron: '*/30 * * * *'
   # Adds a "Run workflow" button on the Actions tab for running it on demand.
   workflow_dispatch:
     inputs:
