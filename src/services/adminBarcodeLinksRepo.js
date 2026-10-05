@@ -84,7 +84,38 @@ export async function adminApprovedBarcodeFor(lookupKey) {
  *   brandOf: Map<string, string|null>, imageOf: Map<string, string|null> }>}
  *   verdicts/brandOf keyed "barcode|lookupKey", imageOf by lookupKey
  */
+// The check reads the whole catalog (~9 MB). It's remembered for 5 minutes so
+// the Dashboard, this page and a reload don't each download it again -- and
+// Supabase's free egress limit stays safe. Cleared by adminForgetBarcodeCheck().
+const ASSESS_TTL_MS = 5 * 60 * 1000;
+let assessCache = { at: 0, key: '', value: null };
+let assessInflight = { key: '', promise: null }; // the same check already running -- share it
+const pairsKey = (pairs) => `${pairs.length}:${pairs.map((p) => `${p.barcode}|${p.lookupKey}`).sort().join(',')}`;
+
+export function adminForgetBarcodeCheck() {
+  assessCache = { at: 0, key: '', value: null };
+  assessInflight = { key: '', promise: null };
+}
+
+/** The last barcode check's number of safe pairs, if one ran in the last 5 minutes. */
+export function adminCachedSafeBarcodeCount() {
+  if (!assessCache.value || Date.now() - assessCache.at > ASSESS_TTL_MS) return null;
+  return [...assessCache.value.verdicts.values()].filter((v) => v.safe).length;
+}
+
 export async function adminAssessBarcodeLinks(pairs) {
+  const key = pairsKey(pairs);
+  if (assessCache.value && assessCache.key === key && Date.now() - assessCache.at < ASSESS_TTL_MS) return assessCache.value;
+  if (assessInflight.key === key && assessInflight.promise) return assessInflight.promise;
+  const promise = assessBarcodeLinksUncached(pairs).then((value) => {
+    assessCache = { at: Date.now(), key, value };
+    return value;
+  }).finally(() => { if (assessInflight.promise === promise) assessInflight = { key: '', promise: null }; });
+  assessInflight = { key, promise };
+  return promise;
+}
+
+async function assessBarcodeLinksUncached(pairs) {
   requireSupabase();
   const empty = { verdicts: new Map(), brandOf: new Map(), imageOf: new Map() };
   if (pairs.length === 0) return empty;

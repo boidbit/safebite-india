@@ -13,7 +13,7 @@ import AdminLayout from './AdminLayout';
 import ProductImage from '../../components/ProductImage';
 import {
   adminListBarcodeLinks, adminApproveBarcodeLink, adminRejectBarcodeLink,
-  adminAssessBarcodeLinks, adminApproveBarcodeLinks, adminRejectBarcodeLinks,
+  adminAssessBarcodeLinks, adminApproveBarcodeLinks, adminRejectBarcodeLinks, adminForgetBarcodeCheck,
 } from '../../services/adminBarcodeLinksRepo';
 
 const SAFETY_FILTERS = [
@@ -59,12 +59,16 @@ export default function AdminBarcodeLinks() {
     }
   };
   useEffect(() => { load(status); }, [status]);
+  const refresh = () => { adminForgetBarcodeCheck(); load(status); };
 
   const act = async (fn, pair) => {
     setBusy(true);
     try {
       await fn(pair);
-      await load(status);
+      // Drop the row from the list we already have -- a full reload
+      // re-downloads the whole catalog for the safe check, on every click.
+      // (Approving also rejects the barcode's other waiting products.)
+      setRows((prev) => (prev || []).filter((p) => p.barcode !== pair.barcode || (fn === adminRejectBarcodeLink && p.lookupKey !== pair.lookupKey)));
     } catch (err) {
       window.alert(err.message);
     } finally {
@@ -116,6 +120,7 @@ export default function AdminBarcodeLinks() {
     } finally {
       setProgress(null);
       setBusy(false);
+      adminForgetBarcodeCheck();
       await load(status);
     }
   };
@@ -193,9 +198,14 @@ export default function AdminBarcodeLinks() {
 
   return (
     <AdminLayout>
-      <p className="text-[22px] font-bold tracking-tight" style={{ color: 'var(--label-1)' }}>
-        Barcode matches {rows && <span style={{ color: 'var(--label-3)', fontWeight: 500 }}>({rows.length})</span>}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[22px] font-bold tracking-tight" style={{ color: 'var(--label-1)' }}>
+          Barcode matches {rows && <span style={{ color: 'var(--label-3)', fontWeight: 500 }}>({rows.length})</span>}
+        </p>
+        <button onClick={refresh} disabled={busy} className="tap-scale px-3 py-1.5 rounded-full text-[13px] font-semibold" style={{ background: 'var(--fill)', color: 'var(--label-1)' }}>
+          Refresh
+        </button>
+      </div>
       <p className="text-[12.5px] mb-3" style={{ color: 'var(--label-3)' }}>
         A barcode the catalog didn’t know, tied to one of our products. Approve to make scanning that barcode open the product.
       </p>

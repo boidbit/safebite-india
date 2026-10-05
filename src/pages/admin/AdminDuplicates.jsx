@@ -220,11 +220,11 @@ export default function AdminDuplicates() {
   const [dismissed, setDismissed] = useState(loadDismissed);
   const [doneCount, setDoneCount] = useState(0);
 
-  const load = async () => {
+  const load = async (fresh = false) => {
     setError('');
     setGroups(null);
     try {
-      setGroups(await adminLoadDuplicateGroups());
+      setGroups(await adminLoadDuplicateGroups({ fresh }));
     } catch (err) {
       setError(err.message);
     }
@@ -264,7 +264,12 @@ export default function AdminDuplicates() {
         <p className="text-[22px] font-bold tracking-tight" style={{ color: 'var(--label-1)' }}>
           Duplicates {groups && <span style={{ color: 'var(--label-3)', fontWeight: 500 }}>({list.length} groups)</span>}
         </p>
-        {doneCount > 0 && <span className="text-[12.5px] font-semibold" style={{ color: 'var(--v-good)' }}>✓ {doneCount} group{doneCount === 1 ? '' : 's'} sorted this session</span>}
+        <div className="flex items-center gap-3">
+          {doneCount > 0 && <span className="text-[12.5px] font-semibold" style={{ color: 'var(--v-good)' }}>✓ {doneCount} group{doneCount === 1 ? '' : 's'} sorted this session</span>}
+          <button onClick={() => load(true)} className="tap-scale px-3 py-1.5 rounded-full text-[13px] font-semibold" style={{ background: 'var(--fill)', color: 'var(--label-1)' }}>
+            Refresh
+          </button>
+        </div>
       </div>
       <p className="text-[12.5px] mb-4" style={{ color: 'var(--label-3)' }}>
         Products that look like the same one saved more than once — same brand and flavour, similar name, same pack size (or one not known). ⭐ = suggested copy to keep (most complete data). Only copies whose name says exactly the same thing are ticked for you; “name differs” shows the extra or missing words, which often mean a different product. Checking the whole catalog takes about 15 seconds.

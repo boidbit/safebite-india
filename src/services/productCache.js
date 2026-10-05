@@ -55,6 +55,18 @@ export function textKey(ingredientsText) {
  * productMatch.js), so "Parle-G Gluco Biscuits 250 g" still finds
  * "Parle-G Original Gluco Biscuits". Only published products.
  */
+// A product's whole report is ~12 KB (every ingredient, its breakdown, the
+// story...) but the lists on Home, Category, search and matching show only a
+// few fields. Asking for just those cuts what each list downloads about 10x
+// (Supabase's free egress limit was being used up by this and the admin
+// pages). Rows keep the shape callers already read: row.report.brand etc.
+const LIST_FIELDS = 'brand:report->>brand, packSize:report->>packSize, imageUrl:report->>imageUrl, overallScore:report->overallScore, verdict:report->>verdict, isInfantFormula:report->isInfantFormula';
+const listColumns = (extra = '') => `lookup_key, product_name, ${extra}${LIST_FIELDS}`;
+function slimRow(row) {
+  const { brand, packSize, imageUrl, overallScore, verdict, isInfantFormula, ...rest } = row;
+  return { ...rest, report: { brand, packSize, imageUrl, overallScore, verdict, isInfantFormula } };
+}
+
 export async function findProductMatches({ productName, brand = '', packSize = '' }, { limit = 5 } = {}) {
   if (!isSupabaseConfigured) return [];
   const tokens = searchTokens(`${brand} ${productName}`);
@@ -67,7 +79,7 @@ export async function findProductMatches({ productName, brand = '', packSize = '
   // or PostgREST separators can get through.
   const base = () => supabase
     .from('product_reports')
-    .select('lookup_key, product_name, report')
+    .select(listColumns())
     .in('review_status', VISIBLE_REVIEW_STATUSES);
   // First every distinctive word at once (narrow, usually the right
   // product and its pack sizes); only if that finds too little, any of
@@ -75,7 +87,7 @@ export async function findProductMatches({ productName, brand = '', packSize = '
   let all = base();
   for (const t of tokens) all = all.ilike('product_name', `%${t}%`);
   const { data: strict } = await all.limit(40);
-  let data = strict || [];
+  let data = (strict || []).map(slimRow);
   if (data.length < limit) {
     // One small query per word rather than one big OR -- a common word
     // ("choco") would otherwise fill the whole result and crowd out the
@@ -84,7 +96,7 @@ export async function findProductMatches({ productName, brand = '', packSize = '
     const results = await Promise.all(words.map((t) => base().ilike('product_name', `%${t}%`).limit(25)));
     const seen = new Set(data.map((r) => r.lookup_key));
     for (const { data: rows } of results) {
-      for (const r of rows || []) if (!seen.has(r.lookup_key)) { seen.add(r.lookup_key); data.push(r); }
+      for (const r of rows || []) if (!seen.has(r.lookup_key)) { seen.add(r.lookup_key); data.push(slimRow(r)); }
     }
   }
   const candidates = data.filter((row) => row.product_name).map((row) => ({
@@ -207,7 +219,7 @@ async function exactTextSearch(cleaned, limit) {
   // column, hence the report->>brand path in the OR filter.
   const { data, error } = await supabase
     .from('product_reports')
-    .select('lookup_key, product_name, report')
+    .select(listColumns())
     .in('review_status', VISIBLE_REVIEW_STATUSES)
     .or(`product_name.ilike.${pattern},report->>brand.ilike.${pattern}`)
     .limit(limit);
@@ -215,6 +227,7 @@ async function exactTextSearch(cleaned, limit) {
   if (error || !data) return [];
 
   return data
+    .map(slimRow)
     .filter((row) => row.product_name)
     .map((row) => ({
       lookupKey: row.lookup_key,
@@ -239,7 +252,7 @@ export async function browseCategoryProducts(keywords, { limit = 24 } = {}) {
 
   const { data, error } = await supabase
     .from('product_reports')
-    .select('lookup_key, product_name, report')
+    .select(listColumns())
     .in('review_status', VISIBLE_REVIEW_STATUSES)
     .or(orFilter)
     .limit(limit);
@@ -247,6 +260,7 @@ export async function browseCategoryProducts(keywords, { limit = 24 } = {}) {
   if (error || !data) return [];
 
   return data
+    .map(slimRow)
     .filter((row) => row.product_name)
     .map((row) => ({
       lookupKey: row.lookup_key,
@@ -280,7 +294,7 @@ export async function getPopularSearchTerms(limit = 8) {
 
   const { data, error } = await supabase
     .from('product_reports')
-    .select('product_name, report, scan_count')
+    .select('product_name, scan_count')
     .in('review_status', VISIBLE_REVIEW_STATUSES)
     .order('scan_count', { ascending: false })
     .limit(limit * 6); // over-fetch so de-duping brands + skipping long names still leaves enough
@@ -321,7 +335,7 @@ export async function getRecentlyAddedProducts(limit = 10) {
 
   const { data, error } = await supabase
     .from('product_reports')
-    .select('lookup_key, product_name, report, created_at')
+    .select(listColumns('created_at, '))
     .in('review_status', VISIBLE_REVIEW_STATUSES)
     .order('reviewed_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
@@ -330,6 +344,7 @@ export async function getRecentlyAddedProducts(limit = 10) {
   if (error || !data) return [];
 
   return data
+    .map(slimRow)
     .filter((row) => row.product_name)
     .map((row) => ({
       lookupKey: row.lookup_key,

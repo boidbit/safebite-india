@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom';
 import AdminLayout from './AdminLayout';
 import { adminReviewCounts } from '../../services/adminReviewRepo';
 import { adminInboxCounts, adminBarcodeSummary, adminLastScrapeAt } from '../../services/adminDashboardRepo';
-import { adminListBarcodeLinks, adminAssessBarcodeLinks } from '../../services/adminBarcodeLinksRepo';
+import { adminCachedSafeBarcodeCount } from '../../services/adminBarcodeLinksRepo';
 
 function timeAgo(iso) {
   if (!iso) return 'never';
@@ -63,11 +63,10 @@ export default function AdminDashboard() {
     adminInboxCounts().then(setInbox, fail);
     adminBarcodeSummary().then(setBarcodes, fail);
     adminLastScrapeAt().then(setLastScrape, () => setLastScrape(null));
-    // The safe-to-approve check reads a lot (every link and product), so
-    // it fills in after everything else.
-    adminListBarcodeLinks({ status: 'pending' })
-      .then((list) => adminAssessBarcodeLinks(list))
-      .then(({ verdicts }) => setSafeBarcodes([...verdicts.values()].filter((v) => v.safe).length), () => setSafeBarcodes('—'));
+    // The safe-to-approve check reads the whole catalog (~9 MB), so the
+    // dashboard doesn't run it: it shows the last result if Barcode matches
+    // ran it in the last 5 minutes, otherwise a link to go and run it.
+    setSafeBarcodes(adminCachedSafeBarcodeCount() ?? 'Check');
   }, []);
 
   const backfill = barcodes?.backfill;
@@ -100,7 +99,7 @@ export default function AdminDashboard() {
         </Card>
 
         <Card title="Barcodes">
-          <Line to="/admin/barcode-links" label="Safe to approve" hint="One click: “Approve all safe”" value={safeBarcodes} />
+          <Line to="/admin/barcode-links" label="Safe to approve" hint="Open Barcode matches to count them — then “Approve all safe”" value={safeBarcodes} />
           <Line to="/admin/barcode-links" label="Waiting in Barcode matches" hint="Safe ones + ones that need a look" value={barcodes?.waiting} />
           <Line to="/admin/barcode-backfill" label="Barcode backfill" hint={backfill ? `Last update ${timeAgo(backfill.updated_at)}` : null} value={backfillText} urgent={false} />
         </Card>

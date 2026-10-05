@@ -39,11 +39,33 @@ function ingredientCount(text) {
   return n;
 }
 
+// Reads the whole catalog (~12 MB), so it's remembered for 5 minutes --
+// reopening the page or switching tabs doesn't download it again.
+// adminResolveDuplicates() and adminForgetDuplicates() clear it.
+const GROUPS_TTL_MS = 5 * 60 * 1000;
+let groupsCache = { at: 0, value: null };
+let groupsInflight = null; // a load already running is shared, not repeated
+export function adminForgetDuplicates() {
+  groupsCache = { at: 0, value: null };
+  groupsInflight = null;
+}
+
+export async function adminLoadDuplicateGroups({ fresh = false } = {}) {
+  if (!fresh && groupsCache.value && Date.now() - groupsCache.at < GROUPS_TTL_MS) return groupsCache.value;
+  if (groupsInflight && !fresh) return groupsInflight;
+  const promise = loadDuplicateGroupsUncached().then((value) => {
+    groupsCache = { at: Date.now(), value };
+    return value;
+  }).finally(() => { if (groupsInflight === promise) groupsInflight = null; });
+  groupsInflight = promise;
+  return promise;
+}
+
 /**
  * @returns {Promise<Array<{ key, brand, variant, size, otherSizes, products }>>}
  *   products enriched and sorted with the suggested keeper first
  */
-export async function adminLoadDuplicateGroups() {
+async function loadDuplicateGroupsUncached() {
   requireSupabase();
   const [reports, links, flags, issues] = await Promise.all([
     allRows(() => supabase.from('product_reports').select(
@@ -130,6 +152,7 @@ export async function adminLoadDuplicateGroups() {
 export async function adminResolveDuplicates(keep, hide) {
   requireSupabase();
   if (hide.length === 0) return;
+  adminForgetDuplicates();
   await adminSetReviewStatus(hide.map((p) => ({ id: p.id, productName: p.productName })), 'rejected');
 
   const keepCodes = new Set(keep.barcodes.map((b) => b.barcode));
