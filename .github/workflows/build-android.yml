@@ -37,8 +37,9 @@ jobs:
     env:
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
       # Play Store: each upload needs a higher versionCode than the last one.
-      # The run number only goes up; +10 keeps it above the first manual upload.
-      APP_VERSION_CODE: ${{ github.run_number + 10 }}
+      # The run number only goes up (build.gradle adds an offset). GitHub
+      # expressions can't do arithmetic, so no `+` here.
+      APP_RUN_NUMBER: ${{ github.run_number }}
 
     steps:
       - uses: actions/checkout@v4

@@ -8,10 +8,11 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Play Store needs a higher versionCode for every upload. The GitHub
-        // build passes its run number (APP_VERSION_CODE); a local build uses 1.
-        // First Play Store upload was 1 -- the run number is already above that.
-        versionCode (System.getenv("APP_VERSION_CODE") ?: "1").toInteger()
-        versionName "1.0." + (System.getenv("APP_VERSION_CODE") ?: "0")
+        // build passes its run number (APP_RUN_NUMBER); +10 keeps it above the
+        // first manual upload (versionCode 1). A local build uses 1.
+        def runNumber = System.getenv("APP_RUN_NUMBER")
+        versionCode runNumber ? runNumber.toInteger() + 10 : 1
+        versionName runNumber ? "1.0." + (runNumber.toInteger() + 10) : "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
