@@ -10,5 +10,5 @@ export default defineConfig(({ mode }) => ({
   // Capacitor serves the build from its own local root (capacitor://
   // localhost/), so THAT build (`vite build --mode capacitor`) needs a
   // plain "/" instead, or every asset request 404s inside the app.
-  base: mode === 'capacitor' ? '/' : '/safebite-india/',
+    base: '/',  
 }))
