@@ -6,6 +6,7 @@
 
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { researchIngredients } from './geminiService.js';
+import { isJunkIngredient, neutralizeJunk } from './typoIngredient.js';
 
 /**
  * Fetch every ingredient we already know about, matching on either the
@@ -48,7 +49,8 @@ function matchRow(parsedItem, rows) {
 
 /** Turn a database row into the shape the report UI already expects. */
 function rowToIngredient(row, parsedItem) {
-  return {
+  // Typo / OCR junk already in the table (saved before the junk rule) scores nothing.
+  return neutralizeJunk({
     name: parsedItem.displayName,
     status: row.status,
     fssaiStatus: row.fssai_status,
@@ -67,14 +69,15 @@ function rowToIngredient(row, parsedItem) {
     estimatedPercentage: parsedItem.estimatedPercentage,
     recognized: row.recognized !== false,
     fromCache: true,
-  };
+  });
 }
 
 /** Save newly-researched ingredients so future scans get them for free. */
 async function saveResearched(records) {
   if (!isSupabaseConfigured || records.length === 0) return;
 
-  const rows = records.map((r) => ({
+  // Typos and OCR leftovers are never kept (see typoIngredient.js).
+  const rows = records.filter((r) => !isJunkIngredient(r)).map((r) => ({
     canonical_name: r.canonicalName,
     display_name: r.displayName,
     ins_code: r.insCode || null,
@@ -93,6 +96,8 @@ async function saveResearched(records) {
     evidence_type: r.evidenceType || null,
     recognized: r.recognized !== false,
   }));
+
+  if (rows.length === 0) return;
 
   try {
     await supabase.from('ingredients').upsert(rows, { onConflict: 'canonical_name' });
@@ -157,7 +162,7 @@ export async function resolveIngredients(parsed) {
         researched.find((r) => r.canonicalName === item.lookupKeys[0]) || researched[n];
       if (!record) return;
 
-      resolved[index] = {
+      resolved[index] = neutralizeJunk({
         name: item.displayName,
         status: record.status,
         fssaiStatus: record.fssaiStatus,
@@ -176,7 +181,7 @@ export async function resolveIngredients(parsed) {
         estimatedPercentage: item.estimatedPercentage,
         recognized: record.recognized !== false,
         fromCache: false,
-      };
+      });
       researchedCount++;
     });
 
