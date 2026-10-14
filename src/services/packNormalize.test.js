@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { singleUnitPackSize, singleUnitName, normalizeListing, isMultiPackListing } from './packNormalize.js';
+import { singleUnitPackSize, singleUnitName, normalizeListing, isMultiPackListing, isSampleListing } from './packNormalize.js';
 
 test('N x size keeps one unit', () => {
   assert.deepEqual(singleUnitPackSize('3 x 250 ml'), { packSize: '250 ml', units: 3, clear: true });
@@ -64,4 +64,13 @@ test('bundles of different products are left alone', () => {
   assert.equal(r.changed, false);
   assert.equal(r.bundle, true);
   assert.equal(normalizeListing({ product_name: 'Yu Tomato Soup + Kimchi Noodles Combo', pack_size: null }).bundle, true);
+});
+
+test('sample and trial sachets are spotted', () => {
+  assert.equal(isSampleListing('Pintola Sample'), true);
+  assert.equal(isSampleListing('Pintola High Protein Dark Chocolate Sample'), true);
+  assert.equal(isSampleListing('Dove Trial Pack'), true);
+  assert.equal(isSampleListing('Free Sample Tea Bags'), true);
+  assert.equal(isSampleListing('Pintola Classic Creamy Peanut Butter'), false);
+  assert.equal(isSampleListing('Sampler Box'), false); // a sampler is a bundle (bundleListing.js), not a sample
 });

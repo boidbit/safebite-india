@@ -22,7 +22,7 @@ const slugOf = (name) => (name || '').toLowerCase().replace(/['’`]/g, '').repl
 const urlSlug = (url) => url.split('/prn/')[1]?.split('/prid/')[0] || '';
 const urlId = (url) => url.split('/prid/')[1] || '';
 // Listings the scraper skips anyway (see packNormalize.js / bundleListing.js).
-const SKIPPED = /(^|-)(pack-of-\d+|buy-\d+-get-\d+|combo|gift|hamper|hampers|potli|sampler|variety-pack|assorted)(-|$)|\d+-x-\d/;
+const SKIPPED = /(^|-)(pack-of-\d+|buy-\d+-get-\d+|combo|gift|hamper|hampers|potli|sampler|variety-pack|assorted|samples?|trial-pack|tester)(-|$)|\d+-x-\d/;
 
 async function allRows(table, columns, filter = (q) => q) {
   const rows = [];

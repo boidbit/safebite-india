@@ -14,6 +14,7 @@ import PhotoCropModal from './PhotoCropModal';
 import { adminListReviewQueue, adminReviewCounts, adminSetReviewStatus, adminProductThumb, adminGetProductRow, REVIEW_TABS, DEFAULT_REVIEW_TAB } from '../../services/adminReviewRepo';
 import { adminDeleteProduct, adminUpdateProduct } from '../../services/adminProductsRepo';
 import { getScoreColor } from '../../utils/storage';
+import { parseSize, sizeLabel } from '../../utils/productFamilies';
 import { CATEGORY_KEYWORDS } from '../../data/categoryKeywords';
 import { FOOD_TYPES } from '../../services/foodType';
 
@@ -100,7 +101,7 @@ function Field({ label, children, className = '' }) {
   );
 }
 
-const GRID = '28px 64px 2.4fr 1fr 1fr 0.8fr 0.7fr 1.05fr 70px 200px';
+const GRID = '28px 64px 2.4fr 1fr 0.8fr 1fr 0.8fr 0.7fr 1.05fr 70px 200px';
 
 // A row's photo and ingredient count, fetched once the row scrolls into
 // view -- photos are stored inside the report (often as a data URL), so
@@ -151,6 +152,17 @@ function ProductRow({ row, isSelected, onToggle, busy, onStatus, onCrop, onDelet
         </p>
       </div>
       <span className="truncate" style={{ color: 'var(--label-2)' }}>{r.brand || '—'}</span>
+      {(() => {
+        // The pack size on the report; if it's empty, one written in the name ("Sprite 750ml").
+        const fromReport = parseSize(r.packSize);
+        const size = fromReport || parseSize(row.product_name);
+        return (
+          <span className="text-[12.5px]" title={r.packSize || ''} style={{ color: size ? 'var(--label-1)' : 'var(--label-3)' }}>
+            {size ? sizeLabel(size) : '—'}
+            {size && !fromReport && <span className="block text-[10.5px]" style={{ color: 'var(--label-3)' }}>from name</span>}
+          </span>
+        );
+      })()}
       <ScorePill score={r.overallScore} />
       <span className="text-[12.5px]" style={{ color: 'var(--label-2)' }}>{r.foodType || '—'}</span>
       <span className="text-[12.5px]" style={{ color: 'var(--label-2)' }}>{row.source}</span>
@@ -436,12 +448,13 @@ export default function AdminProducts() {
 
       {rows.length > 0 && (
         <div className="rounded-[14px] overflow-x-auto" style={{ background: 'var(--bg-card)', border: '1px solid var(--separator)' }}>
-          <div className="min-w-[1080px]">
+          <div className="min-w-[1180px]">
             <div className="grid gap-3 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide items-center" style={{ gridTemplateColumns: GRID, color: 'var(--label-3)', borderBottom: '1px solid var(--separator)' }}>
               <input type="checkbox" checked={allOnPageSelected} onChange={toggleAll} aria-label="Select all on this page" />
               <span></span>
               <span>Product</span>
               <span>Brand</span>
+              <span>Pack size</span>
               <span>Score</span>
               <span>Food type</span>
               <span>Source</span>

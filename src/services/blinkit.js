@@ -18,7 +18,7 @@ import { isGeminiAvailable, callGemini } from './geminiService.js';
 import { isBundleListing } from './bundleListing.js';
 import { optimizeAndUploadBlinkitImage } from './blinkitImageOptimizer.js';
 import { isValidGtin, readBarcodesFromPhoto, confirmBarcode } from './barcodeReader.js';
-import { isMultiPackListing } from './packNormalize.js';
+import { isMultiPackListing, isSampleListing } from './packNormalize.js';
 
 const SITEMAP_INDEX = 'https://blinkit.com/sitemap.xml';
 // A real browser UA, not a self-identifying bot string. Manual testing
@@ -428,6 +428,9 @@ export async function scrapeProduct(url, category, { useAI = false, useImageFall
   if (isComboListing(productName)) {
     return { error: 'combo listing (bundles multiple products)', productName };
   }
+
+  // A sample / trial sachet isn't the product people buy.
+  if (isSampleListing(productName)) return { error: 'sample / trial pack', productName };
 
   const attributes = allAttributes(html);
 

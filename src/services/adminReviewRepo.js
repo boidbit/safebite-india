@@ -175,14 +175,14 @@ export async function adminListReviewQueue({
     const { data, error } = await supabase
       .from('product_reports')
       .select('id, lookup_key, source, product_name, review_status, reviewed_at, created_at, updated_at, '
-        + 'brand:report->>brand, overallScore:report->overallScore, foodType:report->>foodType, nutrientsPer100:report->nutrientsPer100')
+        + 'brand:report->>brand, packSize:report->>packSize, overallScore:report->overallScore, foodType:report->>foodType, nutrientsPer100:report->nutrientsPer100')
       .in('id', chunk);
     if (error) throw new Error(error.message);
     for (const r of data || []) byId.set(r.id, r);
   });
-  const rows = ids.map((id) => byId.get(id)).filter(Boolean).map(({ brand, overallScore, foodType, nutrientsPer100, ...r }) => ({
+  const rows = ids.map((id) => byId.get(id)).filter(Boolean).map(({ brand, packSize, overallScore, foodType, nutrientsPer100, ...r }) => ({
     ...r,
-    report: { brand, overallScore, foodType, nutrientsPer100 },
+    report: { brand, packSize, overallScore, foodType, nutrientsPer100 },
   }));
 
   // Each row's barcode: its own key's, or one approved in Barcode matches.

@@ -57,6 +57,14 @@ export function singleUnitName(name) {
 }
 
 /**
+ * A sample / trial / tester sachet ("Pintola Sample 40 g"): a giveaway pack,
+ * not the product people buy -- the scraper skips these.
+ */
+export function isSampleListing(name) {
+  return /\b(samples?|trial\s*packs?|testers?|free\s*sample)\b/i.test(String(name || ''));
+}
+
+/**
  * A listing of several units of one product ("3 x 250 ml", "- Pack of 2",
  * "Buy 1 Get 1 Free", "1 ltr + 200 ml"). The scraper skips these: the
  * single-unit listing is the product.
