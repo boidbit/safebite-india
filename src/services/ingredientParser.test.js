@@ -537,3 +537,12 @@ test('numbers outside the INS range are not read as additive codes', () => {
   const result = parseIngredients('Sugar, Notes (2000 - calories a day is used for general nutrition advice, 4500)');
   assert.ok(!result.some((i) => i.insCode === '2000' || i.insCode === '4500'));
 });
+
+test('a line break in the middle of an ingredient is wrapping, not a separator', () => {
+  const names = (t) => parseLabel(t).ingredients.map((i) => i.displayName);
+  assert.deepEqual(names('Peanuts, Split Chickpea Flour, Black\nGram Flour, Iodised Salt, Red\nChilli Powder'), ['Peanuts', 'Split Chickpea Flour', 'Black Gram Flour', 'Iodised Salt', 'Red Chilli Powder']);
+  assert.deepEqual(names('Colour (Beetroot\nRed, Curcumin), Salt, Sugar').slice(0, 2), ['Beetroot Red', 'Curcumin']);
+  assert.deepEqual(names('Ingredients as served (greatest first):\nTomatoes (55%), Water, Sugar').slice(0, 2), ['Tomatoes', 'Water']);
+  // one-per-line lists (no commas) keep their line breaks as separators
+  assert.deepEqual(names('Water\nSugar\nSalt'), ['Water', 'Sugar', 'Salt']);
+});

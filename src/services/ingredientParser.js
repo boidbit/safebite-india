@@ -382,6 +382,21 @@ function joinsFlavourKinds(before, after) {
 }
 
 /**
+ * Label text from a web page or a photo wraps mid-ingredient: "Black<newline>Gram
+ * Flour", "Colour (Beetroot<newline>Red, Curcumin)". Read as separators those line
+ * breaks cut one ingredient into fragments ("Black", "Red") that the research step
+ * then scores as junk. In a comma-separated label (2+ commas) a line break right
+ * after a word is only wrapping, so it becomes a space. A break after a comma,
+ * colon or full stop stays as it is; a label with no commas is a one-per-line list
+ * and is left alone.
+ */
+export function joinWrappedLines(text) {
+  const s = String(text || '');
+  if ((s.match(/,/g) || []).length < 2) return s;
+  return s.replace(/([^,;:.\n\r|•])[ \t]*\r?\n[ \t]*(?=\S)/g, '$1 ');
+}
+
+/**
  * Split a label into top-level entries, respecting brackets so that
  * "INVERT SUGAR SYRUP (SUGAR, CITRIC ACID)" stays as one entry while
  * "SUGAR, SALT" becomes two.
@@ -390,7 +405,7 @@ function joinsFlavourKinds(before, after) {
  * and a top-level " AND " / "&" (labels routinely end with "X, Y AND Z").
  */
 export function splitTopLevel(rawText) {
-  const text = repairRunOnCategories(rawText);
+  const text = repairRunOnCategories(joinWrappedLines(rawText));
   const parts = [];
   let depth = 0;
   let current = '';
@@ -807,7 +822,9 @@ function stripMarkdownEmphasis(text) {
  */
 export function parseLabel(labelText) {
   if (!labelText || !labelText.trim()) return { ingredients: [], allergens: [] };
-  const withoutBoilerplate = stripBoilerplate(stripMarkdownEmphasis(labelText));
+  // "Ingredients as served (greatest first):" is a heading, not the first ingredient.
+  const withoutHeading = labelText.replace(/^\s*ingredients?\s+as\s+(?:served|prepared|sold|consumed)\s*(?:\([^)]*\))?\s*:\s*/i, '');
+  const withoutBoilerplate = stripBoilerplate(stripMarkdownEmphasis(withoutHeading));
   const { remaining, allergens } = extractAllergens(withoutBoilerplate);
   return { ingredients: parseIngredients(remaining), allergens };
 }
