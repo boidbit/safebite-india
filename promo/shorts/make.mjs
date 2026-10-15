@@ -28,7 +28,19 @@ const args = process.argv.slice(2);
 const outIdx = args.indexOf('--out');
 const OUT = outIdx !== -1 ? path.resolve(args[outIdx + 1]) : path.join(HERE, '..', 'out');
 const query = args.filter((a, i) => outIdx === -1 || (i !== outIdx && i !== outIdx + 1)).join(' ').trim();
-const fail = (msg) => { console.error(`NOT MADE: ${msg}`); process.exit(2); };
+// On GitHub the reason also goes to the top of the run's page (an error
+// annotation and the job summary), which is where the admin panel sends you.
+const fail = (msg) => {
+  console.error(`NOT MADE: ${msg}`);
+  if (process.env.GITHUB_ACTIONS) {
+    console.log(`::error title=Video not made::${msg}`);
+    if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Video not made
+
+${msg}
+`);
+  }
+  process.exit(2);
+};
 if (!query) fail('give a product name or id');
 
 const slugify = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
@@ -62,7 +74,12 @@ if (!r.imageUrl) fail(`"${name}" has no product photo`);
 const all = r.ingredients || [];
 const ings = all.filter((i) => i?.name && !isJunkIngredient(i));
 if (ings.length < 4) fail(`only ${ings.length} readable ingredients`);
-if (ings.length !== all.length) fail(`${all.length - ings.length} unreadable / typo ingredient(s) on the report -- fix them in Manual review first`);
+// Junk that scores nothing (a stray "Allergen Note", an OCR fragment) is just
+// left out of the video. Junk that still carries a penalty would make the score
+// on screen wrong, so that one has to be fixed first.
+const scoredJunk = all.filter((i) => i?.name && isJunkIngredient(i) && ((i.penalty || 0) > 0 || i.status === 'concerning' || i.status === 'harmful'));
+if (scoredJunk.length) fail(`typo / unreadable ingredient(s) that still affect the score: ${scoredJunk.map((i) => `"${i.name}"`).join(', ')} -- fix them in Admin > Manual review first`);
+if (ings.length !== all.length) console.log(`left out of the video (label text, not ingredients): ${all.filter((i) => i?.name && isJunkIngredient(i)).map((i) => i.name).join(', ')}`);
 if (typeof r.overallScore !== 'number') fail('no score');
 const score = r.overallScore;
 const verdict = verdictFor(score);
@@ -70,8 +87,12 @@ const isFlagged = (i) => i.status === 'concerning' || i.status === 'harmful';
 const flaggedAll = ings.filter(isFlagged);
 
 // ---- 3. the label and what to decode (every flagged one, up to 6, then the first fine ones, 9 at most) ----
-const pick = new Set(flaggedAll.slice(0, 6).map((i) => ings.indexOf(i)));
-for (let k = 0; k < ings.length && pick.size < 9; k++) pick.add(k);
+// Section headings the label prints over a group ("NOODLES", "MASALA
+// TASTEMAKER") stay on the label but aren't decoded as if they were ingredients.
+const HEADING = /^(noodles?|masala|tastemaker|masala tastemaker|seasoning|filling|coating|dough|base|cream|wafers?|biscuits?)$/i;
+const decodable = (i) => !HEADING.test(i.name.trim());
+const pick = new Set(flaggedAll.filter(decodable).slice(0, 6).map((i) => ings.indexOf(i)));
+for (let k = 0; k < ings.length && pick.size < 9; k++) if (decodable(ings[k])) pick.add(k);
 const order = [...pick].sort((a, b) => a - b);
 const tokens = order.map((k) => {
   const i = ings[k];
@@ -128,7 +149,17 @@ if (per100.addedSugarG > 0) {
     facts.push({ tone: 'sugar', k: perPack ? `Added sugar, per pack (${pack})` : `Added sugar, per 100 ${unit}`, v: `~${Math.round(grams)} g`, d: `about ${tspText} teaspoon${tsp >= 1.5 ? 's' : ''}`, spoons });
   }
 }
-if (!facts.length) facts.push({ tone: 'neutral', k: 'On the label', v: String(ings.length), d: 'ingredients, each one explained' });
+// The ingredient the product is named after, with its share on the label
+// ("Cheesy" cup noodles -> Cheese 4.8%).
+// "cheesy" and "cheese" both stem to "chees". A printed share has at most one
+// decimal ("4.8"); an estimated one (1.2857...) isn't from the label.
+const stem = (w) => w.replace(/(ies|es|y|s|e)$/, '');
+const nameWords = new Set(name.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3).map(stem));
+const printed = (p) => Math.abs(p * 10 - Math.round(p * 10)) < 1e-6;
+const named = ings.find((i, k) => k > 0 && typeof i.percentage === 'number' && i.percentage < 25 && printed(i.percentage)
+  && i.name.toLowerCase().split(/[^a-z]+/).some((w) => w.length > 3 && nameWords.has(stem(w))));
+if (named && facts.length < 3) facts.unshift({ tone: 'neutral', k: 'In the name, on the label', v: `${round1(named.percentage)}%`, d: named.name });
+if (facts.length < 3) facts.push({ tone: 'neutral', k: 'On the label', v: String(ings.length), d: 'ingredients — each one explained' });
 const sugarFact = facts.find((fc) => fc.spoons);
 
 // ---- 5. timeline ----
@@ -140,7 +171,7 @@ const duration = Math.ceil(verdictEnd + 4.6);
 const spoonStart = labelEnd + 0.15 + (facts.indexOf(sugarFact) * 0.45) + 1.0;
 const shortName = brand && name.toLowerCase().startsWith(brand.toLowerCase()) ? name.slice(brand.length).trim() : name;
 const hookName = shortName.length <= 26 ? shortName : shortName.split(/\s+/).slice(0, 4).join(' ');
-const chips = flaggedAll.slice(0, 4).map((i) => [i.insCode ? `INS ${i.insCode}` : shorten(i.name.replace(/\s*\(.*\)$/, ''), 22), 'c']);
+const chips = flaggedAll.filter(decodable).slice(0, 4).map((i) => [i.insCode ? `INS ${i.insCode}` : shorten(i.name.replace(/\s*\(.*\)$/, ''), 22), 'c']);
 if (facts[0]?.tone === 'good') chips.push([`${facts[0].v} ${facts[0].k === 'Protein' ? 'protein' : main.name.toLowerCase().split(/\s+/).pop()}`, 's']);
 const drink = unit === 'ml';
 const TL = {
@@ -176,7 +207,7 @@ const caption = `${name} — what’s actually inside? 🔍
 
 We read the label${pack ? ` (${pack})` : ''}:
 ${facts.map((fc) => `• ${fc.k}: ${fc.v} — ${fc.d}`).join('\n')}
-${flaggedAll.length ? `🟠 Worth a closer look: ${flaggedAll.slice(0, 5).map((i) => i.name).join(', ')}` : '✅ No ingredient flagged'}
+${flaggedAll.length ? `🟠 Worth a closer look: ${flaggedAll.filter(decodable).slice(0, 5).map((i) => i.name).join(', ')}` : '✅ No ingredient flagged'}
 
 Ingredient score: ${score}/100 · ${verdict}
 

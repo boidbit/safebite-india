@@ -144,6 +144,8 @@
   const ringBg = (v, c) => `conic-gradient(${c} ${v}%, rgba(251,247,238,.16) 0)`;
 
   const P = TL.product;
+  // The score band's colour, as in the app (score ring, number, verdict word).
+  const TIER_COLOR = { Excellent: '#2fbf5f', Good: '#8cc63f', Moderate: '#e0a100', Poor: '#f0821e', 'Very Poor': '#ef5a3c' }[TL.verdict] || '#e0a100';
   $('hookT1').textContent = TL.hook[0];
   $('hookT2').textContent = TL.hook[1];
   $('hookT1').style.fontSize = (TL.hook[0].length > 18 ? 84 : 100) + 'px';
@@ -224,7 +226,7 @@
       $('capW').textContent = cur[2];
     }
     const prog = TL.score * clamp((t - TL.firstToken) / (lastTok - TL.firstToken + 0.6));
-    $('ring').style.background = ringBg(prog, '#e0a100');
+    $('ring').style.background = ringBg(prog, TIER_COLOR);$('ringNum').style.color = TIER_COLOR;
     $('ringNum').textContent = Math.round(prog);
     const decoded = t >= lastTok + 0.6;
     $('meterWord').textContent = decoded ? 'Decoded' : 'Reading the label…';
@@ -253,10 +255,10 @@
     $('burst').style.transform = `translate(-50%, -50%) scale(${b * 260})`;
     $('burst').style.opacity = 1 - clamp((t - v0 - 0.2) / 0.5);
     const sp = ease((t - v0) / 1.3);
-    $('big').style.background = ringBg(TL.score * sp, '#e0a100');
+    $('big').style.background = ringBg(TL.score * sp, TIER_COLOR);$('bigNum').style.color = TIER_COLOR;
     $('big').style.transform = `scale(${0.6 + 0.4 * back((t - v0) / 0.7)})`;
     $('bigNum').textContent = Math.round(TL.score * sp);
-    $('vWord').textContent = TL.verdict;
+    $('vWord').textContent = TL.verdict;$('vWord').style.color = TIER_COLOR;
     $('vWord').style.opacity = ease((t - v0 - 0.9) / 0.4);
     $('vWord').style.transform = `translateY(${(1 - ease((t - v0 - 0.9) / 0.4)) * 40}px)`;
     $('vLine').textContent = TL.flaggedLine;

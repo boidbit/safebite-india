@@ -85,7 +85,7 @@ export default function VideoMakerButton({ productId }) {
       <span className="text-[12px] flex-1 min-w-[200px]" style={{ color: 'var(--label-3)' }}>
         {running && (status?.state === 'in_progress' ? `Making the video on GitHub… ${clock} (takes 3–4 min)` : `Waiting for GitHub to start… ${clock}`)}
         {ok && 'Ready — download “video” from the bottom of the GitHub page (MP4 + caption).'}
-        {done && !ok && 'It didn’t work. The GitHub page says why (often: no photo, or typo ingredients to fix in Manual review).'}
+        {done && !ok && 'It didn’t work. Open “See why” — the reason is in red at the top of the GitHub page.'}
         {!job && !error && 'A 30-second 9:16 short of this product — real label, score, music and a caption. Made on GitHub, nothing stored here.'}
         {error && <span style={{ color: 'var(--v-poor)' }}>{error}</span>}
       </span>
