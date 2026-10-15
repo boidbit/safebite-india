@@ -6,7 +6,8 @@
 // from the run's page, so nothing is stored in Supabase and no table is needed:
 // each request carries a short job id, which the workflow puts in its run name.
 //
-//   POST { action: 'start', productId }  -> { jobId }
+//   POST { action: 'start', productId, kind }  -> { jobId }
+//        kind: 'decoded' (default) | 'swap' (side by side with a better pick)
 //   POST { action: 'status', jobId }     -> { state, conclusion, url }
 //        state: 'queued' | 'in_progress' | 'completed'
 //
@@ -63,11 +64,12 @@ export async function handler(req, env, fetchImpl = fetch) {
   if (input?.action === 'start') {
     const productId = String(input.productId || '');
     if (!/^[0-9a-f-]{36}$/i.test(productId)) return json(400, { error: 'productId must be a product id.' });
+    const kind = input.kind === 'swap' ? 'swap' : 'decoded';
     const jobId = crypto.randomUUID().slice(0, 8);
     const res = await github(env, fetchImpl, `/actions/workflows/${WORKFLOW}/dispatches`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ref: 'main', inputs: { product: productId, job_id: jobId } }),
+      body: JSON.stringify({ ref: 'main', inputs: { product: productId, kind, job_id: jobId } }),
     });
     if (res.status !== 204) {
       const detail = await res.text().catch(() => '');

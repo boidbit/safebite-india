@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- The "Swap it" short template (shorts/make.mjs --swap copies it into
+     shorts/auto-swap-<slug>/ next to timeline.json, a.jpg and b.jpg). Two
+     products from the same shelf, side by side, facts from their own packs.
+     Every frame is drawn from window.render(t) (promo/render.cjs); the
+     soundtrack (shorts/soundtrack.cjs) reads the same timeline.json. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,700;0,9..144,800;1,9..144,700&family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #0f5132; }
+  * { box-sizing: border-box; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: Inter, sans-serif; color: #fbf7ee; background: #0f5132; }
+  #bg { position: absolute; inset: -200px; background: radial-gradient(circle at 80% 15%, rgba(232,163,61,.24), transparent 40%), radial-gradient(circle at 15% 85%, rgba(255,255,255,.08), transparent 38%), radial-gradient(circle at 50% 50%, #12603c, #0b3f27 75%); }
+  .scene { position: absolute; inset: 0; opacity: 0; }
+  .serif { font-family: Fraunces, Georgia, serif; font-weight: 800; letter-spacing: -0.02em; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+  .brand { position: absolute; top: 70px; left: 70px; z-index: 20; display: flex; align-items: center; gap: 18px; font-family: Fraunces, serif; font-weight: 800; font-size: 46px; }
+  .brand img { width: 64px; height: 64px; border-radius: 16px; background: #fff; }
+  .brand small { font-family: 'JetBrains Mono', monospace; font-size: 20px; color: #e8a33d; letter-spacing: .16em; }
+  #fine { position: absolute; left: 70px; right: 70px; bottom: 64px; z-index: 20; text-align: center; font-size: 24px; line-height: 1.4; color: rgba(251,247,238,.62); }
+  .shelf { background: #fff; border: 6px solid #1b1a17; border-radius: 40px; box-shadow: 14px 14px 0 #082d1c; display: grid; place-items: center; overflow: hidden; }
+  .shelf img { max-width: 86%; max-height: 86%; object-fit: contain; }
+
+  /* hook */
+  .hcard { position: absolute; top: 330px; width: 430px; height: 640px; }
+  #hA { left: 70px; } #hB { right: 70px; }
+  #vs { position: absolute; left: 50%; top: 600px; width: 150px; height: 150px; margin-left: -75px; border-radius: 50%; background: #e8a33d; color: #1b1a17; display: grid; place-items: center; font-family: Fraunces, serif; font-weight: 800; font-size: 62px; border: 6px solid #1b1a17; z-index: 3; }
+  #h1 { position: absolute; left: 70px; right: 70px; top: 1130px; text-align: center; font-size: 120px; line-height: 1; }
+  #h2 { position: absolute; left: 70px; right: 70px; top: 1270px; text-align: center; font-size: 104px; font-style: italic; font-weight: 700; color: #e8a33d; }
+
+  /* option cards */
+  .opt { position: absolute; left: 70px; right: 70px; top: 230px; }
+  .opt .tag { font-size: 28px; color: #e8a33d; margin-bottom: 18px; }
+  .opt .row { display: grid; grid-template-columns: 380px 1fr; gap: 34px; align-items: center; }
+  .opt .shelf { height: 500px; }
+  .opt .bn { font-size: 26px; color: #a9cdb7; }
+  .opt .nm { font-size: 58px; line-height: 1.05; margin-top: 8px; }
+  .opt .pk { font-family: 'JetBrains Mono', monospace; font-size: 24px; color: #a9cdb7; margin-top: 12px; }
+  .opt .score { display: flex; align-items: center; gap: 28px; margin-top: 70px; }
+  .ring { width: 230px; height: 230px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+  .ring span { width: 188px; height: 188px; border-radius: 50%; background: #0f5132; display: grid; place-items: center; font-family: Fraunces, serif; font-weight: 800; font-size: 92px; }
+  .opt .verdict { font-family: Fraunces, serif; font-weight: 800; font-size: 76px; }
+  .opt .line { font-size: 36px; font-weight: 600; margin-top: 6px; color: #fbf7ee; }
+  .opt .chips { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 46px; }
+  .chip { border-radius: 999px; padding: 14px 28px; font-size: 36px; font-weight: 700; }
+  .chip.c { background: #fde3c4; color: #8a3b0a; }
+  .chip.s { background: #dcefe3; color: #0f5132; }
+
+  /* compare */
+  #cmpTitle { position: absolute; left: 70px; right: 70px; top: 220px; font-size: 92px; }
+  #table { position: absolute; left: 70px; right: 70px; top: 380px; background: #fffdf8; color: #1b1a17; border: 6px solid #1b1a17; border-radius: 36px; box-shadow: 16px 16px 0 #082d1c; overflow: hidden; }
+  .thead, .trow { display: grid; grid-template-columns: 1.2fr 1fr 1fr; align-items: center; }
+  .thead { background: #1b1a17; color: #fbf7ee; padding: 22px 30px; gap: 20px; }
+  .thead div { display: flex; align-items: center; gap: 14px; font-size: 26px; font-weight: 700; line-height: 1.15; }
+  .thead img { width: 74px; height: 96px; object-fit: contain; background: #fff; border-radius: 12px; padding: 4px; flex-shrink: 0; }
+  .trow { padding: 26px 30px; gap: 20px; border-top: 2px solid #e3dccd; }
+  .trow .k { font-size: 30px; color: #4a463f; font-weight: 600; }
+  .trow .v { font-family: Fraunces, serif; font-weight: 800; font-size: 56px; text-align: center; border-radius: 18px; padding: 10px 0; }
+  .trow .v.win { background: #dcefe3; color: #0f5132; }
+  .trow .v.win::after { content: ' ✓'; font-size: 40px; }
+  #pick { position: absolute; left: 70px; right: 70px; text-align: center; font-size: 46px; font-weight: 700; }
+
+  /* cta */
+  #wipe { position: absolute; left: 0; right: 0; height: 2400px; background: linear-gradient(#e8a33d 0 90px, #0f5132 90px); }
+  #ctaHead { position: absolute; left: 80px; right: 80px; top: 520px; font-size: 132px; line-height: 1.02; }
+  #ctaHead em { color: #e8a33d; }
+  #ctaUrl { position: absolute; left: 80px; right: 80px; top: 1010px; background: #fbf7ee; color: #0f5132; border-radius: 999px; padding: 40px; text-align: center; font-size: 76px; font-weight: 800; }
+  #ctaSub { position: absolute; left: 80px; right: 80px; top: 1200px; text-align: center; font-size: 40px; color: #d6eadd; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div>
+  <div class="brand"><img src="/site/assets/logo.png" alt="" />FoodGuard<small>INDIA</small></div>
+
+  <div class="scene" id="hook">
+    <div class="hcard shelf" id="hA"><img src="a.jpg" alt="" /></div>
+    <div class="hcard shelf" id="hB"><img src="b.jpg" alt="" /></div>
+    <div id="vs">VS</div>
+    <div id="h1" class="serif"></div>
+    <div id="h2" class="serif"></div>
+  </div>
+
+  <div class="scene" id="optA"></div>
+  <div class="scene" id="optB"></div>
+
+  <div class="scene" id="compare">
+    <div id="cmpTitle" class="serif">Side by side</div>
+    <div id="table"></div>
+    <div id="pick"></div>
+  </div>
+
+  <div class="scene" id="cta">
+    <div id="wipe"></div>
+    <div id="ctaHead" class="serif"></div>
+    <div id="ctaUrl">foodguards.space</div>
+    <div id="ctaSub">Every label explained.<br />Find a better pick on your shelf — free.</div>
+  </div>
+
+  <div id="fine">From each pack’s own ingredient list &amp; nutrition panel. FoodGuard ingredient score (FSSAI, EFSA, WHO sources) — general information, not medical advice.</div>
+</div>
+
+<script>
+(async () => {
+  const TL = await (await fetch('timeline.json')).json();
+  const S = TL.scenes;
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+  const easeIO = (x) => { x = clamp(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+  const back = (x) => { x = clamp(x); const c = 1.70158; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+  const ringBg = (v, c) => `conic-gradient(${c} ${v}%, rgba(251,247,238,.16) 0)`;
+  const txt = (el, s) => { el.textContent = s; return el; };
+
+  $('h1').textContent = TL.hook[0];
+  $('h2').textContent = TL.hook[1];
+  $('ctaHead').innerHTML = TL.cta;
+
+  // Option cards.
+  for (const [key, side, label] of [['a', 'optA', 'Option A'], ['b', 'optB', 'Option B']]) {
+    const p = TL[key];
+    $(side).innerHTML = `<div class="opt"><div class="tag mono">${label}</div><div class="row"><div class="shelf"><img src="${key}.jpg" alt="" /></div>
+      <div><div class="bn mono"></div><div class="nm serif"></div><div class="pk"></div></div></div>
+      <div class="score"><div class="ring"><span></span></div><div><div class="verdict"></div><div class="line"></div></div></div>
+      <div class="chips"></div></div>`;
+    const o = $(side);
+    txt(o.querySelector('.bn'), p.brand || '');
+    txt(o.querySelector('.nm'), p.shortName);
+    txt(o.querySelector('.pk'), p.pack || '');
+    txt(o.querySelector('.verdict'), p.verdict).style.color = p.color;
+    txt(o.querySelector('.line'), p.line);
+    o.querySelector('.ring span').style.color = p.color;
+    const chips = o.querySelector('.chips');
+    p.chips.forEach(([c, kind]) => { const el = document.createElement('span'); el.className = `chip ${kind}`; el.textContent = c; chips.appendChild(el); });
+  }
+
+  // Comparison table.
+  $('table').innerHTML = `<div class="thead"><div></div><div><img src="a.jpg" alt="" /><span></span></div><div><img src="b.jpg" alt="" /><span></span></div></div>`;
+  const heads = $('table').querySelectorAll('.thead span');
+  txt(heads[0], TL.a.shortName.length > 26 ? TL.a.shortName.slice(0, 24) + '…' : TL.a.shortName);
+  txt(heads[1], TL.b.shortName.length > 26 ? TL.b.shortName.slice(0, 24) + '…' : TL.b.shortName);
+  for (const row of TL.rows) {
+    const el = document.createElement('div');
+    el.className = 'trow';
+    el.innerHTML = '<div class="k"></div><div class="v"></div><div class="v"></div>';
+    txt(el.querySelector('.k'), row.label);
+    const [va, vb] = el.querySelectorAll('.v');
+    txt(va, row.a); txt(vb, row.b);
+    if (row.better === 'a') va.classList.add('win');
+    if (row.better === 'b') vb.classList.add('win');
+    $('table').appendChild(el);
+  }
+  $('pick').textContent = TL.pickLine;
+
+  window.render = (t) => {
+    $('bg').style.transform = `translate(${Math.sin(t / 4) * 40}px, ${Math.cos(t / 5) * 30}px) scale(${1.05 + Math.sin(t / 6) * 0.03})`;
+
+    // Hook: the two packs slide in from the sides, VS pops, then both fly apart.
+    const [h0, h1] = S.hook;
+    const inA = back((t - 0.1) / 0.8), inB = back((t - 0.35) / 0.8), out = easeIO((t - h1 + 0.45) / 0.6);
+    $('hook').style.opacity = t < h1 + 0.2 ? 1 : 0;
+    $('hA').style.transform = `translateX(${(1 - inA) * -700 - out * 900}px) rotate(${-5 + Math.sin(t * 1.4) * 1}deg)`;
+    $('hB').style.transform = `translateX(${(1 - inB) * 700 + out * 900}px) rotate(${5 - Math.sin(t * 1.4) * 1}deg)`;
+    $('vs').style.transform = `scale(${back((t - 0.9) / 0.5) * (1 - out)})`;
+    $('h1').style.opacity = ease((t - 1.1) / 0.4) * (1 - out);
+    $('h2').style.opacity = ease((t - 1.7) / 0.4) * (1 - out);
+    $('h1').style.transform = `translateY(${(1 - ease((t - 1.1) / 0.4)) * 50}px)`;
+    $('h2').style.transform = `translateY(${(1 - ease((t - 1.7) / 0.4)) * 50}px)`;
+
+    // Options A then B: each slides up, its score fills, its chips pop.
+    for (const [key, side, [s0, s1]] of [['a', 'optA', S.label], ['b', 'optB', S.facts]]) {
+      const o = $(side);
+      const inn = easeIO((t - s0 + 0.2) / 0.6), outp = easeIO((t - s1 + 0.3) / 0.55);
+      o.style.opacity = t < s0 - 0.2 || t > s1 + 0.3 ? 0 : 1;
+      o.style.transform = `translateY(${(1 - inn) * 260}px) translateX(${outp * -1180}px) rotate(${outp * -4}deg)`;
+      const p = TL[key];
+      const sp = ease((t - s0 - 0.5) / 1.2);
+      o.querySelector('.ring').style.background = ringBg(p.score * sp, p.color);
+      o.querySelector('.ring span').textContent = Math.round(p.score * sp);
+      o.querySelector('.verdict').style.opacity = ease((t - s0 - 1.4) / 0.4);
+      o.querySelector('.line').style.opacity = ease((t - s0 - 1.7) / 0.4);
+      [...o.querySelectorAll('.chip')].forEach((el, i) => { const q = back((t - p.chipTimes[i]) / 0.4); el.style.opacity = clamp((t - p.chipTimes[i]) / 0.2); el.style.transform = `scale(${0.6 + 0.4 * q})`; });
+    }
+
+    // Comparison: burst in, rows land one by one.
+    const [c0, c1] = S.verdict;
+    const cin = back((t - c0) / 0.7);
+    $('compare').style.opacity = t < c0 - 0.05 || t > c1 + 0.4 ? 0 : 1;
+    $('table').style.transform = `scale(${0.7 + 0.3 * cin})`;
+    $('cmpTitle').style.opacity = ease((t - c0) / 0.4);
+    [...$('table').querySelectorAll('.trow')].forEach((el, i) => { const q = ease((t - TL.rowTimes[i]) / 0.35); el.style.opacity = q; el.style.transform = `translateX(${(1 - q) * 80}px)`; });
+    $('pick').style.top = `${380 + $('table').offsetHeight + 60}px`;
+    $('pick').style.opacity = ease((t - TL.rowTimes[TL.rowTimes.length - 1] - 0.6) / 0.5);
+
+    // CTA wipe.
+    const [k0] = S.cta;
+    const w = easeIO((t - k0 + 0.3) / 0.7);
+    $('cta').style.opacity = t < k0 - 0.3 ? 0 : 1;
+    $('wipe').style.top = `${1920 - w * 2010}px`;
+    $('ctaHead').style.opacity = ease((t - k0 - 0.2) / 0.5);
+    $('ctaHead').style.transform = `translateY(${(1 - ease((t - k0 - 0.2) / 0.5)) * 70}px)`;
+    $('ctaUrl').style.opacity = ease((t - k0 - 0.7) / 0.4);
+    $('ctaUrl').style.transform = `scale(${0.8 + 0.2 * back((t - k0 - 0.7) / 0.5)})`;
+    $('ctaSub').style.opacity = ease((t - k0 - 1.1) / 0.5);
+  };
+
+  await document.fonts.ready;
+  await Promise.all([...document.images].map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })));
+  window.render(0);
+  window.READY = true;
+})();
+</script>
+</body>
+</html>

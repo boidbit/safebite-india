@@ -15,12 +15,17 @@ on:
       product:
         description: 'Product name or id (an approved product)'
         required: true
+      kind:
+        description: 'decoded = one product, its label decoded; swap = side by side with a higher-scoring product from the same shelf'
+        type: choice
+        options: [decoded, swap]
+        default: decoded
       job_id:
         description: 'Admin panel job id (filled in by the admin panel; leave empty)'
         required: false
         default: ''
 
-run-name: "Video: ${{ inputs.product }}${{ inputs.job_id && format(' [{0}]', inputs.job_id) || '' }}"
+run-name: "Video (${{ inputs.kind || 'decoded' }}): ${{ inputs.product }}${{ inputs.job_id && format(' [{0}]', inputs.job_id) || '' }}"
 
 permissions:
   contents: read
@@ -55,7 +60,10 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           PLAYWRIGHT_PATH: ${{ github.workspace }}/node_modules/playwright
           PRODUCT: ${{ inputs.product }}
-        run: node shorts/make.mjs "$PRODUCT" --out out/video
+          KIND: ${{ inputs.kind }}
+        run: |
+          if [ "$KIND" = "swap" ]; then node shorts/make.mjs "$PRODUCT" --swap --out out/video
+          else node shorts/make.mjs "$PRODUCT" --out out/video; fi
 
       - uses: actions/upload-artifact@v4
         with:

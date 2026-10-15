@@ -134,6 +134,8 @@ for (let bar = 0; bar * BAR < TL.duration; bar++) {
 for (let tb = 0.4; tb < S.hook[1] - 0.3; tb += BEAT) add(tb, 0.4, (t) => env(t, 0.01, 0.12) * Math.sin(TAU * MUSIC.hookHz * t), { gain: 0.25 });
 
 TL.tokens.forEach(([, kind], i) => (kind === 'c' ? bloop : ting)(TL.firstToken + i * TL.tokenStep));
+// Shorts with their own effect times (the swap: chips and table rows).
+(TL.sfx || []).forEach(({ t, kind }) => (kind === 'c' ? bloop : ting)(t));
 for (const tr of TL.transitions) {
   if (tr.kind === 'burst') continue; // the impact covers it
   whoosh(tr.t, tr.kind === 'zoom' ? 0.9 : 0.7, tr.kind === 'wipe' ? 0.45 : 0.55);

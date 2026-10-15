@@ -22,6 +22,7 @@ import sharp from 'sharp';
 import { supabase } from '../../src/services/supabaseClient.js';
 import { isJunkIngredient } from '../../src/services/typoIngredient.js';
 import { verdictFor } from '../../src/services/scoringEngine.js';
+import { planSwap } from './swap-plan.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -29,7 +30,9 @@ const outIdx = args.indexOf('--out');
 const OUT = outIdx !== -1 ? path.resolve(args[outIdx + 1]) : path.join(HERE, '..', 'out');
 // --plan: print the hook, sign-off, music and facts it would use, render nothing.
 const PLAN = args.includes('--plan');
-const query = args.filter((a, i) => a !== '--plan' && (outIdx === -1 || (i !== outIdx && i !== outIdx + 1))).join(' ').trim();
+// --swap: a side-by-side with a higher-scoring product from the same shelf (swap-plan.mjs).
+const SWAP = args.includes('--swap');
+const query = args.filter((a, i) => a !== '--plan' && a !== '--swap' && (outIdx === -1 || (i !== outIdx && i !== outIdx + 1))).join(' ').trim();
 // On GitHub the reason also goes to the top of the run's page (an error
 // annotation and the job summary), which is where the admin panel sends you.
 const fail = (msg) => {
@@ -68,6 +71,46 @@ if (!row) fail(`no approved product matches "${query}"`);
 const r = row.report || {};
 const name = row.product_name;
 const brand = r.brand || '';
+
+// ---- --swap: product A vs a higher-scoring product from the same shelf ----
+if (SWAP) {
+  const pick = (list, salt) => list[[...`${row.id}${salt}`].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % list.length];
+  const plan = await planSwap(supabase, row, pick);
+  if (plan.why) fail(plan.why);
+  const { a, b, TL } = plan;
+  const slug = `auto-swap-${slugify(`${a.brand && !slugify(a.name).startsWith(slugify(a.brand)) ? `${a.brand} ` : ''}${a.name}`)}`;
+  const dir = path.join(HERE, slug);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.copyFileSync(path.join(HERE, '_swap.html'), path.join(dir, 'index.html'));
+  fs.writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(TL, null, 2));
+  for (const [file, p] of [['a.jpg', a], ['b.jpg', b]]) {
+    const photo = Buffer.from(await (await fetch(p.imageUrl)).arrayBuffer());
+    await sharp(photo).flatten({ background: '#ffffff' }).trim({ threshold: 18 }).extend({ top: 24, bottom: 24, left: 24, right: 24, background: '#ffffff' }).jpeg({ quality: 92 }).toFile(path.join(dir, file));
+  }
+  console.log(`${a.name} (${a.score}) vs ${b.name} (${b.score}), ${TL.rows.length} rows, ${TL.duration}s, music ${TL.music}`);
+  if (PLAN) { console.log(JSON.stringify({ a: a.name, b: b.name, rows: TL.rows, cta: TL.cta }, null, 1)); process.exit(0); }
+  execFileSync(process.execPath, [path.join(HERE, 'build-short.cjs'), slug, String(TL.duration)], { cwd: path.join(HERE, '..'), stdio: 'inherit' });
+  const caption = `${a.name} vs ${b.name} — same shelf, two labels 🔍
+
+${TL.rows.map((r) => `• ${r.label}: ${r.a} vs ${r.b}`).join('\n')}
+
+Higher ingredient score: ${b.name} (${b.score}/100 · ${b.verdict}) vs ${a.score}/100 · ${a.verdict}.
+
+Compare any two products 👉 foodguards.space (link in bio)
+
+Based on the ingredient lists and nutrition panels printed on each pack. FoodGuard ingredient score (FSSAI, EFSA, WHO sources) — general information, not medical advice.
+
+#ReadTheLabel #FoodSwap #HealthyChoices #NutritionFacts #IndianFood #EatSmart #FoodGuardIndia
+`;
+  fs.mkdirSync(OUT, { recursive: true });
+  const base = slug.replace(/^auto-/, '');
+  fs.copyFileSync(path.join(HERE, '..', 'out', `${slug}.mp4`), path.join(OUT, `${base}.mp4`));
+  fs.writeFileSync(path.join(OUT, `${base}-caption.txt`), caption);
+  fs.rmSync(path.join(HERE, '..', 'out', `${slug}.mp4`), { force: true });
+  fs.rmSync(path.join(HERE, '..', 'out', `${slug}.wav`), { force: true });
+  console.log(`MADE: ${path.join(OUT, `${base}.mp4`)}\n      ${path.join(OUT, `${base}-caption.txt`)}`);
+  process.exit(0);
+}
 
 // ---- 2. fit for a public video? ----
 if (row.review_status !== 'approved') fail(`"${name}" is ${row.review_status}, not approved`);

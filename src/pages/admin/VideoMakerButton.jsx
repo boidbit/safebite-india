@@ -59,13 +59,15 @@ export default function VideoMakerButton({ productId }) {
     return () => { stop = true; clearInterval(poll); clearInterval(tick); };
   }, [job, done]);
 
-  const start = async () => {
-    setBusy(true);
+  // kind: 'decoded' (this product's label, decoded) or 'swap' (side by side
+  // with a higher-scoring product from the same shelf).
+  const start = async (kind) => {
+    setBusy(kind);
     setError('');
     setStatus(null);
     try {
-      const { jobId } = await callVideoMaker({ action: 'start', productId });
-      const next = { jobId, startedAt: Date.now() };
+      const { jobId } = await callVideoMaker({ action: 'start', productId, kind });
+      const next = { jobId, kind, startedAt: Date.now() };
       try { localStorage.setItem(storageKey(productId), JSON.stringify(next)); } catch { /* private mode */ }
       setJob(next);
     } catch (err) {
@@ -84,9 +86,9 @@ export default function VideoMakerButton({ productId }) {
       <span className="text-[12.5px] font-semibold" style={{ color: 'var(--label-2)' }}>🎬 Short video</span>
       <span className="text-[12px] flex-1 min-w-[200px]" style={{ color: 'var(--label-3)' }}>
         {running && (status?.state === 'in_progress' ? `Making the video on GitHub… ${clock} (takes 3–4 min)` : `Waiting for GitHub to start… ${clock}`)}
-        {ok && 'Ready — download “video” from the bottom of the GitHub page (MP4 + caption).'}
+        {ok && `${job.kind === 'swap' ? 'Swap video' : 'Video'} ready — download “video” from the bottom of the GitHub page (MP4 + caption).`}
         {done && !ok && 'It didn’t work. Open “See why” — the reason is in red at the top of the GitHub page.'}
-        {!job && !error && 'A 30-second 9:16 short of this product — real label, score, music and a caption. Made on GitHub, nothing stored here.'}
+        {!job && !error && 'A 30-second 9:16 short — this product’s label decoded, or a swap: side by side with a higher-scoring product from the same shelf. Made on GitHub, nothing stored here.'}
         {error && <span style={{ color: 'var(--v-poor)' }}>{error}</span>}
       </span>
       <div className="flex items-center gap-2 ml-auto">
@@ -95,11 +97,11 @@ export default function VideoMakerButton({ productId }) {
             {ok ? 'Download ↗' : done ? 'See why ↗' : 'Watch on GitHub ↗'}
           </a>
         )}
-        {(!running || error) && (
-          <button type="button" disabled={busy} onClick={start} className="tap-scale px-3 py-1.5 rounded-[8px] text-[13px] font-semibold" style={{ background: 'var(--fill)', color: 'var(--label-1)', opacity: busy ? 0.5 : 1 }}>
-            {busy ? 'Starting…' : job ? 'Make again' : 'Make video'}
+        {(!running || error) && [['decoded', 'Make video'], ['swap', 'Make swap video']].map(([kind, label]) => (
+          <button key={kind} type="button" disabled={Boolean(busy)} onClick={() => start(kind)} className="tap-scale px-3 py-1.5 rounded-[8px] text-[13px] font-semibold" style={{ background: 'var(--fill)', color: 'var(--label-1)', opacity: busy ? 0.5 : 1 }}>
+            {busy === kind ? 'Starting…' : label}
           </button>
-        )}
+        ))}
       </div>
     </div>
   );
