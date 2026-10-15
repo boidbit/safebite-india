@@ -271,3 +271,21 @@ footer .fine { margin-top: 30px; font-size: 12.5px; color: var(--ink-3); max-wid
 .dir-brand a:hover { text-decoration: underline; }
 .dir-brand a span { color: var(--ink-3); font-size: 12.5px; }
 .dir-brand b { font-family: var(--mono); font-size: 13px; }
+
+/* Report a problem (site/assets/report.js) */
+.report { margin-top: 14px; border: 1.5px solid var(--hair); border-radius: 16px; background: var(--card); }
+.report summary { cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 14.5px; list-style: none; display: flex; justify-content: space-between; }
+.report summary::-webkit-details-marker { display: none; }
+.report summary::after { content: '⚑'; color: var(--tomato); }
+.report[open] { border-color: var(--ink); }
+.report-form { padding: 0 16px 16px; }
+.report-q { margin: 0 0 8px; font-size: 14px; color: var(--ink-2); }
+.report-opt { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 15px; cursor: pointer; border-bottom: 1px solid var(--hair); }
+.report-opt input { accent-color: var(--leaf); width: 17px; height: 17px; }
+.report-form textarea { width: 100%; margin-top: 12px; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--hair); background: var(--paper); color: var(--ink); font: 14.5px/1.5 var(--body); resize: vertical; }
+.report-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.report-actions button { cursor: pointer; }
+.report-actions button:disabled { opacity: .6; }
+.report-status { font-size: 13.5px; color: var(--ink-3); }
+.report-status.err { color: var(--tomato); }
+.report-done { margin: 4px 0 0; font-weight: 600; color: var(--leaf); }

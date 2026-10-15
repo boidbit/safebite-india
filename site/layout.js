@@ -15,7 +15,7 @@ export function soonPill() {
   return `<span class="pill-soon"><span aria-hidden="true">▶</span><span><b>Android app</b>Coming soon to Google Play</span></span>`;
 }
 
-export function layout({ path, title, description, body, ogImage = `${SITE_URL}/assets/app-score.webp` }) {
+export function layout({ path, title, description, body, scripts = [], ogImage = `${SITE_URL}/assets/app-score.webp` }) {
   const url = `${SITE_URL}${path}`;
   const fullTitle = path === '/' ? title : `${title} · FoodGuard India`;
   return `<!doctype html>
@@ -78,6 +78,7 @@ ${body}
     <p class="fine">FoodGuard India rates ingredient lists using public sources (FSSAI, EFSA, WHO). It is general information, not medical or dietary advice. Brand names and product images belong to their owners and are shown only to identify the product. Spotted a mistake? <a style="display:inline" href="mailto:${CONTACT_EMAIL}">Tell us</a>. © ${new Date().getFullYear()} FoodGuard India.</p>
   </div>
 </footer>
+${scripts.map((src) => `<script src="${src}" defer></script>`).join('')}
 </body>
 </html>
 `;

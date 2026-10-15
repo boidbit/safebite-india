@@ -9,6 +9,7 @@ import { APP_URL, CONTACT_EMAIL, esc } from './layout.js';
 import { isJunkIngredient } from '../src/services/typoIngredient.js';
 import { findCategoryForProduct } from '../src/services/productCache.js';
 import { verdictFor } from '../src/services/scoringEngine.js';
+import { FLAG_REASONS } from '../src/services/productFlags.js';
 
 const TIER = {
   Excellent: { color: 'var(--t-excellent)', eat: 'Yes' },
@@ -96,7 +97,20 @@ function nutritionTable(per100, foodType) {
     </div>`;
 }
 
-export function productPage(p, { alternatives = [] } = {}) {
+// The app's "Report an issue", on the page: same reasons, same table
+// (product_flags) -> Admin > Flagged. Sent by /assets/report.js.
+function reportForm(p, nameWithBrand, api) {
+  if (!api?.url || !api?.key) return '';
+  return `<details class="report"><summary>Is something wrong? Report it</summary>
+    <form class="report-form" data-api="${esc(api.url)}" data-key="${esc(api.key)}" data-lookup-key="${esc(p.lookup_key || '')}" data-name="${esc(p.name)}" data-score="${p.score}" data-verdict="${esc(p.verdict)}">
+      <p class="report-q">What looks wrong with ${esc(nameWithBrand)}?</p>
+      ${FLAG_REASONS.map((r) => `<label class="report-opt"><input type="radio" name="reason" value="${r.key}" /> ${esc(r.label)}</label>`).join('')}
+      <textarea maxlength="500" rows="3" placeholder="Anything that helps us fix it (optional)"></textarea>
+      <div class="report-actions"><button type="submit" class="btn btn-primary btn-sm">Send report</button><span class="report-status" role="status"></span></div>
+    </form></details>`;
+}
+
+export function productPage(p, { alternatives = [], api = null } = {}) {
   const tier = TIER[p.verdict] || { color: 'var(--ink-3)', eat: '' };
   const ings = (p.ingredients || [])
     .filter((i) => i?.name && !isJunkIngredient(i))
@@ -113,6 +127,7 @@ export function productPage(p, { alternatives = [] } = {}) {
     title: `${nameWithBrand} — ingredients & score (${p.score}/100)`,
     description,
     ogImage: p.imageUrl || undefined,
+    scripts: api?.url ? ['/assets/report.js'] : [],
     body: `
 <div class="wrap p-wrap">
   <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/products/">Products</a>${p.brand ? ` / <a href="/products/#${esc(slugify(p.brand))}">${esc(p.brand)}</a>` : ''}</nav>
@@ -154,7 +169,8 @@ export function productPage(p, { alternatives = [] } = {}) {
           <div class="meta">${a.brand ? `<div class="brand-n">${esc(a.brand)}</div>` : ''}<div class="name">${esc(a.name)}</div><div class="verdict" style="color:${(TIER[a.verdict] || {}).color}">${esc(a.verdict)}</div></div>
           ${ring(a.score, (TIER[a.verdict] || {}).color || 'var(--ink-3)', 'sm')}</a>`).join('')}</div></section>` : ''}
 
-      <div class="note p-fine"><p>This score rates the ingredient list using <a href="/how-we-score/">our published method</a> and public sources (FSSAI, EFSA, WHO). It is general information, not medical advice, and does not mean the product is unsafe — products sold in India meet FSSAI rules. Recipes change: check the pack in your hand. <a href="mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Correction: ${nameWithBrand}`)}">Is something wrong? Tell us.</a></p></div>
+      <div class="note p-fine"><p>This score rates the ingredient list using <a href="/how-we-score/">our published method</a> and public sources (FSSAI, EFSA, WHO). It is general information, not medical advice, and does not mean the product is unsafe — products sold in India meet FSSAI rules. Recipes change: check the pack in your hand. Brand owner? Write to <a href="mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Correction: ${nameWithBrand}`)}">${CONTACT_EMAIL}</a>.</p></div>
+      ${reportForm(p, nameWithBrand, api)}
     </div>
   </div>
 </div>`,

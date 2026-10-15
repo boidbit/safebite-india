@@ -89,15 +89,23 @@ if (productsArg) {
   const { supabase } = await import('../src/services/supabaseClient.js');
   // The whole catalog, slim (for slugs, alternatives and the directory).
   const catalog = [];
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase.from('product_reports')
-      .select('id, product_name, scan_count, updated_at, brand:report->>brand, packSize:report->>packSize, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict, infant:report->>isInfantFormula')
-      .in('review_status', ['live', 'approved']).order('id').range(from, from + 999);
+  // The public key has a short statement timeout: small pages, and a page
+  // that times out is tried again rather than failing the whole deploy.
+  const PAGE = 500;
+  for (let from = 0; ; from += PAGE) {
+    let data, error;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      ({ data, error } = await supabase.from('product_reports')
+        .select('id, lookup_key, product_name, scan_count, updated_at, brand:report->>brand, packSize:report->>packSize, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict, infant:report->>isInfantFormula')
+        .in('review_status', ['live', 'approved']).order('id').range(from, from + PAGE - 1));
+      if (!error) break;
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
     if (error) throw new Error(`catalog: ${error.message}`);
     // Infant formula gets no public score page -- the app keeps it out of
     // every spotlight too (a specially regulated product, adult limits don't apply).
     catalog.push(...data.filter((r) => r.product_name && typeof r.score === 'number' && r.infant !== 'true').map((r) => ({ ...r, name: r.product_name })));
-    if (data.length < 1000) break;
+    if (data.length < PAGE) break;
   }
   assignSlugs(catalog);
 
@@ -120,7 +128,7 @@ if (productsArg) {
     for (const d of data) detail.set(d.id, d);
   }
   for (const p of chosen) {
-    const page = productPage({ ...p, ...detail.get(p.id) }, { alternatives: alternativesFor(p, catalog) });
+    const page = productPage({ ...p, ...detail.get(p.id) }, { alternatives: alternativesFor(p, catalog), api: { url: process.env.VITE_SUPABASE_URL, key: process.env.VITE_SUPABASE_ANON_KEY } });
     write(page.path, layout(page));
     productUrls.push({ path: page.path, lastmod: String(p.updated_at || '').slice(0, 10) });
   }
