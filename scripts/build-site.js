@@ -26,13 +26,15 @@ async function loadStats() {
     if (!isSupabaseConfigured) return null;
     const visible = ['live', 'approved'];
     const { count } = await supabase.from('product_reports').select('id', { count: 'exact', head: true }).in('review_status', visible);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('product_reports')
       .select('id, product_name, brand:report->>brand, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict')
       .in('review_status', visible)
-      .not('report->>imageUrl', 'is', null)
+      // No JSON filter here: with the public key, filtering on report->>imageUrl
+      // while sorting the whole table hits the statement timeout. Filtered below.
       .order('scan_count', { ascending: false })
       .limit(250);
+    if (error) throw new Error(error.message);
     const rows = (data || []).filter((r) => r.product_name && typeof r.score === 'number' && r.imageUrl);
     // Popular products across the bands -- but not a brand singled out as
     // "Very Poor" on the home page; low scores live on each product's page.
