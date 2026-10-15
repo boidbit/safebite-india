@@ -21,32 +21,45 @@ const OUT = 'dist';
 const PAGES = [home, howWeScore, about, disclaimer];
 
 async function loadStats() {
+  let supabase;
   try {
-    const { supabase, isSupabaseConfigured } = await import('../src/services/supabaseClient.js');
-    if (!isSupabaseConfigured) return null;
-    const visible = ['live', 'approved'];
-    const { count } = await supabase.from('product_reports').select('id', { count: 'exact', head: true }).in('review_status', visible);
+    const client = await import('../src/services/supabaseClient.js');
+    if (!client.isSupabaseConfigured) return null;
+    supabase = client.supabase;
+  } catch { return null; }
+  const visible = ['live', 'approved'];
+  const stats = { total: null, examples: [] };
+
+  // Each part on its own: one failing must not cost the other.
+  try {
+    const { count, error } = await supabase.from('product_reports').select('id', { count: 'exact', head: true }).in('review_status', visible);
+    if (error) throw new Error(error.message);
+    stats.total = count || null;
+  } catch (err) { console.warn(`website: no product count this build (${err.message})`); }
+
+  try {
+    // The public key has a short statement timeout: sorting the whole table
+    // (or filtering inside the report JSON) runs past it. Products scanned
+    // more than once are few -- fetch those, sort here.
     const { data, error } = await supabase
       .from('product_reports')
-      .select('id, product_name, brand:report->>brand, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict')
+      .select('id, product_name, scan_count, brand:report->>brand, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict')
       .in('review_status', visible)
-      // No JSON filter here: with the public key, filtering on report->>imageUrl
-      // while sorting the whole table hits the statement timeout. Filtered below.
-      .order('scan_count', { ascending: false })
-      .limit(250);
+      .gte('scan_count', 2)
+      .limit(400);
     if (error) throw new Error(error.message);
-    const rows = (data || []).filter((r) => r.product_name && typeof r.score === 'number' && r.imageUrl);
+    const rows = (data || [])
+      .filter((r) => r.product_name && typeof r.score === 'number' && r.imageUrl)
+      .sort((a, b) => (b.scan_count || 0) - (a.scan_count || 0));
     // Popular products across the bands -- but not a brand singled out as
     // "Very Poor" on the home page; low scores live on each product's page.
     const pick = (test) => rows.find((r) => test(r.score));
-    const examples = [pick((s) => s >= 85), pick((s) => s >= 65 && s < 85), pick((s) => s >= 45 && s < 65)]
+    stats.examples = [pick((v) => v >= 85), pick((v) => v >= 65 && v < 85), pick((v) => v >= 45 && v < 65)]
       .filter(Boolean)
       .map((r) => ({ id: r.id, name: r.product_name, brand: r.brand, imageUrl: r.imageUrl, score: r.score, verdict: r.verdict }));
-    return { total: count || null, examples };
-  } catch (err) {
-    console.warn(`website: no live numbers this build (${err.message})`);
-    return null;
-  }
+  } catch (err) { console.warn(`website: no example products this build (${err.message})`); }
+
+  return stats;
 }
 
 function write(pagePath, html) {
@@ -77,4 +90,4 @@ Allow: /
 Disallow: /app/
 Sitemap: ${SITE_URL}/sitemap.xml
 `);
-console.log(`website: ${built.join(', ')} + sitemap.xml, robots.txt${stats ? ` (${stats.total} products, ${stats.examples.length} examples)` : ' (no live numbers)'}`);
+console.log(`website: ${built.join(', ')} + sitemap.xml, robots.txt${stats ? ` (${stats.total ?? 'no'} product count, ${stats.examples.length} examples)` : ' (no live numbers)'}`);
