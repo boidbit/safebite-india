@@ -15,6 +15,10 @@
 // carries its own translation alongside its keywords. Callers with a
 // LanguageProvider (Home.jsx/Category.jsx) pick label vs labelHi off
 // the current language.
+// Indian mithai. Browsed under "Chocolates & Sweets", and kept OUT of every
+// other category: "Desi Ghee Motichoor Laddu" names ghee but isn't dairy.
+export const INDIAN_SWEET_KEYWORDS = ['laddu', 'ladoo', 'laddoo', 'motichoor', 'barfi', 'burfi', 'peda', 'pedha', 'halwa', 'soan papdi', 'son papdi', 'kaju katli', 'rasgulla', 'gulab jamun', 'rasmalai', 'jalebi', 'mysore pak'];
+
 export const CATEGORY_KEYWORDS = [
   { id: 'biscuits', label: 'Biscuits & Cookies', labelHi: 'बिस्कुट और कुकीज़', keywords: ['biscuit', 'cookie', 'cracker', 'rusk'] },
   // 'instant' on its own used to be a keyword here too, but it's generic
@@ -24,7 +28,7 @@ export const CATEGORY_KEYWORDS = [
   { id: 'noodles', label: 'Instant Noodles', labelHi: 'इंस्टेंट नूडल्स', keywords: ['noodle', 'maggi', 'pasta', 'vermicelli', 'macaroni', 'soup'] },
   { id: 'beverages', label: 'Beverages', labelHi: 'ड्रिंक्स', keywords: ['juice', 'drink', 'squash', 'tea', 'coffee'] },
   { id: 'snacks', label: 'Snacks & Namkeen', labelHi: 'स्नैक्स और नमकीन', keywords: ['chips', 'namkeen', 'bhujia', 'sev', 'mixture', 'popcorn', 'wafer'] },
-  { id: 'chocolates', label: 'Chocolates & Sweets', labelHi: 'चॉकलेट और मीठा', keywords: ['chocolate', 'candy', 'toffee', 'eclair', 'chikki'] },
+  { id: 'chocolates', label: 'Chocolates & Sweets', labelHi: 'चॉकलेट और मीठा', keywords: ['chocolate', 'candy', 'toffee', 'eclair', 'chikki', ...INDIAN_SWEET_KEYWORDS] },
   { id: 'spices', label: 'Spices & Masala', labelHi: 'मसाले', keywords: ['masala', 'spice', 'haldi', 'mirchi', 'garam'] },
   { id: 'dairy', label: 'Dairy & Frozen', labelHi: 'डेयरी और फ़्रोज़न', keywords: ['milk', 'cheese', 'paneer', 'curd', 'dahi', 'ice cream', 'kulfi', 'ghee', 'butter'] },
   { id: 'essentials', label: 'Cooking Essentials', labelHi: 'रोज़मर्रा की ज़रूरतें', keywords: ['oil', 'atta', 'flour', 'rice', 'sauce', 'ketchup'] },

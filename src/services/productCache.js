@@ -7,7 +7,7 @@ import { recordJunkIssue } from './junkIssues.js';
 // The keyword-only data, not categories.js -- that file also imports
 // each category's .png, which plain-Node scripts importing this module
 // (generate-reports.js, discover-off-products.js) can't load outside Vite.
-import { CATEGORY_KEYWORDS } from '../data/categoryKeywords.js';
+import { CATEGORY_KEYWORDS, INDIAN_SWEET_KEYWORDS } from '../data/categoryKeywords.js';
 
 // "Alternative"/"similar" only means something if the two products are
 // actually substitutable -- the browse page's own 'essentials' bucket
@@ -24,7 +24,7 @@ import { CATEGORY_KEYWORDS } from '../data/categoryKeywords.js';
 // in dairy (ghee) and be offered ghee and butter as alternatives. The browse
 // page has no sweets bucket, so this group exists only here.
 const ALTERNATIVES_CATEGORY_KEYWORDS = [
-  { id: 'indian-sweets', keywords: ['laddu', 'ladoo', 'laddoo', 'motichoor', 'barfi', 'burfi', 'peda', 'pedha', 'halwa', 'soan papdi', 'son papdi', 'kaju katli', 'rasgulla', 'gulab jamun', 'rasmalai', 'jalebi', 'mysore pak'] },
+  { id: 'indian-sweets', keywords: INDIAN_SWEET_KEYWORDS },
   ...CATEGORY_KEYWORDS.filter((c) => c.id !== 'essentials'),
   { id: 'oil', keywords: ['oil'] },
   { id: 'atta-flour', keywords: ['atta', 'flour', 'maida', 'besan', 'sooji', 'rava'] },
@@ -265,13 +265,23 @@ export async function browseCategoryProducts(keywords, { limit = 24 } = {}) {
     .select(listColumns())
     .in('review_status', VISIBLE_REVIEW_STATUSES)
     .or(orFilter)
-    .limit(limit);
+    // Fetched with room to spare: the substring ilike above lets through
+    // names that only CONTAIN a keyword ("Haldiram's" for haldi, "Khatta"
+    // for atta), and those are dropped below.
+    .limit(limit * 3);
 
   if (error || !data) return [];
 
   return data
     .map(slimRow)
-    .filter((row) => row.product_name)
+    .filter((row) => {
+      const name = (row.product_name || '').toLowerCase();
+      if (!name || !keywords.some((k) => hasKeyword(name, k))) return false;
+      // A laddu is browsed with the sweets, not wherever "ghee" puts it.
+      const browsingSweets = keywords.some((k) => INDIAN_SWEET_KEYWORDS.includes(k));
+      return browsingSweets || !INDIAN_SWEET_KEYWORDS.some((k) => hasKeyword(name, k));
+    })
+    .slice(0, limit)
     .map((row) => ({
       lookupKey: row.lookup_key,
       productName: row.product_name,

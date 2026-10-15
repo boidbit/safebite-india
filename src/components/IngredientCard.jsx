@@ -89,7 +89,7 @@ export default function IngredientCard({ ingredient, severityLabel, style, id })
           className="w-9 h-9 rounded-[10px] flex-shrink-0 flex items-center justify-center text-[17px]"
           style={{ background: iconColor.bg }}
         >
-          {categoryIcon(ingredient.category)}
+          {categoryIcon(ingredient.category, ingredient.name)}
         </span>
 
         <span className="flex-1 min-w-0">

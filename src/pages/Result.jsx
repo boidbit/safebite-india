@@ -1683,7 +1683,7 @@ export default function Result() {
                             className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[14px]"
                             style={{ background: tier.bg }}
                           >
-                            {categoryIcon(ing.category)}
+                            {categoryIcon(ing.category, ing.name)}
                           </span>
                           <span className="flex-1 min-w-0">
                             <span className="block text-[13.5px] font-semibold truncate" style={{ color: 'var(--label-1)' }}>

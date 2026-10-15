@@ -8,7 +8,7 @@
 // misleading than a neutral placeholder.
 const CATEGORY_ICONS = {
   natural: '🌿',
-  protein: '🥩',
+  protein: '🫘', // see proteinIcon -- most protein on Indian labels is veg
   spice: '🌶️',
   'flavour enhancer': '👅',
   flavour: '👃',
@@ -19,15 +19,32 @@ const CATEGORY_ICONS = {
   fat: '🧈',
   preservative: '🧪',
   antioxidant: '🛡️',
-  emulsifier: '🧴',
+  emulsifier: '🥣', // blends oil and water -- was a lotion bottle, which read as a cosmetic
   color: '🎨',
   colorant: '🎨',
   'raising agent': '🫧',
-  stabilizer: '🧷',
+  stabilizer: '🫙',
 };
 
-export function categoryIcon(category) {
-  return CATEGORY_ICONS[(category || '').toLowerCase()] || '🔹';
+// "Protein" covers peanuts, dal and soy as much as chicken -- a steak next to
+// Roasted Peanuts alarms a vegetarian. The ingredient's own name picks the icon;
+// a meat icon only for something that names meat.
+const PROTEIN_ICONS = [
+  [/\b(eggs?|egg (white|yolk|powder))\b/, '🥚'],
+  [/\b(fish|prawns?|shrimps?|tuna|salmon|anchov\w*|seafood)\b/, '🐟'],
+  [/\b(chicken|mutton|meat|beef|pork|lamb|bacon|ham|sausages?|gelatine?)\b/, '🍗'],
+  [/\b(milk|whey|casein\w*|paneer|cheese|curd|yogh?urt)\b/, '🥛'],
+  [/(peanut|groundnut|almond|cashew|walnut|pistachio|pista|hazelnut|\bnuts?\b|\bseeds?\b)/, '🥜'],
+];
+
+export function categoryIcon(category, name = '') {
+  const key = (category || '').toLowerCase();
+  if (key === 'protein') {
+    const n = String(name || '').toLowerCase();
+    const hit = PROTEIN_ICONS.find(([re]) => re.test(n));
+    if (hit) return hit[1];
+  }
+  return CATEGORY_ICONS[key] || '🔹';
 }
 
 // A tinted background for the icon's own little square -- purely a
