@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- Short #1, "Label decoded in 30 seconds" (1080x1920, ~24 s). Every frame
+     is drawn from one time value: window.render(t) -- see promo/render.cjs.
+     The label is an EXAMPLE (a typical masala-noodles list, no brand), like
+     the decoder on foodguards.space. English captions, no voice; music is
+     added in Instagram/YouTube's own editor. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,700;0,9..144,800;1,9..144,700&family=Inter:wght@500;600;700&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #0f5132; }
+  * { box-sizing: border-box; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: Inter, sans-serif; color: #fbf7ee;
+    background: radial-gradient(circle at 85% 12%, rgba(232,163,61,.22), transparent 42%), radial-gradient(circle at 8% 92%, rgba(255,255,255,.07), transparent 40%), #0f5132; }
+  .scene { position: absolute; inset: 0; opacity: 0; }
+  .serif { font-family: Fraunces, Georgia, serif; font-weight: 800; letter-spacing: -0.02em; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+  .brand { position: absolute; top: 70px; left: 70px; display: flex; align-items: center; gap: 18px; font-family: Fraunces, serif; font-weight: 800; font-size: 46px; }
+  .brand img { width: 64px; height: 64px; border-radius: 16px; background: #fff; }
+  .brand small { font-family: 'JetBrains Mono', monospace; font-size: 20px; color: #e8a33d; letter-spacing: .16em; }
+
+  /* hook */
+  #hook .l1 { position: absolute; left: 80px; right: 80px; top: 640px; font-size: 150px; line-height: 1; }
+  #hook .l2 { position: absolute; left: 80px; right: 80px; top: 860px; font-size: 110px; line-height: 1.05; color: #e8a33d; font-style: italic; font-weight: 700; }
+
+  /* label */
+  #label .card { position: absolute; left: 70px; right: 70px; top: 300px; background: #fffdf8; color: #1b1a17; border: 6px solid #1b1a17; border-radius: 40px; box-shadow: 18px 18px 0 #082d1c; overflow: hidden; }
+  #label .bar { background: #1b1a17; color: #a8a297; padding: 22px 34px; font-size: 26px; display: flex; gap: 18px; align-items: center; }
+  #label .bar .live { color: #e8a33d; }
+  #label .bar .dot { width: 16px; height: 16px; border-radius: 50%; background: #e8a33d; display: inline-block; margin-right: 10px; }
+  #label .body { padding: 40px 44px 46px; }
+  #label .title { font-size: 58px; margin-bottom: 18px; }
+  #label .text { font-size: 47px; line-height: 1.62; color: #4a463f; }
+  .tok { border-radius: 8px; padding: 2px 5px; }
+  .tok.s.on { background: #dcefe3; color: #0f5132; }
+  .tok.c.on { background: #fde3c4; color: #8a3b0a; }
+  .tok.now { box-shadow: 0 0 0 5px #1b1a17; }
+  #ringBox { position: absolute; right: 90px; top: 1150px; width: 230px; height: 230px; }
+  .ring { width: 230px; height: 230px; border-radius: 50%; display: grid; place-items: center; }
+  .ring span { width: 190px; height: 190px; border-radius: 50%; background: #0f5132; display: grid; place-items: center; font-family: Fraunces, serif; font-weight: 800; font-size: 84px; color: #e8a33d; }
+  #ringLabel { position: absolute; left: 90px; top: 1190px; width: 640px; font-size: 40px; font-weight: 600; color: #d6eadd; }
+  #ringLabel b { display: block; font-family: Fraunces, serif; font-size: 64px; color: #fbf7ee; margin-top: 6px; }
+  #cap { position: absolute; left: 70px; right: 70px; top: 1450px; min-height: 250px; border-radius: 34px; padding: 34px 40px; background: #fbf7ee; color: #1b1a17; border-left: 18px solid #1e8e3e; }
+  #cap.c { border-left-color: #e8710a; }
+  #cap .n { font-size: 52px; font-weight: 700; }
+  #cap .w { font-size: 40px; color: #4a463f; margin-top: 10px; }
+  #cap .tag { font-size: 24px; margin-bottom: 10px; }
+
+  /* verdict */
+  #verdict .big { position: absolute; left: 50%; top: 380px; width: 520px; height: 520px; margin-left: -260px; border-radius: 50%; display: grid; place-items: center; }
+  #verdict .big span { width: 430px; height: 430px; border-radius: 50%; background: #0f5132; display: grid; place-items: center; font-family: Fraunces, serif; font-weight: 800; font-size: 210px; color: #e8a33d; }
+  #verdict .v { position: absolute; left: 0; right: 0; top: 960px; text-align: center; font-size: 120px; color: #e8a33d; }
+  #verdict .sub { position: absolute; left: 90px; right: 90px; top: 1120px; text-align: center; font-size: 50px; font-weight: 600; color: #fbf7ee; line-height: 1.3; }
+  #verdict .list { position: absolute; left: 90px; right: 90px; top: 1330px; display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; }
+  #verdict .list span { background: #fde3c4; color: #8a3b0a; border-radius: 999px; padding: 14px 28px; font-size: 36px; font-weight: 700; }
+
+  /* cta */
+  #cta .head { position: absolute; left: 80px; right: 80px; top: 600px; font-size: 128px; line-height: 1.02; }
+  #cta .head em { color: #e8a33d; }
+  #cta .url { position: absolute; left: 80px; right: 80px; top: 1080px; background: #fbf7ee; color: #0f5132; border-radius: 999px; padding: 40px; text-align: center; font-size: 74px; font-weight: 700; }
+  #cta .free { position: absolute; left: 80px; right: 80px; top: 1260px; text-align: center; font-size: 42px; color: #d6eadd; }
+  #fine { position: absolute; left: 70px; right: 70px; bottom: 70px; text-align: center; font-size: 26px; color: rgba(251,247,238,.6); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="brand"><img src="/site/assets/logo.png" alt="" />FoodGuard<small>INDIA</small></div>
+
+  <div class="scene" id="hook">
+    <div class="l1 serif" id="h1">You eat this.</div>
+    <div class="l2 serif" id="h2">Can you read<br />the label?</div>
+  </div>
+
+  <div class="scene" id="label">
+    <div class="card">
+      <div class="bar"><span class="live mono"><i class="dot"></i><span id="liveTxt">Decoding</span></span><span>Example label · masala instant noodles</span></div>
+      <div class="body"><div class="title serif">INGREDIENTS:</div><div class="text" id="text"></div></div>
+    </div>
+    <div id="ringLabel"><span class="mono" style="font-size:24px;color:#e8a33d">Ingredient score</span><b id="ringWord">Reading…</b></div>
+    <div id="ringBox"><div class="ring" id="ring"><span id="ringNum">0</span></div></div>
+    <div id="cap"><div class="tag mono" id="capTag">Fine</div><div class="n" id="capN"></div><div class="w" id="capW"></div></div>
+  </div>
+
+  <div class="scene" id="verdict">
+    <div class="big" id="bigRing"><span id="bigNum">48</span></div>
+    <div class="v serif">Moderate</div>
+    <div class="sub">6 of 12 ingredients<br />worth a closer look</div>
+    <div class="list" id="vlist"></div>
+  </div>
+
+  <div class="scene" id="cta">
+    <div class="head serif">Every label,<br /><em>decoded.</em></div>
+    <div class="url">foodguards.space</div>
+    <div class="free">Scan your own pack · free · no sign-up</div>
+  </div>
+
+  <div id="fine">Example label. Ingredient score from FSSAI, EFSA &amp; WHO sources — not medical advice.</div>
+</div>
+
+<script>
+  // [text, 's' fine | 'c' worth a look, what it is] -- same list as the website decoder.
+  const LABEL = [
+    ['Refined Wheat Flour (Maida)', 'c', 'Refined flour — the fibre is milled out'], ' (68%), ',
+    ['Palm Oil', 'c', 'High in saturated fat'], ', ',
+    ['Iodised Salt', 's', 'Fine in normal amounts'], ', ',
+    ['Wheat Gluten', 's', 'The protein in wheat'], ', ',
+    ['INS 508', 's', 'Potassium chloride — a salt'], ', ',
+    ['INS 412', 's', 'Guar gum — a thickener from a bean'], ', Masala (',
+    ['Spices & Condiments', 's', 'Onion, garlic, chilli, turmeric…'], ', ',
+    ['Sugar', 'c', 'Added sugar'], ', ',
+    ['INS 627', 'c', 'Flavour enhancer (disodium guanylate)'], ', ',
+    ['INS 631', 'c', 'Flavour enhancer (disodium inosinate)'], ', ',
+    ['INS 150d', 'c', 'Caramel colour'], ', ',
+    ['INS 501', 's', 'Potassium carbonate — an acidity regulator'], ').',
+  ];
+  const FINAL = 48;
+  const T = { hookEnd: 3.0, labelIn: 3.0, firstTok: 3.8, step: 1.05, verdictIn: 17.0, ctaIn: 21.0, end: 25.0 };
+
+  const text = document.getElementById('text');
+  const toks = [];
+  for (const part of LABEL) {
+    if (typeof part === 'string') { text.appendChild(document.createTextNode(part)); continue; }
+    const s = document.createElement('span');
+    s.className = 'tok ' + part[1];
+    s.textContent = part[0];
+    s.dataset.note = part[2];
+    text.appendChild(s);
+    toks.push(s);
+  }
+  document.getElementById('vlist').innerHTML = ['Refined flour', 'Palm oil', 'Added sugar', 'INS 627', 'INS 631', 'Caramel colour']
+    .map((x) => `<span>${x}</span>`).join('');
+
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+  const fade = (t, a, b, inDur = 0.45, outDur = 0.4) => clamp((t - a) / inDur) * (1 - clamp((t - (b - outDur)) / outDur));
+  const $ = (id) => document.getElementById(id);
+  const ringBg = (v, color) => `conic-gradient(${color} ${v}%, rgba(251,247,238,.18) 0)`;
+
+  window.render = (t) => {
+    // Scene 1 -- the hook.
+    $('hook').style.opacity = fade(t, 0, T.hookEnd + 0.3, 0.01);
+    $('h1').style.transform = `translateY(${(1 - ease(t / 0.6)) * 80}px)`;
+    $('h1').style.opacity = ease(t / 0.6);
+    $('h2').style.transform = `translateY(${(1 - ease((t - 0.9) / 0.6)) * 80}px)`;
+    $('h2').style.opacity = ease((t - 0.9) / 0.6);
+
+    // Scene 2 -- the label, decoded one ingredient at a time.
+    $('label').style.opacity = fade(t, T.labelIn, T.verdictIn + 0.2);
+    $('label').querySelector('.card').style.transform = `translateY(${(1 - ease((t - T.labelIn) / 0.6)) * 120}px) rotate(${(1 - ease((t - T.labelIn) / 0.8)) * -3 + 0.6}deg)`;
+    const done = clamp(Math.floor((t - T.firstTok) / T.step) + 1, 0, toks.length);
+    toks.forEach((s, i) => { s.classList.toggle('on', i < done); s.classList.toggle('now', i === done - 1 && t < T.firstTok + toks.length * T.step); });
+    const cur = toks[done - 1];
+    const cap = $('cap');
+    cap.style.opacity = cur ? 1 : 0;
+    if (cur) {
+      const into = (t - (T.firstTok + (done - 1) * T.step)) / 0.25;
+      cap.style.transform = `translateY(${(1 - ease(into)) * 30}px)`;
+      cap.className = cur.classList.contains('c') ? 'c' : '';
+      $('capTag').textContent = cur.classList.contains('c') ? 'Worth a closer look' : 'Fine';
+      $('capTag').style.color = cur.classList.contains('c') ? '#e8710a' : '#1e8e3e';
+      $('capN').textContent = cur.textContent;
+      $('capW').textContent = cur.dataset.note;
+    }
+    const v = FINAL * (done / toks.length);
+    $('ring').style.background = ringBg(v, '#e0a100');
+    $('ringNum').textContent = Math.round(v);
+    const finished = done === toks.length && t >= T.firstTok + toks.length * T.step;
+    $('ringWord').textContent = finished ? 'Moderate' : 'Reading…';
+    $('liveTxt').textContent = finished ? 'Decoded' : 'Decoding';
+
+    // Scene 3 -- the verdict.
+    $('verdict').style.opacity = fade(t, T.verdictIn, T.ctaIn + 0.2);
+    const p = ease((t - T.verdictIn) / 1.2);
+    $('bigRing').style.background = ringBg(FINAL * p, '#e0a100');
+    $('bigNum').textContent = Math.round(FINAL * p);
+    [...$('vlist').children].forEach((el, i) => { const q = ease((t - T.verdictIn - 1.0 - i * 0.18) / 0.35); el.style.opacity = q; el.style.transform = `scale(${0.7 + 0.3 * q})`; });
+
+    // Scene 4 -- call to action.
+    $('cta').style.opacity = fade(t, T.ctaIn, T.end + 1);
+    $('cta').querySelector('.head').style.transform = `translateY(${(1 - ease((t - T.ctaIn) / 0.6)) * 70}px)`;
+    $('cta').querySelector('.url').style.transform = `scale(${0.85 + 0.15 * ease((t - T.ctaIn - 0.5) / 0.5)})`;
+  };
+
+  document.fonts.ready.then(() => { window.render(0); window.READY = true; });
+</script>
+</body>
+</html>
