@@ -5,6 +5,7 @@
 // ai-proxy Edge Function, since no keys are built into that code -- and in
 // Node scripts, which call Gemini directly with the keys from .env.
 import { callAiProxy, isAiProxyAvailable } from './aiProxy.js';
+import { normalizeLabelNutrition } from './labelNutrition.js';
 
 // Six keys (six separate free-tier quotas, 500 requests/day each) so
 // this pipeline work and real user scans don't all compete for one shared
@@ -235,12 +236,20 @@ Read the image carefully and return ONLY valid JSON, no markdown, no explanation
     "energyKcal": 0, "proteinG": 0, "totalCarbG": 0, "totalSugarG": 0, "addedSugarG": 0,
     "totalFatG": 0, "saturatedFatG": 0, "transFatG": 0, "fiberG": 0, "sodiumMg": 0, "calciumMg": 0
   },
-  "servingGrams": 0
+  "nutritionBasis": "per100",
+  "servingGrams": 0,
+  "packGrams": 0,
+  "servingsPerPack": 0
 }
 
 If the label truly cannot be read at all, set "readable": false, leave "ingredientsText" empty, and explain why in "notes".
 Never invent or guess ingredients that aren't legible — it is better to leave something out and note it than to make it up.
-If NO nutrition table is visible in this photo at all, omit the "nutrition" key and the "servingGrams" key entirely rather than guessing numbers. If a nutrition table IS visible, only include the specific fields it actually states — per 100g/100ml, not per serving — and never invent a value for a field the table doesn't show.`;
+If NO nutrition table is visible in this photo at all, omit the "nutrition", "nutritionBasis", "servingGrams", "packGrams" and "servingsPerPack" keys entirely rather than guessing numbers.
+If a nutrition table IS visible, only include the specific fields it actually states, and never invent a value for a field the table doesn't show:
+- If it has a per 100g / per 100ml column, use that column and set "nutritionBasis": "per100".
+- If it ONLY gives values per serving (e.g. "Amount per serving"), give those per-serving values exactly as printed and set "nutritionBasis": "perServing".
+- "servingGrams": the weight of one serving in g or ml ONLY if the label prints it (e.g. "Serving size 30 g"); omit it otherwise — never estimate it.
+- "packGrams" (net weight of the whole pack) and "servingsPerPack": only if printed on this photo; omit otherwise.`;
 
 /**
  * Extract (transcribe) the ingredients list from a food label photo.
@@ -287,7 +296,9 @@ export async function extractIngredientsFromImage(imageFile) {
 
   if (!text) throw new Error('Empty response from Gemini');
 
-  return extractJson(text, finishReason);
+  // `nutrition` always per 100 from here on; a per-serving table with no
+  // known serving weight comes back as `nutritionPerServing` instead.
+  return normalizeLabelNutrition(extractJson(text, finishReason));
 }
 
 const IDENTIFY_PROMPT = `This is a photo of the FRONT of an Indian packaged food product. Identify the product exactly as printed on the pack.

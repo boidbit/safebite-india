@@ -21,6 +21,7 @@ import { adminSetReviewStatus } from '../../services/adminReviewRepo';
 import { adminApprovedBarcodeFor } from '../../services/adminBarcodeLinksRepo';
 import { StatusPill } from './AdminProducts';
 import { extractIngredientsFromImage } from '../../services/geminiService';
+import { perServingToPer100 } from '../../services/labelNutrition';
 import { lookupBarcode } from '../../services/openFoodFacts';
 import { parseLabel, looksLikeNutritionPanel, findIngredientTextIssues } from '../../services/ingredientParser';
 import { barcodeKey, textKey } from '../../services/productCache';
@@ -293,6 +294,9 @@ export default function AdminProductForm({ copyMode = false }) {
 
   const [nutrients, setNutrients] = useState({});
   const [servingGrams, setServingGrams] = useState('');
+  // A per-serving nutrition table read off a photo whose serving weight isn't
+  // printed -- waits here until someone types the serving size (labelNutrition.js).
+  const [pendingPerServing, setPendingPerServing] = useState(null);
   // 'g' for a solid/semi-solid pack, 'ml' for a liquid (a can/bottle) --
   // real bug this fixes: the field only ever showed/saved "g", so a
   // 200ml soda's own report told the reader "per 200g serving", wrong
@@ -592,6 +596,8 @@ export default function AdminProductForm({ copyMode = false }) {
       let foundProductName = '';
       const mergedNutrition = {};
       let foundServingGrams = '';
+      let convertedFrom = null;
+      let perServing = null;
       const notes = [];
       let anyReadable = false;
 
@@ -606,6 +612,8 @@ export default function AdminProductForm({ copyMode = false }) {
           }
         }
         if (!foundServingGrams && extracted.servingGrams) foundServingGrams = extracted.servingGrams;
+        if (extracted.convertedFromServingGrams && !convertedFrom) convertedFrom = extracted.convertedFromServingGrams;
+        if (extracted.nutritionPerServing && !perServing) perServing = extracted.nutritionPerServing;
         if (extracted.notes) notes.push(extracted.notes);
       }
 
@@ -626,7 +634,13 @@ export default function AdminProductForm({ copyMode = false }) {
       if (!foundIngredientsText) {
         messages.push(anyReadable ? 'No ingredients list found in these photos — type it in manually.' : "Couldn't read these photos clearly.");
       }
-      if (Object.keys(mergedNutrition).length === 0) messages.push('No nutrition table found in these photos.');
+      if (Object.keys(mergedNutrition).length === 0 && perServing) {
+        setPendingPerServing(perServing);
+        messages.push('The nutrition table is per serving and the label does not print the serving size in grams. Type the serving size under "Real serving size", then tap "Convert to per 100 g".');
+      } else if (Object.keys(mergedNutrition).length === 0) {
+        messages.push('No nutrition table found in these photos.');
+      }
+      if (convertedFrom) messages.push(`The nutrition table was per serving (${convertedFrom} g) — converted to per 100 g.`);
       if (notes.length) messages.push(notes.join(' '));
       if (messages.length) setError(messages.join(' '));
     } catch (err) {
@@ -1210,6 +1224,25 @@ export default function AdminProductForm({ copyMode = false }) {
               <label className="block text-[11.5px] font-semibold mb-1" style={{ color: 'var(--label-3)' }}>
                 Real serving size
               </label>
+              {pendingPerServing && (
+                <div className="mb-2 rounded-[10px] px-3 py-2 text-[12px]" style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--label-1)' }}>
+                  Per-serving values read from the photo ({Object.entries(pendingPerServing).map(([k, v]) => `${k} ${v}`).join(', ')}). Type the serving size below, then:
+                  <button
+                    type="button"
+                    disabled={!(Number(servingGrams) > 0)}
+                    onClick={() => {
+                      const per100 = perServingToPer100(pendingPerServing, servingGrams);
+                      if (!per100) return;
+                      setNutrients((prev) => ({ ...prev, ...per100 }));
+                      setPendingPerServing(null);
+                    }}
+                    className="tap-scale block mt-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold text-white disabled:opacity-50"
+                    style={{ background: 'var(--tint)' }}
+                  >
+                    Convert to per 100 g
+                  </button>
+                </div>
+              )}
               <div className="flex items-center gap-1.5">
                 <input
                   type="number"
