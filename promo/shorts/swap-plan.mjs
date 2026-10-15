@@ -9,6 +9,19 @@ import { findCategoryForProduct } from '../../src/services/productCache.js';
 const COLOR = { Excellent: '#2fbf5f', Good: '#8cc63f', Moderate: '#e0a100', Poor: '#f0821e', 'Very Poor': '#ef5a3c' };
 const STOP = new Set(['with', 'and', 'the', 'pack', 'flavour', 'flavor', 'flavoured', 'flavored', 'premium', 'classic', 'original', 'india', 'indian']);
 const isFlagged = (i) => i.status === 'concerning' || i.status === 'harmful';
+// Kinds that share words but aren't swaps for each other: a coffee latte vs a
+// chai latte, a chocolate drink vs a coffee. A product in one kind is only
+// paired with one in the same kind (or in none).
+const KINDS = [
+  ['coffee', /\b(coffee|latte|cappuccino|espresso|frappe|nescafe|bru|mocha)\b/i],
+  ['tea', /\b(tea|chai|matcha|chamomile)\b/i],
+  ['chocolate drink', /\b(cocoa|hot chocolate|chocolate drink)\b/i],
+];
+const kindOf = (name) => {
+  // Tea first: "Chai Tea Latte" is tea even though it says latte.
+  const order = [KINDS[1], KINDS[0], KINDS[2]];
+  return (order.find(([, re]) => re.test(name)) || [null])[0];
+};
 const HEADING = /^(noodles?|masala|tastemaker|masala tastemaker|seasoning|filling|coating|dough|base|cream|wafers?|biscuits?)$/i;
 const round1 = (v) => Math.round(v * 10) / 10;
 const shorten = (s, n) => (s.length <= n ? s : `${s.slice(0, n).replace(/\s+\S*$/, '')}…`);
@@ -46,14 +59,19 @@ function describe(row) {
 export async function planSwap(supabase, rowA, pickBy) {
   const a = describe(rowA);
   if (a.why) return { why: `"${rowA.product_name}": ${a.why}` };
-  const shelf = findCategoryForProduct(a.name);
-  if (!shelf) return { why: `can't tell which shelf "${a.name}" is on, so there is nothing to compare it with` };
+// The shelf: the app's category for the name, or -- when the name names
+  // none ("Nescafe Kitkat Latte") -- the product's food type.
+  const category = findCategoryForProduct(a.name);
+  const foodType = rowA.report?.foodType || null;
+  if (!category && !foodType) return { why: `can't tell which shelf "${a.name}" is on (no category word in its name and no food type), so there is nothing to compare it with` };
+  const shelf = { id: category ? category.id : foodType };
+  const sameShelf = (p) => (category ? findCategoryForProduct(p.product_name)?.id === category.id : p.foodType === foodType);
 
   // Every approved product, slim, to find same-shelf ones with a clearly higher score.
   const cat = [];
   for (let from = 0; ; from += 500) {
     const { data, error } = await supabase.from('product_reports')
-      .select('id, product_name, scan_count, brand:report->>brand, imageUrl:report->>imageUrl, score:report->overallScore')
+      .select('id, product_name, scan_count, brand:report->>brand, imageUrl:report->>imageUrl, score:report->overallScore, foodType:report->>foodType')
       .eq('review_status', 'approved').order('id').range(from, from + 499);
     if (error) return { why: `catalog: ${error.message}` };
     cat.push(...data);
@@ -61,11 +79,11 @@ export async function planSwap(supabase, rowA, pickBy) {
   }
   const aWords = words(a.name, a.brand);
   const candidates = cat
-    .filter((p) => p.id !== a.id && p.imageUrl && typeof p.score === 'number' && p.score >= Math.max(65, a.score + 15) && findCategoryForProduct(p.product_name)?.id === shelf.id)
+    .filter((p) => p.id !== a.id && p.imageUrl && typeof p.score === 'number' && p.score >= Math.max(65, a.score + 15) && sameShelf(p))
     .map((p) => ({ ...p, overlap: [...words(p.product_name, p.brand)].filter((w) => aWords.has(w)).length, otherBrand: (p.brand || '').toLowerCase() !== a.brand.toLowerCase() }))
     // Same kind of product, not just the same browse shelf: cup noodles vs
     // other noodles, not vs pasta -- at least one product word in common.
-    .filter((p) => p.overlap >= 1)
+    .filter((p) => p.overlap >= 1 && kindOf(p.product_name) === kindOf(a.name))
     .sort((x, y) => y.overlap - x.overlap || Number(y.otherBrand) - Number(x.otherBrand) || y.score - x.score || (y.scan_count || 0) - (x.scan_count || 0))
     .slice(0, 8);
   if (!candidates.length) return { why: `no similar approved product (${[...aWords].join(', ')}) on the "${shelf.id}" shelf scores at least ${Math.max(65, a.score + 15)} with a photo` };

@@ -26,7 +26,7 @@ export const CATEGORY_KEYWORDS = [
   // surfaced as a "safer alternative" to a pasta product. Every keyword
   // left here is specific to an actual noodle/pasta product.
   { id: 'noodles', label: 'Instant Noodles', labelHi: 'इंस्टेंट नूडल्स', keywords: ['noodle', 'maggi', 'pasta', 'vermicelli', 'macaroni', 'soup'] },
-  { id: 'beverages', label: 'Beverages', labelHi: 'ड्रिंक्स', keywords: ['juice', 'drink', 'squash', 'tea', 'coffee'] },
+  { id: 'beverages', label: 'Beverages', labelHi: 'ड्रिंक्स', keywords: ['juice', 'drink', 'squash', 'tea', 'coffee', 'latte', 'cappuccino', 'frappe', 'espresso'] },
   { id: 'snacks', label: 'Snacks & Namkeen', labelHi: 'स्नैक्स और नमकीन', keywords: ['chips', 'namkeen', 'bhujia', 'sev', 'mixture', 'popcorn', 'wafer'] },
   { id: 'chocolates', label: 'Chocolates & Sweets', labelHi: 'चॉकलेट और मीठा', keywords: ['chocolate', 'candy', 'toffee', 'eclair', 'chikki', ...INDIAN_SWEET_KEYWORDS] },
   { id: 'spices', label: 'Spices & Masala', labelHi: 'मसाले', keywords: ['masala', 'spice', 'haldi', 'mirchi', 'garam'] },
