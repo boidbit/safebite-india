@@ -71,11 +71,8 @@ export function alternativesFor(p, catalog, limit = 4) {
 const ring = (score, color, size = 'lg') => `<div class="ring ring-${size}" style="--c:${color};--v:${score}"><span>${score}</span></div>`;
 const firstSentence = (s) => { const t = String(s || '').trim(); const m = t.match(/^.+?[.!?](\s|$)/); return (m ? m[0] : t).trim(); };
 
-function ingredientRows(ingredients) {
-  const list = (ingredients || [])
-    .filter((i) => i?.name && !isJunkIngredient(i))
-    .map((i) => ({ ...i, s: STATUS[i.status] || STATUS.safe }))
-    .sort((a, b) => a.s.order - b.s.order);
+// Ingredients worth a look: full rows, with the reason.
+function flaggedRows(list) {
   return list.map((i) => `<li class="ing">
       <span class="ing-dot" style="background:${i.s.color}"></span>
       <div><div class="ing-name">${esc(i.name)}${i.insCode ? ` <span class="ing-ins">INS ${esc(i.insCode)}</span>` : ''}</div>
@@ -84,25 +81,33 @@ function ingredientRows(ingredients) {
     </li>`).join('');
 }
 
+// The fine ones: compact chips -- tap one for its one-line reason.
+function fineChips(list) {
+  return list.map((i) => `<details class="chip"><summary>${esc(i.name)}</summary><p>${esc(firstSentence(i.reason || i.whatIsIt))}</p></details>`).join('');
+}
+
 function nutritionTable(per100, foodType) {
   if (!per100) return '';
   const rows = NUTRIENTS.filter(([k]) => typeof per100[k] === 'number');
   if (rows.length < 3) return '';
   const unit = /drink|beverage|juice|milk/i.test(foodType || '') ? '100 ml' : '100 g';
-  return `<section class="p-sec"><h2>Nutrition</h2>
-    <div class="label nutri"><div class="label-title">Nutrition facts</div><div class="label-sub"><span>Per ${unit}</span><span>from the pack</span></div>
+  return `<div class="label nutri"><div class="label-title">Nutrition facts</div><div class="label-sub"><span>Per ${unit}</span><span>from the pack</span></div>
     ${rows.map(([k, label, u]) => `<div class="nutri-row"><span>${label}</span><b>${per100[k]} ${u}</b></div>`).join('')}
-    </div></section>`;
+    </div>`;
 }
 
 export function productPage(p, { alternatives = [] } = {}) {
   const tier = TIER[p.verdict] || { color: 'var(--ink-3)', eat: '' };
-  const ings = (p.ingredients || []).filter((i) => i?.name && !isJunkIngredient(i));
-  const flagged = ings.filter((i) => i.status === 'concerning' || i.status === 'harmful');
+  const ings = (p.ingredients || [])
+    .filter((i) => i?.name && !isJunkIngredient(i))
+    .map((i) => ({ ...i, s: STATUS[i.status] || STATUS.safe }));
+  const flagged = ings.filter((i) => i.status === 'concerning' || i.status === 'harmful').sort((a, b) => a.s.order - b.s.order);
+  const fine = ings.filter((i) => i.status !== 'concerning' && i.status !== 'harmful');
   const flaggedLine = ings.length ? (flagged.length ? `${flagged.length} of ${ings.length} ingredients worth a closer look` : `All ${ings.length} ingredients check out`) : '';
   const nameWithBrand = p.brand && !p.name.toLowerCase().includes(p.brand.toLowerCase()) ? `${p.brand} ${p.name}` : p.name;
   const flaggedNames = [...new Set(flagged.map((i) => i.name.replace(/^[^:]{2,30}:\s*/, '').trim()))].slice(0, 3).join(', ');
   const description = `Is ${nameWithBrand} healthy? Ingredient score ${p.score}/100 (${p.verdict}). ${flagged.length ? `Worth a closer look: ${flaggedNames}${flagged.length > 3 ? ' and more' : ''}.` : 'No ingredient flagged.'} Every ingredient explained.`;
+  const nutrition = nutritionTable(p.per100, p.foodType);
   return {
     path: productPath(p),
     title: `${nameWithBrand} — ingredients & score (${p.score}/100)`,
@@ -111,36 +116,47 @@ export function productPage(p, { alternatives = [] } = {}) {
     body: `
 <div class="wrap p-wrap">
   <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/products/">Products</a>${p.brand ? ` / <a href="/products/#${esc(slugify(p.brand))}">${esc(p.brand)}</a>` : ''}</nav>
-  <div class="p-head">
-    <div class="p-img">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="${esc(nameWithBrand)}" width="220" height="220" />` : '<span aria-hidden="true">📦</span>'}</div>
-    <div class="p-title">
-      ${p.brand ? `<div class="eyebrow">${esc(p.brand)}</div>` : ''}
-      <h1>${esc(p.name)}</h1>
-      ${p.packSize ? `<div class="p-pack">${esc(p.packSize)}</div>` : ''}
-      <div class="p-score">
-        ${ring(p.score, tier.color)}
-        <div><div class="p-verdict" style="color:${tier.color}">${esc(p.verdict)}</div><div class="p-flagged">${esc(flaggedLine)}</div>
-        ${tier.eat ? `<div class="p-eat">How often? <b style="color:${tier.color}">${tier.eat}</b></div>` : ''}</div>
+  <div class="p-layout">
+    <aside class="p-side">
+      <div class="p-card">
+        <div class="p-top">
+          <div class="p-img${p.imageUrl ? '' : ' p-img-none'}">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="${esc(nameWithBrand)}" width="200" height="200" />` : '<span aria-hidden="true">📦</span>'}</div>
+          <div class="p-title">
+            ${p.brand ? `<div class="eyebrow">${esc(p.brand)}</div>` : ''}
+            <h1>${esc(p.name)}</h1>
+            ${p.packSize ? `<div class="p-pack">${esc(p.packSize)}</div>` : ''}
+          </div>
+        </div>
+        <div class="p-score">
+          ${ring(p.score, tier.color)}
+          <div><div class="p-verdict" style="color:${tier.color}">${esc(p.verdict)}</div><div class="p-flagged">${esc(flaggedLine)}</div>
+          ${tier.eat ? `<div class="p-eat">How often? <b style="color:${tier.color}">${tier.eat}</b></div>` : ''}</div>
+        </div>
+        <div class="p-ctas"><a class="btn btn-primary btn-sm" href="${APP_URL}#/p/${encodeURIComponent(p.id)}">Open in the app</a><a class="btn btn-ghost btn-sm" href="${APP_URL}">Scan your own</a></div>
       </div>
-      <div class="p-ctas"><a class="btn btn-primary btn-sm" href="${APP_URL}#/p/${encodeURIComponent(p.id)}">Open in the app</a><a class="btn btn-ghost btn-sm" href="${APP_URL}">Scan your own</a></div>
+      ${nutrition ? `<div class="p-side-nutri">${nutrition}</div>` : ''}
+    </aside>
+
+    <div class="p-main">
+      ${p.summary ? `<p class="p-summary">${esc(p.summary)}</p>` : ''}
+
+      ${flagged.length ? `<section class="p-sec"><h2>Worth a closer look <span class="p-count">${flagged.length}</span></h2>
+        <p class="p-note">Allowed in India, but better eaten less often.</p>
+        <ul class="ings">${flaggedRows(flagged)}</ul></section>` : ''}
+
+      ${fine.length ? `<section class="p-sec"><h2>${flagged.length ? 'The rest check out' : 'Every ingredient checks out'} <span class="p-count">${fine.length}</span></h2>
+        <p class="p-note">Tap one to see why.</p>
+        <div class="chips">${fineChips(fine)}</div></section>` : ''}
+
+      ${alternatives.length ? `<section class="p-sec"><h2>Higher-scoring options</h2>
+        <div class="examples p-alts">${alternatives.map((a) => `<a class="ex" href="${productPath(a)}">
+          ${a.imageUrl ? `<img src="${esc(a.imageUrl)}" alt="" loading="lazy" />` : ''}
+          <div class="meta">${a.brand ? `<div class="brand-n">${esc(a.brand)}</div>` : ''}<div class="name">${esc(a.name)}</div><div class="verdict" style="color:${(TIER[a.verdict] || {}).color}">${esc(a.verdict)}</div></div>
+          ${ring(a.score, (TIER[a.verdict] || {}).color || 'var(--ink-3)', 'sm')}</a>`).join('')}</div></section>` : ''}
+
+      <div class="note p-fine"><p>This score rates the ingredient list using <a href="/how-we-score/">our published method</a> and public sources (FSSAI, EFSA, WHO). It is general information, not medical advice, and does not mean the product is unsafe — products sold in India meet FSSAI rules. Recipes change: check the pack in your hand. <a href="mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Correction: ${nameWithBrand}`)}">Is something wrong? Tell us.</a></p></div>
     </div>
   </div>
-
-  ${p.summary ? `<p class="p-summary">${esc(p.summary)}</p>` : ''}
-
-  ${ings.length ? `<section class="p-sec"><h2>Ingredients, explained</h2>
-    <p class="p-note">Listed by what deserves a look first. ${flagged.length ? '“Worth limiting” means allowed in India, but better eaten less often.' : ''}</p>
-    <ul class="ings">${ingredientRows(ings)}</ul></section>` : ''}
-
-  ${nutritionTable(p.per100, p.foodType)}
-
-  ${alternatives.length ? `<section class="p-sec"><h2>Higher-scoring options</h2>
-    <div class="examples">${alternatives.map((a) => `<a class="ex" href="${productPath(a)}">
-      ${a.imageUrl ? `<img src="${esc(a.imageUrl)}" alt="" loading="lazy" />` : ''}
-      <div class="meta">${a.brand ? `<div class="brand-n">${esc(a.brand)}</div>` : ''}<div class="name">${esc(a.name)}</div><div class="verdict" style="color:${(TIER[a.verdict] || {}).color}">${esc(a.verdict)}</div></div>
-      ${ring(a.score, (TIER[a.verdict] || {}).color || 'var(--ink-3)', 'sm')}</a>`).join('')}</div></section>` : ''}
-
-  <div class="note p-fine"><p>This score rates the ingredient list using <a href="/how-we-score/">our published method</a> and public sources (FSSAI, EFSA, WHO). It is general information, not medical advice, and does not mean the product is unsafe — products sold in India meet FSSAI rules. Recipes change: check the pack in your hand. <a href="mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Correction: ${nameWithBrand}`)}">Is something wrong? Tell us.</a></p></div>
 </div>`,
   };
 }
