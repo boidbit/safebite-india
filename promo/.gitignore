@@ -6,3 +6,4 @@ out/*
 
 # product photos used in shorts (brand images, not committed)
 shorts/*/pack.jpg
+shorts/auto-*/

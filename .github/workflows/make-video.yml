@@ -1,0 +1,64 @@
+# Make product video -- one approved product in, a finished 9:16 short out.
+#
+# Actions -> "Make product video" -> Run workflow -> type a product name (or
+# its id). About 3-4 minutes later the run's page has a "video" download:
+# the MP4 and its caption text. Kept for 30 days.
+#
+# The video is rendered here, on GitHub's machine (promo/shorts/make.mjs):
+# Supabase only serves the one product's report (~10 KB), and the file is
+# not stored in Supabase.
+name: Make product video
+
+on:
+  workflow_dispatch:
+    inputs:
+      product:
+        description: 'Product name or id (an approved product)'
+        required: true
+      job_id:
+        description: 'Admin panel job id (filled in by the admin panel; leave empty)'
+        required: false
+        default: ''
+
+run-name: 'Video: ${{ inputs.product }}'
+
+permissions:
+  contents: read
+
+jobs:
+  video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Chromium for rendering
+        run: npx playwright install --with-deps chromium
+
+      - name: Promo tools (fonts, ffmpeg)
+        working-directory: promo
+        run: |
+          npm ci
+          npm install --no-save ffmpeg-static@5.2.0
+
+      - name: Make the video
+        working-directory: promo
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          PLAYWRIGHT_PATH: ${{ github.workspace }}/node_modules/playwright
+          PRODUCT: ${{ inputs.product }}
+        run: node shorts/make.mjs "$PRODUCT" --out out/video
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: video
+          path: promo/out/video
+          retention-days: 30
