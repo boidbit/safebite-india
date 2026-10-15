@@ -1,0 +1,35 @@
+{
+  "_": "One timeline for both the picture (index.html) and the soundtrack (shorts/soundtrack.cjs). Seconds. Facts are from the pack's ingredient list and nutrition panel as saved in FoodGuard (Britannia Winkin' Cow Cold Coffee, 180 ml, approved): added sugar 6.9 g/100 ml -> 12.4 g per bottle; score 49 Moderate, 3 of 13 ingredients flagged.",
+  "duration": 28,
+  "bpm": 104,
+  "scenes": {
+    "hook": [0, 3.4],
+    "label": [3.4, 14.9],
+    "facts": [14.9, 19.4],
+    "verdict": [19.4, 23.4],
+    "cta": [23.4, 28]
+  },
+  "transitions": [
+    { "t": 3.4, "kind": "zoom" },
+    { "t": 14.9, "kind": "push" },
+    { "t": 19.4, "kind": "burst" },
+    { "t": 23.4, "kind": "wipe" }
+  ],
+  "firstToken": 4.3,
+  "tokenStep": 1.12,
+  "tokens": [
+    ["Double Toned Milk (87%)", "s", "The main ingredient — milk with 1.5% fat"],
+    ["Sugar", "c", "Added sugar"],
+    ["Soluble Coffee Powder (0.5%)", "s", "Instant coffee — half a percent of the bottle"],
+    ["INS 471", "s", "Mono- & diglycerides — keep it smooth"],
+    ["INS 407", "c", "Carrageenan — a seaweed thickener"],
+    ["INS 401", "s", "Sodium alginate — a seaweed thickener"],
+    ["Colour (150C)", "c", "Caramel colour, made with ammonia"],
+    ["Nature Identical & Natural Flavouring", "s", "Added flavour"],
+    ["Acidity Regulators (340, 452, 339)", "s", "Phosphate salts — stop the milk splitting"]
+  ],
+  "spoons": [16.4, 16.75, 17.1],
+  "score": 49,
+  "verdict": "Moderate",
+  "flaggedLine": "3 of 13 ingredients worth a closer look"
+}

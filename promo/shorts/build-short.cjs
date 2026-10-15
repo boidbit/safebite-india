@@ -1,6 +1,7 @@
 // promo/shorts/build-short.cjs -- renders one short (promo/shorts/<name>/index.html)
-// to promo/out/<name>.mp4: 1080x1920, 30 fps, H.264, no audio (music is added in
-// Instagram / YouTube's own editor, which has licensed tracks).
+// to promo/out/<name>.mp4: 1080x1920, 30 fps, H.264. A short with a
+// timeline.json gets its synthesized soundtrack (shorts/soundtrack.cjs) muxed
+// in as AAC; one without stays silent (add music in the platform's editor).
 //
 //   cd promo && npm install --no-save ffmpeg-static@5.2.0   (once)
 //   node shorts/build-short.cjs label-decoded 25            (name, seconds)
@@ -32,7 +33,11 @@ const run = (s, e) => new Promise((resolve, reject) => {
   console.log(`${TOTAL} frames in ${Math.round((Date.now() - t0) / 1000)} s`);
   const ffmpeg = require('ffmpeg-static');
   const out = path.join(promo, 'out', `${name}.mp4`);
-  execFileSync(ffmpeg, ['-y', '-v', 'error', '-framerate', String(FPS), '-i', path.join(frames, 'f_%04d.jpg'),
+  const hasTimeline = fs.existsSync(path.join(__dirname, name, 'timeline.json'));
+  const wav = path.join(promo, 'out', `${name}.wav`);
+  if (hasTimeline) execFileSync(process.execPath, [path.join(__dirname, 'soundtrack.cjs'), name], { stdio: 'inherit' });
+  const audio = hasTimeline ? ['-i', wav, '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-shortest'] : [];
+  execFileSync(ffmpeg, ['-y', '-v', 'error', '-framerate', String(FPS), '-i', path.join(frames, 'f_%04d.jpg'), ...audio,
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out]);
   fs.rmSync(frames, { recursive: true, force: true });
   console.log(`wrote ${out} (${(fs.statSync(out).size / 1024 / 1024).toFixed(1)} MB)`);

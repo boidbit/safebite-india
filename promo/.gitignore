@@ -3,3 +3,6 @@ src/
 out/*
 !out/foodguard-promo.mp4
 !out/foodguard-promo-50s.mp4
+
+# product photos used in shorts (brand images, not committed)
+shorts/*/pack.jpg

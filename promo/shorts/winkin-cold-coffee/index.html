@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- Short #2: a real product, Britannia Winkin' Cow Cold Coffee (180 ml),
+     decoded from its own pack label. Every frame is drawn from one time value
+     -- window.render(t), see promo/render.cjs -- and the timing comes from
+     timeline.json, which the soundtrack (shorts/soundtrack.cjs) reads too, so
+     every tick and whoosh lands on its frame. Facts only, neutral wording. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,700;0,9..144,800;1,9..144,700&family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #0f5132; }
+  * { box-sizing: border-box; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: Inter, sans-serif; color: #fbf7ee; background: #0f5132; }
+  #bg { position: absolute; inset: -200px; background: radial-gradient(circle at 80% 15%, rgba(232,163,61,.24), transparent 40%), radial-gradient(circle at 15% 85%, rgba(255,255,255,.08), transparent 38%), radial-gradient(circle at 50% 50%, #12603c, #0b3f27 75%); }
+  .scene { position: absolute; inset: 0; opacity: 0; will-change: transform, opacity; }
+  .serif { font-family: Fraunces, Georgia, serif; font-weight: 800; letter-spacing: -0.02em; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+  .brand { position: absolute; top: 70px; left: 70px; z-index: 20; display: flex; align-items: center; gap: 18px; font-family: Fraunces, serif; font-weight: 800; font-size: 46px; }
+  .brand img { width: 64px; height: 64px; border-radius: 16px; background: #fff; }
+  .brand small { font-family: 'JetBrains Mono', monospace; font-size: 20px; color: #e8a33d; letter-spacing: .16em; }
+  #fine { position: absolute; left: 70px; right: 70px; bottom: 64px; z-index: 20; text-align: center; font-size: 24px; line-height: 1.4; color: rgba(251,247,238,.62); }
+
+  /* 1. hook */
+  /* The pack photo has a white background, so it sits on a shelf card. */
+  #pack { position: absolute; left: 50%; top: 250px; width: 560px; height: 980px; margin-left: -280px; }
+  #pack .halo { position: absolute; inset: -80px -160px; border-radius: 50%; background: radial-gradient(circle, rgba(232,163,61,.40), transparent 62%); }
+  #pack .shelf { position: absolute; inset: 0; background: #ffffff; border: 6px solid #1b1a17; border-radius: 48px; box-shadow: 18px 18px 0 #082d1c; display: grid; place-items: center; overflow: hidden; }
+  #pack img { height: 880px; width: auto; }
+  #hookT1 { position: absolute; left: 70px; right: 70px; top: 1320px; text-align: center; font-size: 100px; line-height: 1; }
+  #hookT2 { position: absolute; left: 70px; right: 70px; top: 1450px; text-align: center; font-size: 86px; font-style: italic; font-weight: 700; color: #e8a33d; }
+
+  /* 2. label */
+  #card { position: absolute; left: 70px; right: 70px; top: 230px; background: #fffdf8; color: #1b1a17; border: 6px solid #1b1a17; border-radius: 40px; box-shadow: 18px 18px 0 #082d1c; overflow: hidden; }
+  #card .bar { background: #1b1a17; color: #a8a297; padding: 22px 32px; font-size: 25px; display: flex; gap: 16px; align-items: center; }
+  #card .bar img { width: 46px; height: 70px; object-fit: contain; background: #fff; border-radius: 8px; padding: 2px; }
+  #card .bar .live { color: #e8a33d; }
+  #card .bar .dot { width: 16px; height: 16px; border-radius: 50%; background: #e8a33d; display: inline-block; margin-right: 10px; vertical-align: 1px; }
+  #card .body { padding: 36px 42px 42px; }
+  #card .title { font-size: 56px; margin-bottom: 14px; }
+  #text { font-size: 44px; line-height: 1.6; color: #4a463f; }
+  .tok { border-radius: 8px; padding: 2px 5px; }
+  .tok.s.on { background: #dcefe3; color: #0f5132; }
+  .tok.c.on { background: #fde3c4; color: #8a3b0a; }
+  .tok.now { box-shadow: 0 0 0 5px #1b1a17; }
+  #meter { position: absolute; left: 70px; right: 70px; top: 1250px; display: flex; align-items: center; gap: 28px; }
+  .ring { border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+  .ring span { border-radius: 50%; background: #0f5132; display: grid; place-items: center; font-family: Fraunces, serif; font-weight: 800; color: #e8a33d; }
+  #ring { width: 200px; height: 200px; } #ring span { width: 164px; height: 164px; font-size: 72px; }
+  #meterTxt { font-size: 34px; font-weight: 600; color: #d6eadd; }
+  #meterTxt b { display: block; font-family: Fraunces, serif; font-size: 58px; color: #fbf7ee; margin-top: 4px; }
+  #cap { position: absolute; left: 70px; right: 70px; top: 1500px; min-height: 230px; border-radius: 34px; padding: 30px 40px; background: #fbf7ee; color: #1b1a17; border-left: 18px solid #1e8e3e; }
+  #cap.c { border-left-color: #e8710a; }
+  #cap .tag { font-size: 23px; margin-bottom: 8px; }
+  #cap .n { font-size: 50px; font-weight: 800; line-height: 1.1; }
+  #cap .w { font-size: 38px; color: #4a463f; margin-top: 10px; }
+
+  /* 3. facts */
+  .fact { position: absolute; left: 70px; right: 70px; border-radius: 40px; padding: 42px 48px; background: #fbf7ee; color: #1b1a17; border: 6px solid #1b1a17; box-shadow: 14px 14px 0 #082d1c; }
+  .fact .k { font-size: 26px; color: #807a6f; }
+  .fact .v { font-size: 120px; line-height: 1; margin-top: 8px; }
+  .fact .d { font-size: 38px; color: #4a463f; margin-top: 10px; }
+  #f1 { top: 260px; } #f1 .v { color: #1e8e3e; }
+  #f2 { top: 700px; } #f2 .v { color: #6b4423; }
+  #f3 { top: 1140px; background: #fde3c4; } #f3 .v { color: #8a3b0a; }
+  #spoons { display: flex; gap: 26px; margin-top: 22px; }
+  .spoon { width: 150px; height: 70px; position: relative; }
+  .spoon i { position: absolute; left: 0; top: 0; width: 92px; height: 70px; border-radius: 50%; border: 6px solid #8a3b0a; overflow: hidden; background: #b9773f; }
+  .spoon i::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: var(--fill, 0%); background: #fffdf8; }
+  .spoon b { position: absolute; left: 86px; top: 29px; width: 64px; height: 12px; border-radius: 6px; background: #8a3b0a; }
+
+  /* 4. verdict */
+  #burst { position: absolute; left: 50%; top: 640px; width: 10px; height: 10px; border-radius: 50%; background: #e8a33d; }
+  #big { position: absolute; left: 50%; top: 330px; width: 540px; height: 540px; margin-left: -270px; }
+  #big span { width: 448px; height: 448px; font-size: 220px; }
+  #vWord { position: absolute; left: 0; right: 0; top: 930px; text-align: center; font-size: 124px; color: #e8a33d; }
+  #vLine { position: absolute; left: 60px; right: 60px; top: 1100px; text-align: center; font-size: 46px; font-weight: 700; line-height: 1.3; }
+  #chips { position: absolute; left: 70px; right: 70px; top: 1290px; display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; }
+  #chips span { border-radius: 999px; padding: 14px 28px; font-size: 36px; font-weight: 700; }
+  #chips .c { background: #fde3c4; color: #8a3b0a; }
+  #chips .s { background: #dcefe3; color: #0f5132; }
+
+  /* 5. cta */
+  #wipe { position: absolute; left: 0; right: 0; height: 2400px; background: linear-gradient(#e8a33d 0 90px, #0f5132 90px); }
+  #ctaHead { position: absolute; left: 80px; right: 80px; top: 520px; font-size: 132px; line-height: 1.02; }
+  #ctaHead em { color: #e8a33d; }
+  #ctaUrl { position: absolute; left: 80px; right: 80px; top: 1010px; background: #fbf7ee; color: #0f5132; border-radius: 999px; padding: 40px; text-align: center; font-size: 76px; font-weight: 800; }
+  #ctaSub { position: absolute; left: 80px; right: 80px; top: 1200px; text-align: center; font-size: 40px; color: #d6eadd; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div>
+  <div class="brand"><img src="/site/assets/logo.png" alt="" />FoodGuard<small>INDIA</small></div>
+
+  <div class="scene" id="hook">
+    <div id="pack"><div class="halo"></div><div class="shelf"><img src="pack.jpg" alt="" /></div></div>
+    <div id="hookT1" class="serif">Bottled cold coffee.</div>
+    <div id="hookT2" class="serif">What’s really inside?</div>
+  </div>
+
+  <div class="scene" id="label">
+    <div id="card">
+      <div class="bar"><img src="pack.jpg" alt="" /><span class="live mono"><i class="dot"></i><span id="liveTxt">Decoding</span></span><span>Britannia Winkin’ Cow Cold Coffee · 180 ml</span></div>
+      <div class="body"><div class="title serif">INGREDIENTS:</div><div id="text"></div></div>
+    </div>
+    <div id="meter"><div class="ring" id="ring"><span id="ringNum">0</span></div><div id="meterTxt"><span class="mono" style="font-size:22px;color:#e8a33d">Ingredient score</span><b id="meterWord">Reading the label…</b></div></div>
+    <div id="cap"><div class="tag mono" id="capTag"></div><div class="n" id="capN"></div><div class="w" id="capW"></div></div>
+  </div>
+
+  <div class="scene" id="facts">
+    <div class="fact" id="f1"><div class="k mono">The good part</div><div class="v serif">87% milk</div><div class="d">3.7 g protein per 100 ml</div></div>
+    <div class="fact" id="f2"><div class="k mono">The coffee</div><div class="v serif">0.5%</div><div class="d">instant coffee powder</div></div>
+    <div class="fact" id="f3"><div class="k mono">Added sugar, per bottle</div><div class="v serif">~12 g</div><div class="d">about 3 teaspoons</div><div id="spoons"><div class="spoon"><i></i><b></b></div><div class="spoon"><i></i><b></b></div><div class="spoon"><i></i><b></b></div></div></div>
+  </div>
+
+  <div class="scene" id="verdict">
+    <div id="burst"></div>
+    <div class="ring" id="big"><span id="bigNum">0</span></div>
+    <div id="vWord" class="serif"></div>
+    <div id="vLine"></div>
+    <div id="chips"><span class="c">Added sugar</span><span class="c">INS 407</span><span class="c">Caramel colour 150C</span><span class="s">87% milk</span></div>
+  </div>
+
+  <div class="scene" id="cta">
+    <div id="wipe"></div>
+    <div id="ctaHead" class="serif">Know it<br />before you <em>sip.</em></div>
+    <div id="ctaUrl">foodguards.space</div>
+    <div id="ctaSub">Every ingredient explained.<br />Scan your own pack — free.</div>
+  </div>
+
+  <div id="fine">From the pack’s own ingredient list &amp; nutrition panel. FoodGuard ingredient score (FSSAI, EFSA, WHO sources) — general information, not medical advice.</div>
+</div>
+
+<script>
+(async () => {
+  const TL = await (await fetch('timeline.json')).json();
+  const S = TL.scenes;
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+  const easeIO = (x) => { x = clamp(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+  const back = (x) => { x = clamp(x); const c = 1.70158; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+  const ringBg = (v, c) => `conic-gradient(${c} ${v}%, rgba(251,247,238,.16) 0)`;
+
+  // The label as printed (the pack spells it "Souluble"; shown corrected).
+  const PRINT = [[0, 'Double Toned Milk (87%)'], ', ', [1, 'Sugar'], ', ', [2, 'Soluble Coffee Powder (0.5%)'], ', Stabilizers (', [3, '471'], ', ', [4, '407'], ', ', [5, '401'], '), ',
+    [6, 'Colour (150C)'], ', ', [7, 'Nature Identical & Natural Flavouring Substances'], ' and ', [8, 'Acidity Regulators [340(ii), 340(iii), 452(i), 339(iii)]'], '.'];
+  const toks = [];
+  for (const part of PRINT) {
+    if (typeof part === 'string') { $('text').appendChild(document.createTextNode(part)); continue; }
+    const [i, txt] = part;
+    const el = document.createElement('span');
+    el.className = 'tok ' + TL.tokens[i][1];
+    el.textContent = txt;
+    $('text').appendChild(el);
+    toks[i] = el;
+  }
+  const tokTime = (i) => TL.firstToken + i * TL.tokenStep;
+  const lastTok = tokTime(TL.tokens.length - 1);
+
+  window.render = (t) => {
+    // Background drifts slowly the whole time.
+    $('bg').style.transform = `translate(${Math.sin(t / 4) * 40}px, ${Math.cos(t / 5) * 30}px) scale(${1.05 + Math.sin(t / 6) * 0.03})`;
+
+    // 1. Hook: the real bottle rises in, then the camera dives into it (zoom).
+    const [h0, h1] = S.hook;
+    const zoom = easeIO((t - h1 + 0.35) / 0.7);
+    $('hook').style.opacity = 1 - clamp((t - h1) / 0.35);
+    const rise = back((t - 0.1) / 0.9);
+    $('pack').style.transform = `translateY(${(1 - rise) * 500}px) rotate(${(1 - rise) * -8 + Math.sin(t * 1.6) * 1.2}deg) scale(${1 + zoom * 2.2})`;
+    $('pack').style.filter = `blur(${zoom * 14}px)`;
+    $('hookT1').style.opacity = ease((t - 0.8) / 0.5) * (1 - zoom);
+    $('hookT1').style.transform = `translateY(${(1 - ease((t - 0.8) / 0.5)) * 60}px)`;
+    $('hookT2').style.opacity = ease((t - 1.6) / 0.5) * (1 - zoom);
+    $('hookT2').style.transform = `translateY(${(1 - ease((t - 1.6) / 0.5)) * 60}px)`;
+
+    // 2. Label: comes out of the zoom, each ingredient lights up in turn.
+    const [l0, l1] = S.label;
+    const lin = easeIO((t - l0 + 0.15) / 0.65);
+    const push = easeIO((t - l1 + 0.25) / 0.6);
+    $('label').style.opacity = t < l0 - 0.15 ? 0 : clamp(lin * 1.4) * (t > l1 + 0.4 ? 0 : 1);
+    $('label').style.transform = `translateX(${push * -1180}px) scale(${0.82 + 0.18 * lin}) rotate(${push * -4}deg)`;
+    $('label').style.filter = `blur(${(1 - lin) * 10 + push * 6}px)`;
+    let done = 0;
+    TL.tokens.forEach((_, i) => { if (t >= tokTime(i)) done = i + 1; });
+    toks.forEach((el, i) => { el.classList.toggle('on', i < done); el.classList.toggle('now', i === done - 1 && t < lastTok + TL.tokenStep); });
+    const cur = TL.tokens[done - 1];
+    $('cap').style.opacity = cur ? 1 : 0;
+    if (cur) {
+      const into = ease((t - tokTime(done - 1)) / 0.28);
+      $('cap').style.transform = `translateY(${(1 - into) * 40}px) scale(${0.96 + 0.04 * into})`;
+      $('cap').className = cur[1] === 'c' ? 'c' : '';
+      $('capTag').textContent = cur[1] === 'c' ? 'Worth a closer look' : 'Fine';
+      $('capTag').style.color = cur[1] === 'c' ? '#e8710a' : '#1e8e3e';
+      $('capN').textContent = cur[0];
+      $('capW').textContent = cur[2];
+    }
+    const prog = TL.score * clamp((t - TL.firstToken) / (lastTok - TL.firstToken + 0.6));
+    $('ring').style.background = ringBg(prog, '#e0a100');
+    $('ringNum').textContent = Math.round(prog);
+    const decoded = t >= lastTok + 0.6;
+    $('meterWord').textContent = decoded ? 'Decoded' : 'Reading the label…';
+    $('liveTxt').textContent = decoded ? 'Decoded' : 'Decoding';
+
+    // 3. Facts: pushed in from the right, cards drop in one by one.
+    const [f0, f1] = S.facts;
+    const fin = easeIO((t - f0 + 0.25) / 0.6);
+    $('facts').style.opacity = t < f0 - 0.3 ? 0 : 1;
+    $('facts').style.transform = `translateX(${(1 - fin) * 1180}px)`;
+    $('facts').style.visibility = t > f1 + 0.3 ? 'hidden' : 'visible';
+    ['f1', 'f2', 'f3'].forEach((id, i) => {
+      const q = back((t - f0 - 0.15 - i * 0.45) / 0.55);
+      $(id).style.transform = `translateY(${(1 - q) * 80}px) rotate(${(1 - q) * (i % 2 ? 3 : -3)}deg)`;
+      $(id).style.opacity = clamp((t - f0 - 0.15 - i * 0.45) / 0.25);
+    });
+    document.querySelectorAll('.spoon i').forEach((el, i) => {
+      const s0 = TL.spoons[i];
+      // 12.4 g / 4 g a teaspoon = 3.1: two full spoons, then three-quarters
+      // of a third reads as "about 3" without overstating it.
+      const full = i < 2 ? 100 : 75;
+      el.style.setProperty('--fill', `${clamp((t - s0) / 0.3) * full}%`);
+    });
+
+    // 4. Verdict: a saffron burst opens it, the score fills.
+    const [v0, v1] = S.verdict;
+    const b = easeIO((t - v0 + 0.15) / 0.55);
+    $('verdict').style.opacity = t < v0 - 0.15 ? 0 : 1;
+    $('verdict').style.visibility = t > v1 + 0.6 ? 'hidden' : 'visible';
+    $('burst').style.transform = `translate(-50%, -50%) scale(${b * 260})`;
+    $('burst').style.opacity = 1 - clamp((t - v0 - 0.2) / 0.5);
+    const sp = ease((t - v0) / 1.3);
+    $('big').style.background = ringBg(TL.score * sp, '#e0a100');
+    $('big').style.transform = `scale(${0.6 + 0.4 * back((t - v0) / 0.7)})`;
+    $('bigNum').textContent = Math.round(TL.score * sp);
+    $('vWord').textContent = TL.verdict;
+    $('vWord').style.opacity = ease((t - v0 - 0.9) / 0.4);
+    $('vWord').style.transform = `translateY(${(1 - ease((t - v0 - 0.9) / 0.4)) * 40}px)`;
+    $('vLine').textContent = TL.flaggedLine;
+    $('vLine').style.opacity = ease((t - v0 - 1.25) / 0.4);
+    [...$('chips').children].forEach((el, i) => { const q = back((t - v0 - 1.6 - i * 0.2) / 0.4); el.style.opacity = clamp((t - v0 - 1.6 - i * 0.2) / 0.2); el.style.transform = `scale(${0.6 + 0.4 * q})`; });
+
+    // 5. CTA: a saffron-edged panel wipes up over everything.
+    const [c0] = S.cta;
+    const w = easeIO((t - c0 + 0.3) / 0.7);
+    $('cta').style.opacity = t < c0 - 0.3 ? 0 : 1;
+    $('wipe').style.top = `${1920 - w * 2010}px`;
+    $('ctaHead').style.opacity = ease((t - c0 - 0.2) / 0.5);
+    $('ctaHead').style.transform = `translateY(${(1 - ease((t - c0 - 0.2) / 0.5)) * 70}px)`;
+    $('ctaUrl').style.opacity = ease((t - c0 - 0.7) / 0.4);
+    $('ctaUrl').style.transform = `scale(${0.8 + 0.2 * back((t - c0 - 0.7) / 0.5)})`;
+    $('ctaSub').style.opacity = ease((t - c0 - 1.1) / 0.5);
+  };
+
+  await document.fonts.ready;
+  await Promise.all([...document.images].map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })));
+  window.render(0);
+  window.READY = true;
+})();
+</script>
+</body>
+</html>
