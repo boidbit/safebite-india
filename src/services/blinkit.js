@@ -170,7 +170,7 @@ async function curlGet(url) {
  * host, so it's attached defensively (harmless where it isn't needed)
  * rather than assumed to be the whole fix for this path.
  */
-async function fetchImageBuffer(url) {
+export async function fetchImageBuffer(url) {
   try {
     const args = ['-sS', '--max-time', '20', '-A', USER_AGENT];
     if (cfCookies) args.push('-H', `Cookie: ${cfCookies.header}`);

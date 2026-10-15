@@ -6,7 +6,8 @@
 
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { researchIngredients } from './geminiService.js';
-import { isJunkIngredient, neutralizeJunk } from './typoIngredient.js';
+import { isJunkIngredient, neutralizeJunk, suggestedName } from './typoIngredient.js';
+import { parseIngredients } from './ingredientParser.js';
 
 /**
  * Fetch every ingredient we already know about, matching on either the
@@ -127,7 +128,7 @@ function bumpCounts(rows) {
  *
  * Returns { ingredients, knownCount, researchedCount }.
  */
-export async function resolveIngredients(parsed) {
+export async function resolveIngredients(parsed, { correctTypos = true } = {}) {
   const rows = await fetchKnown(parsed);
 
   const resolved = new Array(parsed.length).fill(null);
@@ -197,9 +198,37 @@ export async function resolveIngredients(parsed) {
     );
   }
 
+  if (correctTypos) researchedCount += await correctTypoIngredients(resolved, parsed);
+
   return {
     ingredients: resolved.filter(Boolean),
     knownCount: hitRows.length,
     researchedCount,
   };
+}
+
+/**
+ * A junk entry whose own explanation names the real ingredient ("This is a typo
+ * for 'rice flour'") is swapped for that ingredient, looked up the normal way.
+ * Kept only when the corrected name resolves to a real (non-junk) ingredient;
+ * otherwise the neutral junk entry stays. Mutates `resolved`; returns how many
+ * were researched fresh.
+ */
+async function correctTypoIngredients(resolved, parsed) {
+  const fixes = [];
+  resolved.forEach((ing, index) => {
+    if (!ing || !isJunkIngredient(ing)) return;
+    const name = suggestedName(ing);
+    const item = name && parseIngredients(name)[0];
+    if (!item) return;
+    fixes.push({ index, item: { ...item, percentage: parsed[index].percentage, estimatedPercentage: parsed[index].estimatedPercentage } });
+  });
+  if (!fixes.length) return 0;
+  const { ingredients, researchedCount } = await resolveIngredients(fixes.map((f) => f.item), { correctTypos: false });
+  // resolveIngredients drops what it couldn't resolve, so match back by name.
+  for (const fix of fixes) {
+    const real = ingredients.find((i) => i.name === fix.item.displayName);
+    if (real && !isJunkIngredient(real)) resolved[fix.index] = { ...real, correctedFrom: resolved[fix.index].name };
+  }
+  return researchedCount;
 }

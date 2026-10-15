@@ -3,6 +3,7 @@
 // report instead of paying for a fresh AI call every time.
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { searchTokens, rankMatches } from './productMatch.js';
+import { recordJunkIssue } from './junkIssues.js';
 // The keyword-only data, not categories.js -- that file also imports
 // each category's .png, which plain-Node scripts importing this module
 // (generate-reports.js, discover-off-products.js) can't load outside Vite.
@@ -740,4 +741,7 @@ export async function saveReport({ lookupKey, source, productName, ingredientsTe
   }
 
   await upsertProductNutrition(lookupKey, productName, report);
+
+  // Typo / OCR junk still on the list -> the admin's manual review (Data Issues).
+  await recordJunkIssue({ lookupKey, source, productName, report });
 }

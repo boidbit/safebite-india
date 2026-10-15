@@ -27,3 +27,29 @@ export function neutralizeJunk(record) {
   if (!isJunkIngredient(record)) return record;
   return { ...record, status: 'safe', penalty: 0, recognized: false };
 }
+
+// "This is a typo for 'rice flour'", "a common misspelling of Arachidonic Acid",
+// "likely intended to be 'milk solids'". Only a single named answer counts --
+// "typo for 'cardamom' or 'curd'" is a guess between two, not a correction.
+const QUOTED = /(?:typo(?:graphical error)?|misspel\w*|mis-?spelt)\s+(?:for|of)\s+['"‘“]([^'"’”]{2,40})['"’”]|(?:meant|intended)\s+to\s+be\s+['"‘“]([^'"’”]{2,40})['"’”]/i;
+const BARE = /(?:typo(?:graphical error)?|misspel\w*)\s+(?:for|of)\s+([a-z0-9][a-z0-9 ]{1,30}?)(?=\s*[,.;(]|\s+which|\s+and\b|\s+that\b|$)/i;
+
+/**
+ * The real ingredient a junk entry is a typo of, when its own explanation names
+ * exactly one -- or null.
+ */
+export function suggestedName(record) {
+  if (!record) return null;
+  for (const text of [record.reason, record.whatIsIt]) {
+    if (!text) continue;
+    const m = text.match(QUOTED) || text.match(BARE);
+    if (!m) continue;
+    const name = (m[1] || m[2]).trim();
+    const after = text.slice(m.index + m[0].length);
+    if (/^\s*(?:or|\/)\s/i.test(after)) return null; // "'cardamom' or 'curd'"
+    if (!/[a-z]/i.test(name) || name.split(/\s+/).length > 5) return null;
+    if (/^(?:a|an|the)\s/i.test(name)) return null; // "a standard food additive code" describes, doesn't name
+    return name;
+  }
+  return null;
+}

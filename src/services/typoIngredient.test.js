@@ -25,3 +25,17 @@ test('junk is scored as nothing', () => {
   assert.equal(out.recognized, false);
   assert.equal(out.name, 'Sod');
 });
+
+test('suggestedName reads the one real ingredient a typo stands for', async () => {
+  const { suggestedName } = await import('./typoIngredient.js');
+  assert.equal(suggestedName({ reason: "This is a typo for 'rice flour', which is a common, safe grain product." }), 'rice flour');
+  assert.equal(suggestedName({ reason: 'This appears to be a typo for \'Black Pepper\', a standard spice.' }), 'Black Pepper');
+  assert.equal(suggestedName({ reason: 'This is likely a misspelling of sodium sesquicarbonate (INS 500iii), safe.' }), 'sodium sesquicarbonate');
+  assert.equal(suggestedName({ reason: 'This is likely a typo for INS 200 (Sorbic Acid), a common preservative.' }), 'INS 200');
+  assert.equal(suggestedName({ reason: "The word is likely intended to be 'milk solids'." }), 'milk solids');
+  assert.equal(suggestedName({ reason: "This is likely a typo for 'cardamom' or 'curd', but as written it is not recognized." }), null);
+  assert.equal(suggestedName({ reason: 'This appears to be a typo or non-standard ingredient name.' }), null);
+  assert.equal(suggestedName({ reason: 'This is a random word or incomplete label fragment, not a food ingredient.' }), null);
+  assert.equal(suggestedName({ reason: 'This is likely a typo for a standard food additive code.' }), null);
+  assert.equal(suggestedName(null), null);
+});
