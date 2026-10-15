@@ -22,6 +22,7 @@ import { adminApprovedBarcodeFor } from '../../services/adminBarcodeLinksRepo';
 import { StatusPill } from './AdminProducts';
 import { extractIngredientsFromImage } from '../../services/geminiService';
 import { perServingToPer100 } from '../../services/labelNutrition';
+import VideoMakerButton from './VideoMakerButton';
 import { lookupBarcode } from '../../services/openFoodFacts';
 import { parseLabel, looksLikeNutritionPanel, findIngredientTextIssues } from '../../services/ingredientParser';
 import { barcodeKey, textKey } from '../../services/productCache';
@@ -911,6 +912,9 @@ export default function AdminProductForm({ copyMode = false }) {
           </div>
         </div>
       )}
+
+      {/* Only approved products go on the website, so only they get a video. */}
+      {isEdit && reviewStatus === 'approved' && id && <VideoMakerButton productId={id} />}
 
       <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)' }}>
         <div>

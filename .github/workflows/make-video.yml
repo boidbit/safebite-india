@@ -20,7 +20,7 @@ on:
         required: false
         default: ''
 
-run-name: 'Video: ${{ inputs.product }}'
+run-name: "Video: ${{ inputs.product }}${{ inputs.job_id && format(' [{0}]', inputs.job_id) || '' }}"
 
 permissions:
   contents: read
