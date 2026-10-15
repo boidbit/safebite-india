@@ -19,7 +19,17 @@ const SR = 44100;
 const N = Math.ceil(TL.duration * SR);
 const L = new Float32Array(N), R = new Float32Array(N);
 const sendL = new Float32Array(N), sendR = new Float32Array(N); // reverb send
-const BEAT = 60 / TL.bpm;
+// Five feels, chosen per product by make.mjs (timeline.music); a hand-made
+// short without one keeps its own bpm and the original "warm" feel.
+const PRESETS = {
+  warm: { bpm: 104, chords: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]], hats: 2, swing: 0, halfKick: false, ting: 1318.5, hookHz: 110 }, // Am F C G
+  bright: { bpm: 112, chords: [[60, 64, 67], [55, 59, 62], [57, 60, 64], [53, 57, 60]], hats: 4, swing: 0, halfKick: false, ting: 1568, hookHz: 130.8 }, // C G Am F
+  chill: { bpm: 96, chords: [[62, 65, 69], [58, 62, 65], [53, 57, 60], [60, 64, 67]], hats: 2, swing: 0.1, halfKick: true, ting: 1174.7, hookHz: 146.8 }, // Dm Bb F C
+  pulse: { bpm: 118, chords: [[64, 67, 71], [60, 64, 67], [55, 59, 62], [62, 66, 69]], hats: 4, swing: 0, halfKick: false, ting: 1318.5, hookHz: 164.8 }, // Em C G D
+  lofi: { bpm: 90, chords: [[53, 57, 60, 64], [50, 53, 57, 60], [58, 62, 65, 69], [48, 52, 55, 58]], hats: 2, swing: 0.18, halfKick: true, ting: 1396.9, hookHz: 87.3 }, // Fmaj7 Dm7 Bbmaj7 C7
+};
+const MUSIC = { ...PRESETS[TL.music] || PRESETS.warm, ...(TL.music ? {} : { bpm: TL.bpm || 104 }) };
+const BEAT = 60 / MUSIC.bpm;
 const TAU = Math.PI * 2;
 let seed = 7;
 const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 * 2 - 1; };
@@ -62,7 +72,7 @@ function noiseHit(t0, len, decay, cutoff, gain, pan = 0, hp = false) {
 }
 const hat = (t0) => noiseHit(t0, 0.08, 0.025, 7000, 0.18, 0.3, true);
 const clap = (t0) => { for (const d of [0, 0.012, 0.024]) noiseHit(t0 + d, 0.25, 0.09, 2200, 0.22, -0.2); };
-const ting = (t0) => add(t0, 0.9, (t) => env(t, 0.003, 0.22) * (Math.sin(TAU * 1318.5 * t) + 0.45 * Math.sin(TAU * 2637 * t) + 0.2 * Math.sin(TAU * 3955 * t)), { gain: 0.22, pan: 0.25, send: 0.55 });
+const ting = (t0) => add(t0, 0.9, (t) => env(t, 0.003, 0.22) * (Math.sin(TAU * MUSIC.ting * t) + 0.45 * Math.sin(TAU * 2 * MUSIC.ting * t) + 0.2 * Math.sin(TAU * 3 * MUSIC.ting * t)), { gain: 0.22, pan: 0.25, send: 0.55 });
 const bloop = (t0) => add(t0, 0.5, (t) => {
   const f = 330 - 120 * Math.min(1, t / 0.18);
   const tri = (2 / Math.PI) * Math.asin(Math.sin(TAU * f * t));
@@ -101,7 +111,7 @@ function sparkle(t0) {
 // ---- arrangement ----
 const S = TL.scenes;
 const drumsOn = (t) => (t >= S.label[0] && t < S.facts[1] - 0.6) || (t >= S.verdict[0] && t < S.cta[0]);
-const CHORDS = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]]; // Am F C G
+const CHORDS = MUSIC.chords;
 const BAR = BEAT * 4;
 for (let bar = 0; bar * BAR < TL.duration; bar++) {
   const t0 = bar * BAR;
@@ -113,14 +123,15 @@ for (let bar = 0; bar * BAR < TL.duration; bar++) {
     if (tb >= TL.duration) break;
     if (tb >= S.label[0] - 0.01 && !(tb >= S.facts[1] - 0.6 && tb < S.verdict[0])) bass(tb, ch[0] - 12, b % 2 === 0 ? 0.35 : 0.22);
     if (drumsOn(tb)) {
-      kick(tb, b === 0 ? 0.85 : 0.65);
-      hat(tb + BEAT / 2);
+      if (!MUSIC.halfKick || b % 2 === 0) kick(tb, b === 0 ? 0.85 : 0.65);
+      if (MUSIC.hats === 4) [0.25, 0.5, 0.75].forEach((q) => hat(tb + BEAT * q));
+      else hat(tb + BEAT / 2 + MUSIC.swing * BEAT / 2);
       if (b % 2 === 1 && tb > TL.firstToken) clap(tb);
     }
   }
 }
 // The hook: a soft pulse before the beat drops.
-for (let tb = 0.4; tb < S.hook[1] - 0.3; tb += BEAT) add(tb, 0.4, (t) => env(t, 0.01, 0.12) * Math.sin(TAU * 110 * t), { gain: 0.25 });
+for (let tb = 0.4; tb < S.hook[1] - 0.3; tb += BEAT) add(tb, 0.4, (t) => env(t, 0.01, 0.12) * Math.sin(TAU * MUSIC.hookHz * t), { gain: 0.25 });
 
 TL.tokens.forEach(([, kind], i) => (kind === 'c' ? bloop : ting)(TL.firstToken + i * TL.tokenStep));
 for (const tr of TL.transitions) {
@@ -167,4 +178,4 @@ head.write('data', 36); head.writeUInt32LE(data.length, 40);
 const out = path.join(__dirname, '..', 'out', `${name}.wav`);
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, Buffer.concat([head, data]));
-console.log(`wrote ${out} (${TL.duration}s)`);
+console.log(`wrote ${out} (${TL.duration}s, ${TL.music || 'warm'} @ ${MUSIC.bpm} bpm)`);

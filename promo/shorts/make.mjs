@@ -27,7 +27,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const outIdx = args.indexOf('--out');
 const OUT = outIdx !== -1 ? path.resolve(args[outIdx + 1]) : path.join(HERE, '..', 'out');
-const query = args.filter((a, i) => outIdx === -1 || (i !== outIdx && i !== outIdx + 1)).join(' ').trim();
+// --plan: print the hook, sign-off, music and facts it would use, render nothing.
+const PLAN = args.includes('--plan');
+const query = args.filter((a, i) => a !== '--plan' && (outIdx === -1 || (i !== outIdx && i !== outIdx + 1))).join(' ').trim();
 // On GitHub the reason also goes to the top of the run's page (an error
 // annotation and the job summary), which is where the admin panel sends you.
 const fail = (msg) => {
@@ -174,17 +176,43 @@ const hookName = shortName.length <= 26 ? shortName : shortName.split(/\s+/).sli
 const chips = flaggedAll.filter(decodable).slice(0, 4).map((i) => [i.insCode ? `INS ${i.insCode}` : shorten(i.name.replace(/\s*\(.*\)$/, ''), 22), 'c']);
 if (facts[0]?.tone === 'good') chips.push([`${facts[0].v} ${facts[0].k === 'Protein' ? 'protein' : main.name.toLowerCase().split(/\s+/).pop()}`, 's']);
 const drink = unit === 'ml';
+
+// The hook leads with this product's most telling fact, so no two videos open
+// the same way. First match wins; every line is a plain fact from the pack.
+const packWord = drink ? (/\bcan\b/i.test(name) ? 'can' : 'bottle') : /\bcup\b/i.test(name) ? 'cup' : 'pack';
+const sugarTsp = sugarFact ? Number(sugarFact.d.match(/about ([\d½]+)/)?.[1]?.replace('½', '.5')) : 0;
+const flavourWord = named ? name.split(/\s+/).find((w) => stem(w.toLowerCase().replace(/[^a-z]/g, '')) === stem(named.name.toLowerCase().split(/\s+/).find((x) => nameWords.has(stem(x.replace(/[^a-z]/g, '')))) || '')) : null;
+const hook =
+  sugarFact && sugarTsp >= 2 && sugarFact.k.includes('per pack') ? [`${sugarFact.d.replace('about ', '').replace(/^./, (c) => c.toUpperCase())} of added sugar.`, `In one ${pack} ${packWord}.`]
+  : named && named.percentage < 10 && flavourWord ? [`“${flavourWord.replace(/[^A-Za-z]/g, '')}” ${hookNameTail(shortName, flavourWord)}.`, `${round1(named.percentage)}% ${named.name.toLowerCase()}.`]
+  : additives >= 6 ? [`${additives} additives.`, `In one ${packWord}.`]
+  : score >= 85 ? ['A label that passes.', `All ${ings.length} ingredients check out.`]
+  : [`${hookName}.`, 'What’s really inside?'];
+function hookNameTail(full, word) {
+  // "Spicy Cheesy Cup Noodles" + "Cheesy" -> "cup noodles"
+  const words = full.split(/\s+/);
+  const i = words.findIndex((w) => w.toLowerCase().includes(word.toLowerCase()));
+  return words.slice(i + 1).join(' ').toLowerCase() || 'pack';
+}
+
+// The sign-off and the soundtrack change from product to product (picked by
+// its id, so the same product always gets the same ones).
+const pickBy = (list, salt) => list[[...`${row.id}${salt}`].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % list.length];
+const CTAS = drink
+  ? ['Know it<br />before you <em>sip.</em>', 'Check it<br />before you <em>pour.</em>', 'Your fridge,<br /><em>decoded.</em>', 'Scan yours<br /><em>free.</em>']
+  : ['Know it<br />before you <em>buy.</em>', 'Your shelf,<br /><em>decoded.</em>', 'Scan yours<br /><em>free.</em>', 'Read any label<br />in <em>seconds.</em>'];
+const MUSIC = ['warm', 'bright', 'chill', 'pulse', 'lofi'];
 const TL = {
   _: `Made by shorts/make.mjs from product ${row.id} (${name}). Facts from the pack's ingredient list and nutrition panel as saved in FoodGuard.`,
-  duration, bpm: 104,
+  duration, music: pickBy(MUSIC, 'music'),
   scenes: { hook: [0, 3.4], label: [3.4, labelEnd], facts: [labelEnd, factsEnd], verdict: [factsEnd, verdictEnd], cta: [verdictEnd, duration] },
   transitions: [{ t: 3.4, kind: 'zoom' }, { t: labelEnd, kind: 'push' }, { t: factsEnd, kind: 'burst' }, { t: verdictEnd, kind: 'wipe' }],
   firstToken, tokenStep, tokens, print, labelFont,
   spoons: sugarFact ? sugarFact.spoons.map((_, i) => round1(spoonStart + i * 0.35)) : [],
   facts, chips, score, verdict,
   flaggedLine: flaggedAll.length ? `${flaggedAll.length} of ${ings.length} ingredients worth a closer look` : `All ${ings.length} ingredients check out`,
-  hook: [`${hookName}.`, 'What’s really inside?'],
-  cta: `Know it<br />before you <em>${drink ? 'sip' : 'buy'}.</em>`,
+  hook,
+  cta: pickBy(CTAS, 'cta'),
   product: { id: row.id, name, brand, title: `${shorten(name, 38)}${pack ? ` · ${pack}` : ''}` },
 };
 
@@ -194,6 +222,10 @@ const dir = path.join(HERE, slug);
 fs.mkdirSync(dir, { recursive: true });
 fs.copyFileSync(path.join(HERE, '_template.html'), path.join(dir, 'index.html'));
 fs.writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(TL, null, 2));
+if (PLAN) {
+  console.log(JSON.stringify({ product: name, hook: TL.hook, cta: TL.cta.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(), music: TL.music, facts: TL.facts.map((fc) => `${fc.k}: ${fc.v} (${fc.d})`), score: `${score} ${verdict}` }, null, 1));
+  process.exit(0);
+}
 // White margins trimmed off so the pack fills its card (a listing photo can be half empty).
 const photo = Buffer.from(await (await fetch(r.imageUrl)).arrayBuffer());
 await sharp(photo).flatten({ background: '#ffffff' }).trim({ threshold: 18 }).extend({ top: 24, bottom: 24, left: 24, right: 24, background: '#ffffff' }).jpeg({ quality: 92 }).toFile(path.join(dir, 'pack.jpg'));
