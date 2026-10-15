@@ -16,8 +16,13 @@ import howWeScore from '../site/pages/how-we-score.js';
 import about from '../site/pages/about.js';
 import disclaimer from '../site/pages/disclaimer.js';
 import notFound from '../site/pages/not-found.js';
+import { assignSlugs, productPage, productPath, productsDirectory, alternativesFor } from '../site/products.js';
 
 const OUT = 'dist';
+// Product pages (/product/<slug>/, /products/): off by default until they're
+// signed off. --products=10 builds a small sample locally; --products=all
+// (or SITE_PRODUCT_PAGES=all) builds every live/approved product.
+const productsArg = (process.argv.find((a) => a.startsWith('--products=')) || '').split('=')[1] || process.env.SITE_PRODUCT_PAGES || '';
 const PAGES = [home, howWeScore, about, disclaimer];
 
 async function loadStats() {
@@ -79,10 +84,58 @@ for (const make of [...PAGES, notFound]) {
   built.push(page.path);
 }
 
+const productUrls = [];
+if (productsArg) {
+  const { supabase } = await import('../src/services/supabaseClient.js');
+  // The whole catalog, slim (for slugs, alternatives and the directory).
+  const catalog = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from('product_reports')
+      .select('id, product_name, scan_count, updated_at, brand:report->>brand, packSize:report->>packSize, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict, infant:report->>isInfantFormula')
+      .in('review_status', ['live', 'approved']).order('id').range(from, from + 999);
+    if (error) throw new Error(`catalog: ${error.message}`);
+    // Infant formula gets no public score page -- the app keeps it out of
+    // every spotlight too (a specially regulated product, adult limits don't apply).
+    catalog.push(...data.filter((r) => r.product_name && typeof r.score === 'number' && r.infant !== 'true').map((r) => ({ ...r, name: r.product_name })));
+    if (data.length < 1000) break;
+  }
+  assignSlugs(catalog);
+
+  let chosen = catalog;
+  if (productsArg !== 'all') {
+    // A sample across the bands: popular products first, two per band.
+    const n = Number(productsArg) || 10;
+    const bands = ['Excellent', 'Good', 'Moderate', 'Poor', 'Very Poor'];
+    const popular = [...catalog].sort((a, b) => (b.scan_count || 0) - (a.scan_count || 0));
+    chosen = bands.flatMap((v) => popular.filter((p) => p.verdict === v).slice(0, Math.ceil(n / bands.length))).slice(0, n);
+  }
+
+  // Full detail (ingredients, nutrition) only for the pages being built.
+  const detail = new Map();
+  for (let i = 0; i < chosen.length; i += 100) {
+    const { data, error } = await supabase.from('product_reports')
+      .select('id, summary:report->>summary, ingredients:report->ingredients, per100:report->nutrientsPer100, foodType:report->>foodType')
+      .in('id', chosen.slice(i, i + 100).map((p) => p.id));
+    if (error) throw new Error(`detail: ${error.message}`);
+    for (const d of data) detail.set(d.id, d);
+  }
+  for (const p of chosen) {
+    const page = productPage({ ...p, ...detail.get(p.id) }, { alternatives: alternativesFor(p, catalog) });
+    write(page.path, layout(page));
+    productUrls.push({ path: page.path, lastmod: String(p.updated_at || '').slice(0, 10) });
+  }
+  const dir = productsDirectory(productsArg === 'all' ? catalog : chosen);
+  write(dir.path, layout(dir));
+  productUrls.push({ path: dir.path });
+  console.log(`website: ${chosen.length} product pages + /products/`);
+  for (const p of chosen.slice(0, 12)) console.log(`  ${p.verdict.padEnd(9)} ${productPath(p)}`);
+}
+
 const today = new Date().toISOString().slice(0, 10);
 fs.writeFileSync(path.join(OUT, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${PAGES.map((m) => `  <url><loc>${SITE_URL}${m({ stats }).path}</loc><lastmod>${today}</lastmod></url>`).join('\n')}
+${productUrls.map((u) => `  <url><loc>${SITE_URL}${u.path}</loc><lastmod>${u.lastmod || today}</lastmod></url>`).join('\n')}
 </urlset>
 `);
 fs.writeFileSync(path.join(OUT, 'robots.txt'), `User-agent: *
