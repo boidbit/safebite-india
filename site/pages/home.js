@@ -5,7 +5,7 @@ const TIER_COLOR = { Excellent: 'var(--t-excellent)', Good: 'var(--t-good)', Mod
 
 function exampleCard(p) {
   const color = TIER_COLOR[p.verdict] || 'var(--ink-3)';
-  return `<a class="ex" href="${APP_URL}#/p/${encodeURIComponent(p.id)}">
+  return `<a class="ex" href="${p.href || `${APP_URL}#/p/${encodeURIComponent(p.id)}`}">
     ${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" loading="lazy" />` : ''}
     <div class="meta">
       ${p.brand ? `<div class="brand-n">${esc(p.brand)}</div>` : ''}
@@ -36,7 +36,7 @@ const DECODER_LABEL = [
 
 function shelfItem(p, duplicate) {
   const color = TIER_COLOR[p.verdict] || 'var(--ink-3)';
-  return `<a class="shelf-item" href="${APP_URL}#/p/${encodeURIComponent(p.id)}"${duplicate ? ' aria-hidden="true" tabindex="-1"' : ''}>
+  return `<a class="shelf-item" href="${p.href || `${APP_URL}#/p/${encodeURIComponent(p.id)}`}"${duplicate ? ' aria-hidden="true" tabindex="-1"' : ''}>
     <span class="shelf-pack"><img src="${esc(p.imageUrl)}" alt="${duplicate ? '' : esc(p.name)}" loading="lazy" /></span>
     <span class="shelf-badge" style="background:${color}">${p.score}</span>
     <span class="shelf-name">${esc(p.name)}</span>
@@ -105,7 +105,8 @@ export default function home({ stats }) {
 <div class="barcode-strip" aria-hidden="true"></div>
 
 ${shelf.length >= 6 ? `<section class="shelf-sec" aria-label="Products already checked">
-  <div class="wrap shelf-head"><div class="eyebrow">On the shelf</div><h2>${total ? `${total} foods` : 'Thousands of foods'}, already decoded.</h2></div>
+  <div class="wrap shelf-head"><div class="eyebrow">On the shelf</div><h2>${total ? `${total} foods` : 'Thousands of foods'}, already decoded.</h2>
+    ${stats?.productCount ? `<a class="btn btn-primary shelf-all" href="/products/">Browse ${stats.productCount.toLocaleString('en-IN')} products →</a>` : ''}</div>
   <div class="shelf"><div class="shelf-track">${[...shelf, ...shelf].map((p, i) => shelfItem(p, i >= shelf.length)).join('')}</div></div>
 </section>` : ''}
 

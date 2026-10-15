@@ -36,13 +36,20 @@ jobs:
 
       - run: npm ci
 
+      # The website's product details, kept between deploys so each build
+      # only fetches products that changed (scripts/build-site.js).
+      - uses: actions/cache@v4
+        with:
+          path: .site-cache
+          key: site-cache-${{ github.run_id }}
+          restore-keys: site-cache-
+
       - name: Build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          # Website product pages (scripts/build-site.js): a 10-product sample
-          # for now; 'all' once the design is signed off.
-          SITE_PRODUCT_PAGES: '10'
+          # Website product pages (scripts/build-site.js): every approved product.
+          SITE_PRODUCT_PAGES: 'all'
         run: npm run build
 
       - uses: actions/upload-pages-artifact@v3

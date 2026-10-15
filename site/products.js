@@ -194,12 +194,18 @@ export function productsDirectory(products) {
     path: '/products/',
     title: 'All products',
     description: `Ingredient scores for ${products.length.toLocaleString('en-IN')} packaged foods sold in India, by brand — every ingredient explained.`,
+    scripts: ['/assets/directory.js'],
     body: `
 <div class="page-head"><div class="wrap">
   <div class="eyebrow">Directory</div>
   <h1>All products</h1>
   <p>${products.length.toLocaleString('en-IN')} packaged foods, by brand. Can’t find one? <a href="${APP_URL}">Scan it in the app</a>.</p>
 </div></div>
+<div class="dir-tools"><div class="wrap">
+  <input class="dir-search" type="search" placeholder="Search a product or brand…" aria-label="Search products" />
+  <nav class="az" aria-label="Brands A to Z">${[...new Set(brands.map((b) => (/[a-z]/i.test(b[0]) ? b[0].toUpperCase() : '#')))].map((l) => `<a href="#${esc(slugify(brands.find((b) => (/[a-z]/i.test(b[0]) ? b[0].toUpperCase() : '#') === l)))}">${l}</a>`).join('')}</nav>
+</div></div>
+<div class="wrap"><p class="dir-empty">No product matches that. <a href="${APP_URL}">Scan it in the app</a>.</p></div>
 <div class="wrap dir">
 ${brands.map((b) => `<section class="dir-brand" id="${esc(slugify(b))}"><h2>${esc(b)}</h2><ul>${byBrand.get(b).sort((x, y) => x.name.localeCompare(y.name)).map((p) => `<li><a href="${productPath(p)}">${esc(p.name)}${p.packSize ? ` <span>${esc(p.packSize)}</span>` : ''}</a> <b style="color:${(TIER[p.verdict] || {}).color}">${p.score}</b></li>`).join('')}</ul></section>`).join('\n')}
 </div>`,

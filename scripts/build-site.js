@@ -95,14 +95,16 @@ const stats = await loadStats();
 fs.mkdirSync(OUT, { recursive: true });
 fs.cpSync('site/assets', path.join(OUT, 'assets'), { recursive: true });
 
-const built = [];
-for (const make of [...PAGES, notFound]) {
-  const page = make({ stats });
-  write(page.path, layout(page));
-  built.push(page.path);
-}
+// Product details (ingredients, nutrition) are ~6 KB each. Kept between
+// builds in .site-cache/ (GitHub Actions cache, see deploy-pages.yml) so a
+// deploy only fetches products that are new or changed since the last one --
+// every push deploys, and re-reading all of them each time would eat the
+// Supabase egress allowance.
+const CACHE_FILE = '.site-cache/product-details.json';
+const slimIngredient = (i) => ({ name: i.name, status: i.status, reason: i.reason, whatIsIt: i.whatIsIt, insCode: i.insCode, recognized: i.recognized, penalty: i.penalty });
 
 const productUrls = [];
+let productCount = 0;
 if (productsArg) {
   const { supabase } = await import('../src/services/supabaseClient.js');
   // The whole catalog, slim (for slugs, alternatives and the directory).
@@ -127,6 +129,7 @@ if (productsArg) {
     if (data.length < PAGE) break;
   }
   assignSlugs(catalog);
+  productCount = catalog.length;
 
   let chosen = catalog;
   if (productsArg !== 'all') {
@@ -137,18 +140,33 @@ if (productsArg) {
     chosen = bands.flatMap((v) => popular.filter((p) => p.verdict === v).slice(0, Math.ceil(n / bands.length))).slice(0, n);
   }
 
-  // Full detail (ingredients, nutrition) only for the pages being built.
-  const detail = new Map();
-  for (let i = 0; i < chosen.length; i += 100) {
-    const { data, error } = await supabase.from('product_reports')
-      .select('id, summary:report->>summary, ingredients:report->ingredients, per100:report->nutrientsPer100, foodType:report->>foodType')
-      .in('id', chosen.slice(i, i + 100).map((p) => p.id));
+  let cache = {};
+  try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { /* first build */ }
+  const stale = chosen.filter((p) => cache[p.id]?.updated_at !== p.updated_at);
+  for (let i = 0; i < stale.length; i += 100) {
+    let data, error;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      ({ data, error } = await supabase.from('product_reports')
+        .select('id, summary:report->>summary, ingredients:report->ingredients, per100:report->nutrientsPer100, foodType:report->>foodType')
+        .in('id', stale.slice(i, i + 100).map((p) => p.id)));
+      if (!error) break;
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
     if (error) throw new Error(`detail: ${error.message}`);
-    for (const d of data) detail.set(d.id, d);
+    const when = new Map(stale.map((p) => [p.id, p.updated_at]));
+    for (const d of data) cache[d.id] = { updated_at: when.get(d.id), summary: d.summary, per100: d.per100, foodType: d.foodType, ingredients: (d.ingredients || []).map(slimIngredient) };
   }
+  // Keep only products still on the site.
+  const keep = new Set(chosen.map((p) => p.id));
+  for (const id of Object.keys(cache)) if (!keep.has(id)) delete cache[id];
+  fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
+  fs.writeFileSync(CACHE_FILE, JSON.stringify(cache));
+
+  const built = new Set();
   for (const p of chosen) {
-    const page = productPage({ ...p, ...detail.get(p.id) }, { alternatives: alternativesFor(p, catalog), api: { url: process.env.VITE_SUPABASE_URL, key: process.env.VITE_SUPABASE_ANON_KEY } });
+    const page = productPage({ ...p, ...cache[p.id] }, { alternatives: alternativesFor(p, catalog), api: { url: process.env.VITE_SUPABASE_URL, key: process.env.VITE_SUPABASE_ANON_KEY } });
     write(page.path, layout(page));
+    built.add(p.id);
     productUrls.push({ path: page.path, lastmod: String(p.updated_at || '').slice(0, 10) });
   }
   const dir = productsDirectory(productsArg === 'all' ? catalog : chosen);
@@ -156,8 +174,21 @@ if (productsArg) {
   productUrls.push({ path: dir.path });
   // /product/ on its own (no product named) opens the directory.
   write('/product/', `<!doctype html><meta charset="utf-8"><title>All products</title><link rel="canonical" href="${SITE_URL}/products/"><meta http-equiv="refresh" content="0; url=/products/"><script>location.replace('/products/')</script><a href="/products/">All products</a>`);
-  console.log(`website: ${chosen.length} product pages + /products/`);
+
+  // Home page cards open the product's own page when it has one.
+  const bySlug = new Map(catalog.filter((p) => built.has(p.id)).map((p) => [p.id, productPath(p)]));
+  for (const item of [...(stats?.examples || []), ...(stats?.shelf || [])]) item.href = bySlug.get(item.id) || null;
+  if (stats) stats.productCount = productsArg === 'all' ? catalog.length : chosen.length;
+
+  console.log(`website: ${chosen.length} product pages + /products/ (${stale.length} fetched from Supabase, ${chosen.length - stale.length} from cache)`);
   for (const p of chosen.slice(0, 12)) console.log(`  ${p.verdict.padEnd(9)} ${productPath(p)}`);
+}
+
+const built = [];
+for (const make of [...PAGES, notFound]) {
+  const page = make({ stats });
+  write(page.path, layout(page));
+  built.push(page.path);
 }
 
 const today = new Date().toISOString().slice(0, 10);

@@ -45,6 +45,7 @@ ${FORWARD_OLD_APP_LINKS}
   <div class="wrap">
     <a class="brand" href="/"><img src="/assets/logo.png" alt="" width="32" height="32" />FoodGuard<small>INDIA</small></a>
     <nav class="nav-links" aria-label="Main">
+      <a href="/products/">Products</a>
       <a class="hide-sm" href="/how-we-score/">How we score</a>
       <a class="hide-sm" href="/about/">About</a>
       <a class="btn btn-primary btn-sm" href="${APP_URL}">Open the app</a>
@@ -63,6 +64,7 @@ ${body}
       </div>
       <div>
         <h4>Product</h4>
+        <a href="/products/">All products</a>
         <a href="${APP_URL}">Open the web app</a>
         <a href="/how-we-score/">How we score</a>
         <a href="/#faq">FAQ</a>
