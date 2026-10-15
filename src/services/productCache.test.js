@@ -34,3 +34,13 @@ test('a product matching nothing returns null, not a wrong guess', () => {
   assert.equal(findCategoryForProduct(''), null);
   assert.equal(findCategoryForProduct(null), null);
 });
+
+test('keywords match whole words: Haldiram\'s is not haldi, a laddu is a sweet', () => {
+  assert.equal(findCategoryForProduct("Desi Ghee Motichoor Laddu by Haldiram's")?.id, 'indian-sweets');
+  assert.notEqual(findCategoryForProduct("Haldiram's Aloo Bhujia")?.id, 'spices');
+  assert.equal(findCategoryForProduct("Haldiram's Aloo Bhujia")?.id, 'snacks');
+  assert.equal(findCategoryForProduct('Catch Haldi Powder')?.id, 'spices');
+  assert.equal(findCategoryForProduct('Bikano Soan Papdi')?.id, 'indian-sweets');
+  assert.equal(findCategoryForProduct('Britannia Good Day Cookies')?.id, 'biscuits'); // plural still matches
+  assert.equal(findCategoryForProduct('Amul Pure Ghee')?.id, 'dairy');
+});

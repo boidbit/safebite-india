@@ -19,12 +19,21 @@ import { CATEGORY_KEYWORDS } from '../data/categoryKeywords.js';
 // categories.js/the browse page keeps the single broader bucket, since
 // splitting it there would need real illustrated art for each new
 // piece that doesn't exist yet.
+//
+// Indian sweets come FIRST: "Desi Ghee Motichoor Laddu" would otherwise land
+// in dairy (ghee) and be offered ghee and butter as alternatives. The browse
+// page has no sweets bucket, so this group exists only here.
 const ALTERNATIVES_CATEGORY_KEYWORDS = [
+  { id: 'indian-sweets', keywords: ['laddu', 'ladoo', 'laddoo', 'motichoor', 'barfi', 'burfi', 'peda', 'pedha', 'halwa', 'soan papdi', 'son papdi', 'kaju katli', 'rasgulla', 'gulab jamun', 'rasmalai', 'jalebi', 'mysore pak'] },
   ...CATEGORY_KEYWORDS.filter((c) => c.id !== 'essentials'),
   { id: 'oil', keywords: ['oil'] },
   { id: 'atta-flour', keywords: ['atta', 'flour', 'maida', 'besan', 'sooji', 'rava'] },
   { id: 'rice-grains', keywords: ['rice', 'poha', 'daliya'] },
   { id: 'sauces-condiments', keywords: ['sauce', 'ketchup', 'chutney', 'pickle', 'achar'] },
+  // Whole-word matching (findCategoryForProduct) no longer finds "milk" in
+  // "Buttermilk" or "tea" in an "Herbal Infusion" -- named here instead.
+  { id: 'dairy', keywords: ['buttermilk', 'milkshake', 'lassi', 'chaas'] },
+  { id: 'beverages', keywords: ['infusion'] },
 ];
 
 function normalizeText(text) {
@@ -434,9 +443,22 @@ export async function getDailySpotlight() {
 // Exported for testing -- the real bug this exists to catch (an oil
 // showing a sauce as its "safer alternative") only shows up by checking
 // real product-name pairs against this function's actual output.
+//
+// Whole words only (a plural "s"/"es" allowed): a plain substring match put
+// every Haldiram's product in Spices -- "haldi" is inside "Haldiram's" -- so a
+// Motichoor Laddu was offered chai masala and biryani masala as alternatives.
+const keywordPattern = new Map();
+function hasKeyword(name, keyword) {
+  if (!keywordPattern.has(keyword)) {
+    // Keywords are plain lowercase words, nothing to escape.
+    keywordPattern.set(keyword, new RegExp(`(?:^|[^a-z])${keyword}(?:s|es)?(?![a-z])`));
+  }
+  return keywordPattern.get(keyword).test(name);
+}
+
 export function findCategoryForProduct(productName) {
   const name = (productName || '').toLowerCase();
-  return ALTERNATIVES_CATEGORY_KEYWORDS.find((c) => c.keywords.some((k) => name.includes(k))) || null;
+  return ALTERNATIVES_CATEGORY_KEYWORDS.find((c) => c.keywords.some((k) => hasKeyword(name, k))) || null;
 }
 
 // "Safe" here means the same bar the Result page already displays as
@@ -480,7 +502,9 @@ async function getCategoryProducts({ productName, lookupKey, limit, minScore }) 
   if (error || !data) return [];
 
   return data
-    .filter((row) => row.product_name)
+    // ilike above is a substring match; keep only rows this same matcher
+    // puts in this category ("Haldiram's ..." is not a spice).
+    .filter((row) => row.product_name && findCategoryForProduct(row.product_name)?.id === category.id)
     .map((row) => ({
       lookupKey: row.lookup_key,
       productName: row.product_name,
