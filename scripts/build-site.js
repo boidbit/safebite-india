@@ -26,6 +26,17 @@ const OUT = 'dist';
 const productsArg = (process.argv.find((a) => a.startsWith('--products=')) || '').split('=')[1] || process.env.SITE_PRODUCT_PAGES || '';
 const PAGES = [home, howWeScore, about, disclaimer];
 
+// Only products an admin has APPROVED appear on the website -- not ones
+// that are live but never reviewed, pending, rejected, or have an open
+// report (flag) against them. The "foods checked" count still counts every
+// product the app has checked.
+const SHOWN_STATUS = 'approved';
+async function openFlaggedKeys(supabase) {
+  const { data, error } = await supabase.from('product_flags').select('lookup_key').eq('status', 'open').not('lookup_key', 'is', null);
+  if (error) throw new Error(`flags: ${error.message}`);
+  return new Set(data.map((r) => r.lookup_key));
+}
+
 async function loadStats() {
   let supabase;
   try {
@@ -45,17 +56,16 @@ async function loadStats() {
 
   try {
     // The public key has a short statement timeout: sorting the whole table
-    // (or filtering inside the report JSON) runs past it. Products scanned
-    // more than once are few -- fetch those, sort here.
+    // (or filtering inside the report JSON) runs past it -- fetch, sort here.
     const { data, error } = await supabase
       .from('product_reports')
-      .select('id, product_name, scan_count, brand:report->>brand, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict')
-      .in('review_status', visible)
-      .gte('scan_count', 2)
-      .limit(400);
+      .select('id, lookup_key, product_name, scan_count, brand:report->>brand, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict')
+      .eq('review_status', SHOWN_STATUS)
+      .limit(800);
     if (error) throw new Error(error.message);
+    const flagged = await openFlaggedKeys(supabase);
     const rows = (data || [])
-      .filter((r) => r.product_name && typeof r.score === 'number' && r.imageUrl)
+      .filter((r) => r.product_name && typeof r.score === 'number' && r.imageUrl && !flagged.has(r.lookup_key))
       .sort((a, b) => (b.scan_count || 0) - (a.scan_count || 0));
     // Popular products across the bands -- but not a brand singled out as
     // "Very Poor" on the home page; low scores live on each product's page.
@@ -97,6 +107,7 @@ if (productsArg) {
   const { supabase } = await import('../src/services/supabaseClient.js');
   // The whole catalog, slim (for slugs, alternatives and the directory).
   const catalog = [];
+  const flagged = await openFlaggedKeys(supabase);
   // The public key has a short statement timeout: small pages, and a page
   // that times out is tried again rather than failing the whole deploy.
   const PAGE = 500;
@@ -105,14 +116,14 @@ if (productsArg) {
     for (let attempt = 1; attempt <= 4; attempt++) {
       ({ data, error } = await supabase.from('product_reports')
         .select('id, lookup_key, product_name, scan_count, updated_at, brand:report->>brand, packSize:report->>packSize, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict, infant:report->>isInfantFormula')
-        .in('review_status', ['live', 'approved']).order('id').range(from, from + PAGE - 1));
+        .eq('review_status', SHOWN_STATUS).order('id').range(from, from + PAGE - 1));
       if (!error) break;
       await new Promise((r) => setTimeout(r, 1500 * attempt));
     }
     if (error) throw new Error(`catalog: ${error.message}`);
     // Infant formula gets no public score page -- the app keeps it out of
     // every spotlight too (a specially regulated product, adult limits don't apply).
-    catalog.push(...data.filter((r) => r.product_name && typeof r.score === 'number' && r.infant !== 'true').map((r) => ({ ...r, name: r.product_name })));
+    catalog.push(...data.filter((r) => r.product_name && typeof r.score === 'number' && r.infant !== 'true' && !flagged.has(r.lookup_key)).map((r) => ({ ...r, name: r.product_name })));
     if (data.length < PAGE) break;
   }
   assignSlugs(catalog);
