@@ -16,6 +16,33 @@ function exampleCard(p) {
   </a>`;
 }
 
+// The decoder's example label -- a typical masala-noodles list, no brand.
+// [text, 's' fine | 'c' worth a look, what it is]. Six of twelve flagged,
+// which the method caps at Moderate -- the 48 the ring fills to.
+const DECODER_LABEL = [
+  ['Refined Wheat Flour (Maida)', 'c', 'Refined flour — the fibre is milled out'], ' (68%), ',
+  ['Palm Oil', 'c', 'High in saturated fat'], ', ',
+  ['Iodised Salt', 's', 'Fine in normal amounts'], ', ',
+  ['Wheat Gluten', 's', 'The protein in wheat'], ', ',
+  ['INS 508', 's', 'Potassium chloride — a salt'], ', ',
+  ['INS 412', 's', 'Guar gum — a thickener from a bean'], ', Masala (',
+  ['Spices & Condiments', 's', 'Onion, garlic, chilli, turmeric…'], ', ',
+  ['Sugar', 'c', 'Added sugar'], ', ',
+  ['INS 627', 'c', 'Flavour enhancer (disodium guanylate)'], ', ',
+  ['INS 631', 'c', 'Flavour enhancer (disodium inosinate)'], ', ',
+  ['INS 150d', 'c', 'Caramel colour'], ', ',
+  ['INS 501', 's', 'Potassium carbonate — an acidity regulator'], ').',
+];
+
+function shelfItem(p, duplicate) {
+  const color = TIER_COLOR[p.verdict] || 'var(--ink-3)';
+  return `<a class="shelf-item" href="${APP_URL}#/p/${encodeURIComponent(p.id)}"${duplicate ? ' aria-hidden="true" tabindex="-1"' : ''}>
+    <span class="shelf-pack"><img src="${esc(p.imageUrl)}" alt="${duplicate ? '' : esc(p.name)}" loading="lazy" /></span>
+    <span class="shelf-badge" style="background:${color}">${p.score}</span>
+    <span class="shelf-name">${esc(p.name)}</span>
+  </a>`;
+}
+
 const FAQ = [
   ['Is FoodGuard free?', 'Yes. Scanning, scores and explanations are free. There are no ads selling you a "healthier" product.'],
   ['Where does the score come from?', 'From the ingredient list on the pack. Each ingredient is checked against public sources — FSSAI, the European Food Safety Authority and WHO guidance — and the product is scored on what it contains and how much of it. Where we have the real nutrition panel, too much sugar, salt or saturated fat per serving also counts. <a href="/how-we-score/">The full method is here.</a>'],
@@ -28,10 +55,12 @@ const FAQ = [
 export default function home({ stats }) {
   const total = stats?.total ? stats.total.toLocaleString('en-IN') : null;
   const examples = stats?.examples || [];
+  const shelf = stats?.shelf || [];
   return {
     path: '/',
     title: 'FoodGuard India — know what’s in your food',
     description: 'Scan any packaged food sold in India and see what’s really in it: an ingredient score from 0 to 100, every ingredient explained in plain language, and better options.',
+    scripts: ['/assets/home.js'],
     body: `
 <section class="hero">
   <div class="wrap">
@@ -49,15 +78,36 @@ export default function home({ stats }) {
         <div><b>Free</b><span>no sign-up needed</span></div>
       </div>
     </div>
-    <div class="phone">
-      <div class="phone-frame"><img src="/assets/app-score.webp" alt="FoodGuard showing a score of 61, Moderate, for Maggi Masala Noodles" width="540" height="960" /></div>
-      <div class="phone-tag t1"><b><span class="dot" style="background:var(--t-moderate)"></span>Every INS code, decoded</b>What it is and why it’s there</div>
-      <div class="phone-tag t2"><b><span class="dot" style="background:var(--t-excellent)"></span>Better swaps</b>Higher scores, same shelf</div>
+    <!-- The Label Decoder: an example ingredients label read out loud --
+         each ingredient lights up with what it is, and the score fills in
+         (site/assets/home.js). A made-up "masala noodles" label, no brand. -->
+    <div class="decoder" id="decoder" aria-label="Example: an ingredients label being decoded">
+      <div class="dec-head">
+        <span class="dec-live"><i></i>Decoding</span>
+        <span class="dec-what">Example label · masala instant noodles</span>
+        <button class="dec-replay" type="button" aria-label="Play again">↻</button>
+      </div>
+      <div class="dec-label">
+        <div class="dec-title">INGREDIENTS:</div>
+        <p class="dec-text">${DECODER_LABEL.map((t) => typeof t === 'string' ? t : `<span class="tok" data-t="${t[1]}" data-note="${t[2]}">${t[0]}</span>`).join('')}</p>
+      </div>
+      <div class="dec-foot">
+        <div class="ring dec-ring" style="--c:var(--ink-3);--v:0"><span>0</span></div>
+        <div class="dec-out">
+          <div class="dec-verdict">Reading the label…</div>
+          <ul class="dec-feed" aria-live="polite"></ul>
+        </div>
+      </div>
     </div>
   </div>
 </section>
 
 <div class="barcode-strip" aria-hidden="true"></div>
+
+${shelf.length >= 6 ? `<section class="shelf-sec" aria-label="Products already checked">
+  <div class="wrap shelf-head"><div class="eyebrow">On the shelf</div><h2>${total ? `${total} foods` : 'Thousands of foods'}, already decoded.</h2></div>
+  <div class="shelf"><div class="shelf-track">${[...shelf, ...shelf].map((p, i) => shelfItem(p, i >= shelf.length)).join('')}</div></div>
+</section>` : ''}
 
 <section>
   <div class="wrap split">

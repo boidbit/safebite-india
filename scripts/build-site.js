@@ -16,6 +16,7 @@ import howWeScore from '../site/pages/how-we-score.js';
 import about from '../site/pages/about.js';
 import disclaimer from '../site/pages/disclaimer.js';
 import notFound from '../site/pages/not-found.js';
+import { verdictFor } from '../src/services/scoringEngine.js';
 import { assignSlugs, productPage, productPath, productsDirectory, alternativesFor } from '../site/products.js';
 
 const OUT = 'dist';
@@ -33,7 +34,7 @@ async function loadStats() {
     supabase = client.supabase;
   } catch { return null; }
   const visible = ['live', 'approved'];
-  const stats = { total: null, examples: [] };
+  const stats = { total: null, examples: [], shelf: [] };
 
   // Each part on its own: one failing must not cost the other.
   try {
@@ -62,6 +63,13 @@ async function loadStats() {
     stats.examples = [pick((v) => v >= 85), pick((v) => v >= 65 && v < 85), pick((v) => v >= 45 && v < 65)]
       .filter(Boolean)
       .map((r) => ({ id: r.id, name: r.product_name, brand: r.brand, imageUrl: r.imageUrl, score: r.score, verdict: r.verdict }));
+    // The moving shelf on the home page: popular packs with a photo, every
+    // band but Very Poor (same reason as above), one per brand for variety.
+    const seenBrand = new Set();
+    stats.shelf = rows
+      .filter((r) => r.score >= 25 && !seenBrand.has((r.brand || r.product_name).toLowerCase()) && seenBrand.add((r.brand || r.product_name).toLowerCase()))
+      .slice(0, 22)
+      .map((r) => ({ id: r.id, name: r.product_name, brand: r.brand, imageUrl: r.imageUrl, score: r.score, verdict: verdictFor(r.score) }));
   } catch (err) { console.warn(`website: no example products this build (${err.message})`); }
 
   return stats;
