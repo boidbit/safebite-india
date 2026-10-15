@@ -40,6 +40,9 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Website product pages (scripts/build-site.js): a 10-product sample
+          # for now; 'all' once the design is signed off.
+          SITE_PRODUCT_PAGES: '10'
         run: npm run build
 
       - uses: actions/upload-pages-artifact@v3

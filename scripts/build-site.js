@@ -127,6 +127,8 @@ if (productsArg) {
   const dir = productsDirectory(productsArg === 'all' ? catalog : chosen);
   write(dir.path, layout(dir));
   productUrls.push({ path: dir.path });
+  // /product/ on its own (no product named) opens the directory.
+  write('/product/', `<!doctype html><meta charset="utf-8"><title>All products</title><link rel="canonical" href="${SITE_URL}/products/"><meta http-equiv="refresh" content="0; url=/products/"><script>location.replace('/products/')</script><a href="/products/">All products</a>`);
   console.log(`website: ${chosen.length} product pages + /products/`);
   for (const p of chosen.slice(0, 12)) console.log(`  ${p.verdict.padEnd(9)} ${productPath(p)}`);
 }
