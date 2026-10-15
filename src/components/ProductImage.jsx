@@ -8,6 +8,9 @@
 // blinkitImageOptimizer.js), sharp at thumbnail size but blocky when
 // stretched to a full phone screen, so there's no tap-to-zoom viewer.
 // Keep `size` at or below ~160px for the same reason.
+//
+// object-contain, not object-cover: the whole photo shows, never cropped to
+// fill the square (cover cut off the pack's edges and read as zoomed in).
 import { useState } from 'react';
 
 // `expandable` is no longer used (there's no viewer); still accepted so
@@ -28,7 +31,7 @@ export default function ProductImage({ src, size = 76, expandable }) {
         <img
           src={src}
           alt=""
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain"
           onError={() => setFailed(true)}
         />
       )}

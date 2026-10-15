@@ -142,7 +142,7 @@ function ProductRow({ row, isSelected, onToggle, busy, onStatus, onCrop, onDelet
         className="tap-scale w-14 h-14 rounded-[8px] overflow-hidden flex items-center justify-center"
         style={{ background: 'var(--fill)', cursor: imageUrl ? 'pointer' : 'default' }}
       >
-        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" className="w-full h-full object-cover" /> : thumb ? <span style={{ fontSize: 20 }}>🍽️</span> : null}
+        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" className="w-full h-full object-contain" /> : thumb ? <span style={{ fontSize: 20 }}>🍽️</span> : null}
       </button>
       <div className="min-w-0">
         <p className="font-semibold truncate" style={{ color: 'var(--label-1)' }}>{row.product_name || 'Unnamed product'}</p>
