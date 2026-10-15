@@ -6,7 +6,7 @@
 // The public web app, hardcoded rather than read from window.location:
 // inside the Android app that's a local capacitor/localhost address the
 // person receiving the message could never open.
-export const PUBLIC_APP_URL = 'https://boidbit.github.io/safebite-india/';
+export const PUBLIC_APP_URL = 'https://foodguards.space/app/';
 
 export function productShareUrl(reportId) {
   return `${PUBLIC_APP_URL}#/p/${encodeURIComponent(reportId)}`;
