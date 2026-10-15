@@ -134,7 +134,9 @@ export async function adminListReviewQueue({
     else if (foodType) query = query.eq('report->>foodType', foodType);
     if (source) query = query.eq('source', source);
     if (categoryKeywords?.length) {
-      query = query.or(categoryKeywords.map((k) => `product_name.ilike.%${k}%`).join(','));
+      // Whole words (plural allowed), same rule as the app's category page:
+      // a plain ilike put every "Haldiram's" product under Spices (haldi).
+      query = query.or(categoryKeywords.map((k) => `product_name.imatch."(^|[^a-z])${k}(s|es)?([^a-z]|$)"`).join(','));
     }
     if (typeof scoreMin === 'number') query = query.gte('report->overallScore', scoreMin);
     if (typeof scoreMax === 'number') query = query.lte('report->overallScore', scoreMax);

@@ -33,7 +33,7 @@ import ProductImage from '../components/ProductImage';
 // energy-relative nutrients that still need their own standalone card.
 const ENERGY_RELATIVE_GUIDANCE = {
   saturatedFatG: { icon: '🧈', label: 'Saturated fat', text: 'WHO recommends limiting saturated fat to less than 10% of total energy intake.' },
-  transFatG: { icon: '🧴', label: 'Trans fat', text: 'WHO recommends limiting trans fat to less than 1% of total energy intake.' },
+  transFatG: { icon: '🍟', label: 'Trans fat', text: 'WHO recommends limiting trans fat to less than 1% of total energy intake.' },
 };
 
 // WHO's whole-diet reference for total fat -- used only as a comparison
