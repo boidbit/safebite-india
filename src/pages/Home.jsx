@@ -1366,7 +1366,7 @@ export default function Home() {
                 📷 {t('homeBarcodeScanCamera')}
               </button>
             )}
-            {'BarcodeDetector' in window && (
+            {(
               <button
                 onClick={() => barcodePhotoRef.current?.click()}
                 disabled={readingBarcodePhoto}

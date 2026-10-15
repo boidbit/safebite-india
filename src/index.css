@@ -635,3 +635,63 @@ body {
   .flip-inner { transition: none; }
   .guess-confetti { display: none; }
 }
+
+/* ---- Barcode scanner (BarcodeScanner.jsx) ---- */
+
+/* Android app: ML Kit draws the camera BEHIND the WebView, so while it runs
+   everything but the scanner overlay is hidden and nothing paints a
+   background over the camera. */
+html.barcode-scanner-active,
+body.barcode-scanner-active {
+  background: transparent !important;
+}
+body.barcode-scanner-active {
+  visibility: hidden;
+}
+.barcode-scanner-modal {
+  visibility: visible;
+}
+
+/* The laser line sweeping down the scan frame. */
+@keyframes scanner-laser {
+  0% { top: 8%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 92%; opacity: 0; }
+}
+.scanner-laser {
+  animation: scanner-laser 1.8s ease-in-out infinite;
+}
+
+/* Tap-to-focus ring. */
+@keyframes scanner-focus {
+  0% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+  30% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}
+.scanner-focus {
+  animation: scanner-focus 1s ease-out forwards;
+}
+
+/* The tick that pops when a barcode is read. */
+@keyframes scanner-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.scanner-pop {
+  animation: scanner-pop 0.32s ease-out forwards;
+}
+
+/* A tip changing under the frame. */
+@keyframes scanner-tip-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.scanner-tip-in {
+  animation: scanner-tip-in 0.35s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanner-laser, .scanner-tip-in { animation: none; }
+}
