@@ -107,27 +107,68 @@ const productUrls = [];
 let productCount = 0;
 if (productsArg) {
   const { supabase } = await import('../src/services/supabaseClient.js');
-  // The whole catalog, slim (for slugs, alternatives and the directory).
-  const catalog = [];
+  // The whole approved catalog, slim (slugs, alternatives, the directory).
+  // Kept between deploys in .site-cache/catalog.json (restored by the deploy
+  // workflow) so a deploy reads only what changed: the ids approved right now
+  // (~45 bytes each) plus the rows updated since last time or never seen.
+  // Every push is a deploy, and each used to re-read every product -- 3 MB at
+  // 1,800 products, 14 MB at 8,500 -- which is Supabase egress. A full re-read
+  // once a day catches any change that didn't touch updated_at.
+  const CATALOG_CACHE = '.site-cache/catalog.json';
+  const SLIM = 'id, lookup_key, product_name, scan_count, updated_at, brand:report->>brand, packSize:report->>packSize, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict, infant:report->>isInfantFormula';
   const flagged = await openFlaggedKeys(supabase);
   // The public key has a short statement timeout: small pages, and a page
   // that times out is tried again rather than failing the whole deploy.
   const PAGE = 500;
-  for (let from = 0; ; from += PAGE) {
-    let data, error;
+  const query = async (build) => {
+    let res;
     for (let attempt = 1; attempt <= 4; attempt++) {
-      ({ data, error } = await supabase.from('product_reports')
-        .select('id, lookup_key, product_name, scan_count, updated_at, brand:report->>brand, packSize:report->>packSize, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict, infant:report->>isInfantFormula')
-        .eq('review_status', SHOWN_STATUS).order('id').range(from, from + PAGE - 1));
-      if (!error) break;
+      res = await build();
+      if (!res.error) return res.data;
       await new Promise((r) => setTimeout(r, 1500 * attempt));
     }
-    if (error) throw new Error(`catalog: ${error.message}`);
-    // Infant formula gets no public score page -- the app keeps it out of
-    // every spotlight too (a specially regulated product, adult limits don't apply).
-    catalog.push(...data.filter((r) => r.product_name && typeof r.score === 'number' && r.infant !== 'true' && !flagged.has(r.lookup_key)).map((r) => ({ ...r, name: r.product_name })));
-    if (data.length < PAGE) break;
+    throw new Error(`catalog: ${res.error.message}`);
+  };
+
+  let catalogCache = { fetchedAt: 0, rows: {} };
+  try { catalogCache = JSON.parse(fs.readFileSync(CATALOG_CACHE, 'utf8')); } catch { /* first build */ }
+  if (Date.now() - (catalogCache.fetchedAt || 0) > 24 * 3600 * 1000) catalogCache = { fetchedAt: Date.now(), rows: {} };
+
+  // 1. Which products are approved right now; drop cached ones that are not.
+  const ids = [];
+  for (let from = 0; ; from += 1000) {
+    const data = await query(() => supabase.from('product_reports').select('id').eq('review_status', SHOWN_STATUS).order('id').range(from, from + 999));
+    ids.push(...data.map((r) => r.id));
+    if (data.length < 1000) break;
   }
+  const approved = new Set(ids);
+  for (const id of Object.keys(catalogCache.rows)) if (!approved.has(id)) delete catalogCache.rows[id];
+
+  // 2. Rows edited since the newest one cached, and rows never read.
+  const fetched = [];
+  const newest = Object.values(catalogCache.rows).reduce((m, r) => (r.updated_at > m ? r.updated_at : m), '');
+  if (newest) {
+    for (let from = 0; ; from += PAGE) {
+      const data = await query(() => supabase.from('product_reports').select(SLIM).eq('review_status', SHOWN_STATUS).gte('updated_at', newest).order('id').range(from, from + PAGE - 1));
+      fetched.push(...data);
+      if (data.length < PAGE) break;
+    }
+  }
+  const missing = ids.filter((id) => !catalogCache.rows[id] && !fetched.some((r) => r.id === id));
+  for (let i = 0; i < missing.length; i += 100) {
+    fetched.push(...await query(() => supabase.from('product_reports').select(SLIM).in('id', missing.slice(i, i + 100))));
+  }
+  for (const r of fetched) catalogCache.rows[r.id] = r;
+  fs.mkdirSync(path.dirname(CATALOG_CACHE), { recursive: true });
+  fs.writeFileSync(CATALOG_CACHE, JSON.stringify(catalogCache));
+  console.log(`website: catalog ${ids.length} approved, ${fetched.length} rows read from Supabase, ${ids.length - fetched.length} from the cache`);
+
+  // Infant formula gets no public score page -- the app keeps it out of
+  // every spotlight too (a specially regulated product, adult limits don't apply).
+  const catalog = ids
+    .map((id) => catalogCache.rows[id])
+    .filter((r) => r && r.product_name && typeof r.score === 'number' && r.infant !== 'true' && !flagged.has(r.lookup_key))
+    .map((r) => ({ ...r, name: r.product_name }));
   assignSlugs(catalog);
   productCount = catalog.length;
 
