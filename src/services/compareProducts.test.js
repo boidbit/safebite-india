@@ -218,3 +218,100 @@ test('buildComparisonRows compares on a per-100 basis even when realNutrients is
   const [row] = buildComparisonRows([perServing]);
   assert.equal(row.energyKcal, 500);
 });
+
+// ---- the verdict and the scoreboard ----
+
+import { buildVerdict, buildScoreboard, scoreFitLabels, CLOSE_GAP } from './compareProducts.js';
+
+const row = (name, overallScore, extra = {}) => ({
+  lookupKey: `k:${name}`, productName: name, overallScore, personalScore: null, matchedConcerns: [],
+  energyKcal: null, proteinG: null, totalCarbG: null, sugarG: null, totalFatG: null, saturatedFatG: null, sodiumMg: null,
+  additives: 0, additivesLabel: 'None', processing: null, ...extra,
+});
+
+test('scores within CLOSE_GAP are "Similar", not Better/Lower (real: bhujia 50, 52, 52, 51)', () => {
+  const rows = [row('Haldiram', 50), row('Brij', 52), row('Bikano', 52), row('Balaji', 51)];
+  const labels = scoreFitLabels(rows);
+  assert.deepEqual(Object.values(labels), ['Similar', 'Similar', 'Similar', 'Similar']);
+});
+
+test('labels still separate a real gap, and a top group shares "Better"', () => {
+  const rows = [row('A', 90), row('B', 88), row('C', 40), row('D', 64)];
+  const labels = scoreFitLabels(rows);
+  assert.equal(labels['k:A'], 'Better');
+  assert.equal(labels['k:B'], 'Better'); // 2 points behind the best
+  assert.equal(labels['k:C'], 'Lower');
+  assert.equal(labels['k:D'], 'Moderate');
+});
+
+test('buildVerdict: a lead of 5+ points is clear and names the winner', () => {
+  const v = buildVerdict([row('Alpha', 80, { proteinG: 14 }), row('Beta', 60, { proteinG: 5 })]);
+  assert.equal(v.kind, 'clear');
+  assert.match(v.headline, /Alpha comes out ahead/);
+  assert.match(v.sub, /80 vs 60 — 20 points higher/);
+  assert.match(v.why, /more protein/i);
+});
+
+test('buildVerdict: 53 vs 52 is "too close to call", never a winner', () => {
+  const v = buildVerdict([row('Alpha', 53), row('Beta', 52)]);
+  assert.equal(v.kind, 'close');
+  assert.equal(v.headline, 'Too close to call');
+  assert.match(v.sub, /within 1 point/);
+});
+
+test('buildVerdict: equal scores say they score the same', () => {
+  assert.equal(buildVerdict([row('A', 60), row('B', 60)]).headline, 'They score the same');
+});
+
+test('buildVerdict: two tied leaders are both named (real: Brij 52 and Bikano 52 above two lower ones)', () => {
+  const v = buildVerdict([row('Brij', 52), row('Bikano', 52), row('Low', 30)]);
+  assert.equal(v.kind, 'tie');
+  assert.match(v.headline, /Brij and Bikano lead together/);
+});
+
+test('buildVerdict: a lead of 1-4 over the runner-up is an "edge", not a landslide', () => {
+  const v = buildVerdict([row('Top', 70), row('Next', 66), row('Far', 30)]);
+  assert.equal(v.kind, 'edge');
+  assert.match(v.headline, /Top edges ahead/);
+  assert.ok(CLOSE_GAP > 4);
+});
+
+test('buildVerdict ranks on the personal score when a profile is active', () => {
+  const rows = [row('Gen-best', 80, { personalScore: 50 }), row('Fit-best', 60, { personalScore: 70 })];
+  const v = buildVerdict(rows, { nickname: 'Dad', priorities: [] });
+  assert.equal(v.who, 'For Dad');
+  assert.match(v.headline, /Fit-best/);
+});
+
+test('buildVerdict needs two scored products', () => {
+  assert.equal(buildVerdict([row('Only', 70)]), null);
+  assert.equal(buildVerdict([row('A', null), row('B', 70)]), null);
+});
+
+test('buildScoreboard credits each product with what it really leads, and skips thin gaps', () => {
+  const rows = [
+    row('Atta', 80, { sugarG: 0, saturatedFatG: 1.2, sodiumMg: 300, proteinG: 14, additives: 0, processing: 'Low' }),
+    row('Namkeen', 50, { sugarG: 0, saturatedFatG: 9, sodiumMg: 310, proteinG: 8, additives: 4, processing: 'High' }),
+  ];
+  const { rowWinners, entries } = buildScoreboard(rows);
+  assert.ok(rowWinners.saturatedFatG.has('k:Atta'));
+  assert.ok(rowWinners.proteinG.has('k:Atta'));
+  assert.equal(rowWinners.sodiumMg, undefined); // 300 vs 310 is noise
+  assert.equal(rowWinners.sugarG, undefined);   // 0 vs 0
+  assert.ok(rowWinners.additives.has('k:Atta'));
+  assert.ok(rowWinners.processing.has('k:Atta'));
+  const atta = entries.find((e) => e.row.productName === 'Atta');
+  assert.ok(atta.wins.some((w) => w.label === 'Less saturated fat' && w.text === '1.2g · vs 9g'));
+  assert.equal(entries.find((e) => e.row.productName === 'Namkeen').wins.length, 0);
+});
+
+test('buildScoreboard with 3+ products shows the range of the others', () => {
+  const rows = [row('A', 70, { sodiumMg: 100 }), row('B', 60, { sodiumMg: 500 }), row('C', 55, { sodiumMg: 800 })];
+  const a = buildScoreboard(rows).entries[0];
+  assert.equal(a.wins[0].text, '100mg · others 500mg–800mg');
+});
+
+test('buildScoreboard: 0 vs 1 additives is not a real difference', () => {
+  const rows = [row('A', 70, { additives: 0 }), row('B', 60, { additives: 1 })];
+  assert.equal(buildScoreboard(rows).rowWinners.additives, undefined);
+});

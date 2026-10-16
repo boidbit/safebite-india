@@ -4,13 +4,14 @@
 // the 2-4 products picked on CompareManage.jsx (passed via router state,
 // already full buildReport() output -- no extra fetch needed) and lays
 // score/nutrients/additives/processing side by side, plus deterministic
-// "what differs" bullets and a closing summary (compareProducts.js --
-// never an AI call, never phrased as "buy X").
+// a verdict that opens the page, and "who is better at what" (compareProducts.js
+// -- never an AI call, never phrased as "buy X"). Scores within a few points
+// are called close, not a win.
 import { useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { getScoreColor, saveToHistory } from '../utils/storage';
 import { useFamily } from '../contexts/FamilyContext';
-import { buildComparisonRows, describeDifferences, scoreFitLabels, personalFitLabels } from '../services/compareProducts';
+import { buildComparisonRows, buildVerdict, buildScoreboard, scoreFitLabels, personalFitLabels } from '../services/compareProducts';
 import ProductImage from '../components/ProductImage';
 import { PUBLIC_APP_URL, whatsappShareUrl } from '../utils/share';
 
@@ -26,6 +27,51 @@ function ScoreCell({ score, relativeLabel }) {
       </span>
       {relativeLabel && <span className="text-[9.5px] font-semibold" style={{ color: 'var(--label-3)' }}>{relativeLabel}</span>}
     </span>
+  );
+}
+
+// A value that leads its row: green and ticked (only where the lead is real --
+// see buildScoreboard).
+function Lead({ win, children }) {
+  if (!win) return <>{children}</>;
+  return (
+    <span className="inline-flex items-center gap-0.5 font-bold px-1.5 py-0.5 rounded-[8px]" style={{ background: 'var(--v-good-bg)', color: 'var(--v-good)' }}>
+      {children}<span className="text-[10px]" aria-label="better">✓</span>
+    </span>
+  );
+}
+
+// The answer, before any numbers: who comes out ahead (or that it's too
+// close to call), by how much, and what the leader is best at.
+function VerdictCard({ verdict, rows, onOpen }) {
+  const clear = verdict.kind === 'clear';
+  const leaders = rows.filter((r) => verdict.leaders.includes(r.lookupKey));
+  const single = leaders.length === 1 && (verdict.kind === 'clear' || verdict.kind === 'edge') ? leaders[0] : null;
+  const accent = clear ? 'var(--v-good)' : 'var(--tint)';
+  return (
+    <div className="rounded-[20px] p-4 mb-4" style={{ background: clear ? 'var(--v-good-bg)' : 'var(--tint-bg)' }}>
+      <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: accent }}>
+        {clear ? '🏆' : verdict.kind === 'close' ? '⚖️' : '👍'} {verdict.who}
+      </p>
+      <div className="flex items-center gap-3">
+        {verdict.kind !== 'close' && (
+          <div className="flex -space-x-3 flex-shrink-0">
+            {leaders.slice(0, 2).map((r) => <ProductImage key={r.lookupKey} src={r.imageUrl} size={56} expandable={false} />)}
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="text-[18px] font-bold leading-snug" style={{ color: 'var(--label-1)' }}>{verdict.headline}</p>
+          <p className="text-[13px] mt-0.5 leading-relaxed" style={{ color: 'var(--label-2)' }}>{verdict.sub}</p>
+        </div>
+      </div>
+      {verdict.why && <p className="text-[13px] font-semibold mt-2.5" style={{ color: 'var(--label-1)' }}>{verdict.why}</p>}
+      {verdict.note && <p className="text-[13px] mt-2.5 leading-relaxed" style={{ color: 'var(--label-1)' }}>{verdict.note}</p>}
+      {single && (
+        <button onClick={() => onOpen(single)} className="tap-scale mt-3 w-full py-2.5 rounded-[12px] text-[14px] font-semibold text-white" style={{ background: accent }}>
+          See {single.productName.length > 28 ? 'its' : single.productName + '’s'} full report →
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -152,7 +198,12 @@ export default function Compare() {
   }
 
   const rows = buildComparisonRows(products, activeProfile);
-  const { bullets, take } = describeDifferences(rows, activeProfile);
+  const verdict = buildVerdict(rows, activeProfile);
+  const { rowWinners, entries } = buildScoreboard(rows);
+  // A row where fewer than two products have a number says nothing about
+  // the comparison -- left out rather than shown as a line of dashes.
+  const shownNutrients = NUTRIENT_ROWS.filter((m) => rows.filter((r) => typeof r[m.key] === 'number').length >= 2);
+  const isWin = (key, r) => Boolean(rowWinners[key]?.has(r.lookupKey));
   const scoreLabels = scoreFitLabels(rows);
   const personalLabels = personalFitLabels(rows);
   const colTemplate = `104px repeat(${rows.length}, 1fr)`;
@@ -168,7 +219,7 @@ export default function Compare() {
       </button>
 
       <h1 className="text-2xl font-bold mb-1" style={{ color: 'var(--label-1)' }}>Comparison Result</h1>
-      <p className="text-sm mb-4" style={{ color: 'var(--label-3)' }}>See differences and helpful insights.</p>
+      <p className="text-sm mb-4" style={{ color: 'var(--label-3)' }}>{rows.length} products, side by side.</p>
 
       {/* Who this personalized comparison is for -- switching here also
           updates the app's own active profile, so it stays in sync with
@@ -214,6 +265,8 @@ export default function Compare() {
         </div>
       )}
 
+      {verdict && <VerdictCard verdict={verdict} rows={rows} onOpen={(r) => openProduct(products[rows.indexOf(r)])} />}
+
       <div className="rounded-[16px] overflow-hidden" style={{ background: 'var(--bg-card)' }}>
         {/* Product header -- image + name + brand, tap to open the full result. */}
         <div className="grid gap-2 p-3" style={{ gridTemplateColumns: colTemplate }}>
@@ -258,14 +311,14 @@ export default function Compare() {
           Key Nutrients (per 100g)
         </p>
 
-        {NUTRIENT_ROWS.map((metric) => (
+        {shownNutrients.map((metric) => (
           <div key={metric.key} className="grid gap-2 px-3 py-2 items-center" style={{ gridTemplateColumns: colTemplate }}>
             <span className="text-[12px] font-semibold" style={{ color: 'var(--label-2)' }}>{metric.label}</span>
             {rows.map((r) => {
               const value = r[metric.key];
               return (
                 <span key={r.lookupKey} className="text-center text-[13px]" style={{ color: 'var(--label-1)' }}>
-                  {typeof value === 'number' ? Number(value.toFixed(metric.decimals)) : <span style={{ color: 'var(--label-3)' }}>—</span>}
+                  {typeof value === 'number' ? <Lead win={isWin(metric.key, r)}>{Number(value.toFixed(metric.decimals))}</Lead> : <span style={{ color: 'var(--label-3)' }}>—</span>}
                 </span>
               );
             })}
@@ -275,43 +328,48 @@ export default function Compare() {
         <div className="grid gap-2 px-3 py-2.5 items-center" style={{ gridTemplateColumns: colTemplate, borderTop: '1px solid var(--separator)' }}>
           <span className="text-[12px] font-semibold" style={{ color: 'var(--label-2)' }}>Additives</span>
           {rows.map((r) => (
-            <span key={r.lookupKey} className="text-center text-[13px] font-semibold" style={{ color: 'var(--label-1)' }}>{r.additivesLabel}</span>
+            <span key={r.lookupKey} className="text-center text-[13px] font-semibold" style={{ color: 'var(--label-1)' }}><Lead win={isWin('additives', r)}>{r.additivesLabel}</Lead></span>
           ))}
         </div>
 
         <div className="grid gap-2 px-3 py-2.5 items-center" style={{ gridTemplateColumns: colTemplate, borderTop: '1px solid var(--separator)' }}>
           <span className="text-[12px] font-semibold" style={{ color: 'var(--label-2)' }}>Processing</span>
           {rows.map((r) => (
-            <span key={r.lookupKey} className="text-center text-[13px] font-semibold" style={{ color: 'var(--label-1)' }}>{r.processing || '—'}</span>
+            <span key={r.lookupKey} className="text-center text-[13px] font-semibold" style={{ color: 'var(--label-1)' }}>{r.processing ? <Lead win={isWin('processing', r)}>{r.processing}</Lead> : '—'}</span>
           ))}
         </div>
       </div>
 
-      {/* Deterministic, always-English computed text -- same convention
-          as report.summary (scoringEngine.js): describes real numbers
-          only, never phrased as a command. */}
-      {bullets.length > 0 && (
-        <div className="mt-4 rounded-[14px] p-4" style={{ background: 'var(--tint-bg)' }}>
-          <p className="text-[12px] font-bold mb-2 flex items-center gap-1.5" style={{ color: 'var(--tint)' }}>
-            📋 What differs?
-          </p>
-          <ul className="space-y-1.5">
-            {bullets.map((b, i) => (
-              <li key={i} className="text-[13px] leading-relaxed flex gap-2" style={{ color: 'var(--label-1)' }}>
-                <span style={{ color: 'var(--tint)' }}>•</span>
-                <span>{b}</span>
-              </li>
+      {/* Who is better at what: each product with what it really leads
+          (a gap of at least 20%, or 2+ additives) -- facts from the table
+          above, never a recommendation. A product that leads nothing says so. */}
+      {entries.some((e) => e.wins.length > 0) && (
+        <div className="mt-4">
+          <p className="text-[12.5px] font-semibold mb-2" style={{ color: 'var(--label-2)' }}>Who’s better at what</p>
+          <div className="rounded-[16px] overflow-hidden" style={{ background: 'var(--bg-card)' }}>
+            {entries.map(({ row: r, wins }, i) => (
+              <div key={r.lookupKey} className="px-3 py-3" style={i ? { borderTop: '1px solid var(--separator)' } : undefined}>
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <ProductImage src={r.imageUrl} size={32} expandable={false} />
+                  <p className="text-[13.5px] font-bold flex-1 min-w-0 truncate" style={{ color: 'var(--label-1)' }}>{r.productName}</p>
+                </div>
+                {wins.length > 0 ? (
+                  <ul className="space-y-1">
+                    {wins.map((w) => (
+                      <li key={w.label} className="flex items-baseline gap-2 text-[13px]">
+                        <span style={{ color: 'var(--v-good)' }}>✓</span>
+                        <span className="font-semibold" style={{ color: 'var(--label-1)' }}>{w.label}</span>
+                        <span className="text-[12px]" style={{ color: 'var(--label-3)' }}>{w.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[12.5px]" style={{ color: 'var(--label-3)' }}>No clear lead on any measure.</p>
+                )}
+              </div>
             ))}
-          </ul>
-        </div>
-      )}
-
-      {take && (
-        <div className="mt-3 rounded-[14px] p-4" style={{ background: 'var(--v-good-bg)' }}>
-          <p className="text-[12px] font-bold mb-1" style={{ color: 'var(--v-good)' }}>
-            {activeProfile ? '👪' : '✅'} {take.label}
-          </p>
-          <p className="text-[13px] leading-relaxed" style={{ color: 'var(--label-1)' }}>{take.text}</p>
+          </div>
+          <p className="text-[11px] mt-1.5" style={{ color: 'var(--label-3)' }}>Nutrients per 100g. Small differences (under 20%) aren’t counted.</p>
         </div>
       )}
 

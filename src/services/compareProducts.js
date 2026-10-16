@@ -123,6 +123,11 @@ export function buildComparisonRows(products, activeProfile = null) {
  * scorer" elsewhere in this file. Returns {} with fewer than 2 real
  * scores on `scoreKey` to compare.
  */
+// Scores this close are the same product for practical purposes (53 vs 52
+// is rounding, not a recommendation): within this many points nothing is
+// called better or lower.
+export const CLOSE_GAP = 5;
+
 function relativeLabels(rows, scoreKey, labels) {
   const withScores = (rows || []).filter((r) => typeof r[scoreKey] === 'number');
   if (withScores.length < 2) return {};
@@ -131,9 +136,10 @@ function relativeLabels(rows, scoreKey, labels) {
   const worst = Math.min(...withScores.map((r) => r[scoreKey]));
   const out = {};
   for (const r of withScores) {
-    if (best === worst) out[r.lookupKey] = labels.moderate;
-    else if (r[scoreKey] === best) out[r.lookupKey] = labels.better;
-    else if (r[scoreKey] === worst) out[r.lookupKey] = labels.lower;
+    if (best - worst < CLOSE_GAP) out[r.lookupKey] = labels.similar;
+    // Everything within CLOSE_GAP of the top shares "Better" (90, 89, 88 vs 40).
+    else if (best - r[scoreKey] < CLOSE_GAP) out[r.lookupKey] = labels.better;
+    else if (r[scoreKey] - worst < CLOSE_GAP) out[r.lookupKey] = labels.lower;
     else out[r.lookupKey] = labels.moderate;
   }
   return out;
@@ -141,12 +147,12 @@ function relativeLabels(rows, scoreKey, labels) {
 
 /** Relative standing on the universal score, within this comparison only -- "Better" / "Moderate" / "Lower". */
 export function scoreFitLabels(rows) {
-  return relativeLabels(rows, 'overallScore', { better: 'Better', moderate: 'Moderate', lower: 'Lower' });
+  return relativeLabels(rows, 'overallScore', { better: 'Better', moderate: 'Moderate', lower: 'Lower', similar: 'Similar' });
 }
 
 /** Relative standing on the personal score, within this comparison only -- "Better fit" / "Moderate fit" / "Lower fit". */
 export function personalFitLabels(rows) {
-  return relativeLabels(rows, 'personalScore', { better: 'Better fit', moderate: 'Moderate fit', lower: 'Lower fit' });
+  return relativeLabels(rows, 'personalScore', { better: 'Better fit', moderate: 'Moderate fit', lower: 'Lower fit', similar: 'Similar fit' });
 }
 
 // How much of a real gap between the best- and worst-scoring product on
@@ -343,4 +349,142 @@ export function describeDifferences(rows, activeProfile = null) {
   }
 
   return { bullets, take };
+}
+
+// ---------------------------------------------------------------------
+// What the comparison page leads with: one answer, then who is better at
+// what. Same measured facts as describeDifferences, arranged as a verdict
+// instead of a list -- still never phrased as "buy X".
+// ---------------------------------------------------------------------
+
+// Rows where "better" has a direction (carbs have none: neither more nor
+// less is better by itself).
+const TABLE_DIRECTION = { energyKcal: 'low', proteinG: 'high', sugarG: 'low', totalFatG: 'low', saturatedFatG: 'low', sodiumMg: 'low' };
+const capitalize = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+
+// The best value on one numeric row, when the gap to the worst is real
+// (the same 20% bar as the bullets) and at least two products have data.
+function realLead(rows, key, lowerIsBetter) {
+  const withData = rows.filter((r) => typeof r[key] === 'number');
+  if (withData.length < 2) return null;
+  const values = withData.map((r) => r[key]);
+  const best = lowerIsBetter ? Math.min(...values) : Math.max(...values);
+  const worst = lowerIsBetter ? Math.max(...values) : Math.min(...values);
+  if (best === worst) return null;
+  if (Math.abs(best - worst) / Math.max(Math.abs(best), Math.abs(worst), 1) < MIN_RELATIVE_DIFFERENCE) return null;
+  return { best, worst, winners: withData.filter((r) => r[key] === best), withData };
+}
+
+/**
+ * Who is better at what.
+ * @returns {{ rowWinners: Record<string, Set<string>>, entries: Array<{ row: object, wins: Array<{ label: string, text: string }> }> }}
+ *   rowWinners: per table row ('proteinG', 'additives', 'processing', ...), the
+ *   lookupKeys that lead it -- only where the lead is real.
+ *   entries: one per product, in table order, with what it leads (may be empty).
+ */
+export function buildScoreboard(rows) {
+  const list = rows || [];
+  const rowWinners = {};
+  const wins = new Map(list.map((r) => [r.lookupKey, []]));
+  const addWin = (r, label, text) => wins.get(r.lookupKey).push({ label, text });
+  const two = list.length === 2;
+
+  // Numeric rows. Only the priority metrics (sugar, sodium, saturated fat,
+  // calories, protein) are named in the scoreboard; fat joins the table marks.
+  for (const [key, direction] of Object.entries(TABLE_DIRECTION)) {
+    const lead = realLead(list, key, direction === 'low');
+    if (!lead) continue;
+    rowWinners[key] = new Set(lead.winners.map((r) => r.lookupKey));
+    const metric = NUMERIC_METRICS.find((m) => m.key === key);
+    if (!metric) continue;
+    const others = lead.withData.filter((r) => r[key] !== lead.best).map((r) => r[key]);
+    const lo = Math.min(...others);
+    const hi = Math.max(...others);
+    const range = lo === hi ? formatValue(lo, metric) : `${formatValue(lo, metric)}–${formatValue(hi, metric)}`;
+    const against = two ? `vs ${formatValue(lead.worst, metric)}` : `others ${range}`;
+    for (const w of lead.winners) addWin(w, capitalize(metric.lowerIsBetter ? metric.lowerLabel : metric.higherLabel), `${formatValue(lead.best, metric)} · ${against}`);
+  }
+
+  // Additives: fewer by at least 2 is a real difference (0 vs 1 is not).
+  const counts = list.map((r) => r.additives);
+  if (list.length >= 2 && Math.max(...counts) - Math.min(...counts) >= 2) {
+    const fewest = Math.min(...counts);
+    const winners = list.filter((r) => r.additives === fewest);
+    rowWinners.additives = new Set(winners.map((r) => r.lookupKey));
+    for (const w of winners) addWin(w, 'Fewer additives', `${fewest} vs up to ${Math.max(...counts)}`);
+  }
+
+  // Processing: the lowest level, when levels differ.
+  const withProcessing = list.filter((r) => r.processing);
+  if (withProcessing.length >= 2) {
+    const ranks = withProcessing.map((r) => PROCESSING_RANK[r.processing]);
+    if (Math.max(...ranks) > Math.min(...ranks)) {
+      const winners = withProcessing.filter((r) => PROCESSING_RANK[r.processing] === Math.min(...ranks));
+      const highest = withProcessing.find((r) => PROCESSING_RANK[r.processing] === Math.max(...ranks)).processing;
+      rowWinners.processing = new Set(winners.map((r) => r.lookupKey));
+      for (const w of winners) addWin(w, 'Less processed', `${w.processing} vs ${highest}`);
+    }
+  }
+
+  return { rowWinners, entries: list.map((r) => ({ row: r, wins: wins.get(r.lookupKey) })) };
+}
+
+const joinNames = (rows) => (rows.length <= 2
+  ? rows.map((r) => r.productName).join(' and ')
+  : `${rows.slice(0, -1).map((r) => r.productName).join(', ')} and ${rows[rows.length - 1].productName}`);
+
+/**
+ * The one-line answer the comparison opens with. Ranks on the personal score
+ * when a profile is active, otherwise the general score, and says so plainly
+ * when the lead is thin or shared instead of crowning a product on a point.
+ * @returns {null | { kind: 'clear'|'edge'|'tie'|'close', who: string, headline: string, sub: string, why: string, note: string, leaders: string[] }}
+ */
+export function buildVerdict(rows, activeProfile = null) {
+  const list = rows || [];
+  const personal = Boolean(activeProfile) && list.filter((r) => typeof r.personalScore === 'number').length >= 2;
+  const key = personal ? 'personalScore' : 'overallScore';
+  const scored = list.filter((r) => typeof r[key] === 'number');
+  if (scored.length < 2) return null;
+
+  const max = Math.max(...scored.map((r) => r[key]));
+  const min = Math.min(...scored.map((r) => r[key]));
+  const leaders = scored.filter((r) => r[key] === max);
+  const second = Math.max(...scored.filter((r) => r[key] !== max).map((r) => r[key]), -Infinity);
+  const ordered = [...scored].sort((a, b) => b[key] - a[key]).map((r) => r[key]);
+  const scoresText = ordered.length === 2 ? `${ordered[0]} vs ${ordered[1]}` : ordered.join(' · ');
+  const who = personal ? `For ${activeProfile.nickname}` : 'Our verdict';
+  const points = (n) => `${n} point${n === 1 ? '' : 's'}`;
+
+  let kind;
+  let headline;
+  let sub;
+  if (max - min < CLOSE_GAP) {
+    kind = 'close';
+    headline = max === min ? 'They score the same' : 'Too close to call';
+    sub = `${scoresText} — ${max === min ? 'no difference' : `within ${points(max - min)}`}. Each is better at different things, below.`;
+  } else if (leaders.length > 1) {
+    kind = 'tie';
+    headline = `${joinNames(leaders)} lead together`;
+    sub = `Both score ${max}, ahead of the rest (${scoresText}).`;
+  } else if (max - second < CLOSE_GAP) {
+    kind = 'edge';
+    headline = `${leaders[0].productName} edges ahead`;
+    sub = `${scoresText} — only ${points(max - second)} apart, so check what matters to you below.`;
+  } else {
+    kind = 'clear';
+    headline = `${leaders[0].productName} comes out ahead`;
+    sub = `${scoresText} — ${points(max - second)} higher.`;
+  }
+
+  // Why: for a clear lead, what the leader is best at; for a profile, the
+  // personal reasoning already worked out for it.
+  let why = '';
+  let note = '';
+  if (personal) {
+    note = buildPersonalTake(list, activeProfile) || '';
+  } else if (kind === 'clear' || kind === 'edge') {
+    const entry = buildScoreboard(list).entries.find((e) => e.row.lookupKey === leaders[0].lookupKey);
+    if (entry && entry.wins.length) why = `Best at: ${entry.wins.slice(0, 3).map((w) => w.label.toLowerCase()).join(', ')}.`;
+  }
+  return { kind, who, headline, sub, why, note, leaders: leaders.map((r) => r.lookupKey) };
 }
