@@ -273,7 +273,10 @@ export default function Compare() {
           <div />
           {rows.map((r, i) => (
             <button key={r.lookupKey} onClick={() => openProduct(products[i])} className="tap-scale text-center">
-              <ProductImage src={r.imageUrl} size={56} expandable={false} />
+              {/* ProductImage is a fixed-size block, so text-center doesn't
+                  centre it: without this it sat at the left of a wide column
+                  while the name below it was centred. */}
+              <div className="flex justify-center"><ProductImage src={r.imageUrl} size={56} expandable={false} /></div>
               <p className="text-[10.5px] font-semibold mt-1 leading-tight line-clamp-2" style={{ color: 'var(--label-1)' }}>
                 {r.productName}
               </p>
