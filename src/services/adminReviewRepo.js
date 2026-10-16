@@ -9,7 +9,10 @@
 // Changing a status only works from a signed-in admin session: a
 // database trigger ignores the change from the public key.
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
-import { logActivity } from './adminActivityRepo.js';
+import { logActivities } from './adminActivityRepo.js';
+import { chunk } from '../utils/chunk.js';
+
+const UPDATE_BATCH = 100; // ids per request (a uuid is ~37 characters of URL)
 
 function requireSupabase() {
   if (!isSupabaseConfigured) throw new Error('Supabase isn’t configured.');
@@ -286,24 +289,31 @@ export async function adminSetReviewStatus(products, status) {
 
   const { data: session } = await supabase.auth.getSession();
   const reviewed = status !== 'pending';
-  const { data, error } = await supabase
-    .from('product_reports')
-    .update({
-      review_status: status,
-      reviewed_at: reviewed ? new Date().toISOString() : null,
-      reviewed_by: reviewed ? session?.session?.user?.id || null : null,
-    })
-    .in('id', products.map((p) => p.id))
-    .select('id, review_status');
-  if (error) throw new Error(error.message);
-
-  // The database trigger silently keeps the old status for anyone who
-  // isn't a signed-in admin -- catch that instead of reporting success.
-  const notChanged = (data || []).filter((r) => r.review_status !== status);
-  if ((data || []).length < products.length || notChanged.length > 0) {
-    throw new Error('The review status didn’t change — sign in again as admin and retry.');
-  }
-
+  const reviewedAt = reviewed ? new Date().toISOString() : null;
+  const reviewedBy = reviewed ? session?.session?.user?.id || null : null;
   const action = { approved: 'approve_product', rejected: 'reject_product', pending: 'unreview_product' }[status];
-  await Promise.all(products.map((p) => logActivity({ action, targetType: 'product', targetId: p.id, productName: p.productName || null })));
+
+  // The ids travel in the URL, so a long list (1,317 selected at once) is
+  // rejected as "Bad Request" -- send them 100 at a time. Each piece is
+  // logged as soon as it's saved, so a failure partway leaves an honest
+  // record of what did change.
+  let done = 0;
+  for (const piece of chunk(products, UPDATE_BATCH)) {
+    const { data, error } = await supabase
+      .from('product_reports')
+      .update({ review_status: status, reviewed_at: reviewedAt, reviewed_by: reviewedBy })
+      .in('id', piece.map((p) => p.id))
+      .select('id, review_status');
+    const progress = done ? ` ${done} of ${products.length} were already changed; run it again to finish the rest.` : '';
+    if (error) throw new Error(`${error.message}.${progress}`);
+
+    // The database trigger silently keeps the old status for anyone who
+    // isn't a signed-in admin -- catch that instead of reporting success.
+    const notChanged = (data || []).filter((r) => r.review_status !== status);
+    if ((data || []).length < piece.length || notChanged.length > 0) {
+      throw new Error(`The review status didn’t change — sign in again as admin and retry.${progress}`);
+    }
+    await logActivities(piece.map((p) => ({ action, targetType: 'product', targetId: p.id, productName: p.productName || null })));
+    done += piece.length;
+  }
 }

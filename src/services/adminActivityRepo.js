@@ -5,6 +5,7 @@
 // transient write failure) must never block the real action it was
 // recording, same philosophy as productCache.js's own cache writes.
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
+import { chunk } from '../utils/chunk.js';
 
 export async function logActivity({ action, targetType, targetId, productName, details }) {
   if (!isSupabaseConfigured) return;
@@ -22,6 +23,27 @@ export async function logActivity({ action, targetType, targetId, productName, d
     // The log table may not exist yet (admin_activity_log_schema.sql
     // not run), or the write failed transiently -- either way, the
     // action it was recording already happened and must not be undone.
+  }
+}
+
+/** Same as logActivity, for many rows at once (a bulk approve) -- one insert per 500 rows. */
+export async function logActivities(entries) {
+  if (!isSupabaseConfigured || entries.length === 0) return;
+  try {
+    const { data } = await supabase.auth.getUser();
+    const actor = data?.user?.email || null;
+    for (const rows of chunk(entries, 500)) {
+      await supabase.from('admin_activity_log').insert(rows.map((e) => ({
+        actor_email: actor,
+        action: e.action,
+        target_type: e.targetType,
+        target_id: e.targetId != null ? String(e.targetId) : null,
+        product_name: e.productName || null,
+        details: e.details || null,
+      })));
+    }
+  } catch {
+    // Best-effort, like logActivity: the action already happened.
   }
 }
 
