@@ -9,6 +9,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { barcodeKey, upsertProductNutrition } from './productCache.js';
 import { logActivity } from './adminActivityRepo.js';
+import { moveInlinePhotoToStorage } from './productPhotoStorage.js';
 
 function requireSupabase() {
   if (!isSupabaseConfigured) throw new Error('Supabase isn’t configured.');
@@ -115,8 +116,9 @@ function rethrowFriendly(error) {
   throw new Error(error.message);
 }
 
-export async function adminCreateProduct({ lookupKey, source, productName, ingredientsText, report }) {
+export async function adminCreateProduct({ lookupKey, source, productName, ingredientsText, report: rawReport }) {
   requireSupabase();
+  const report = await moveInlinePhotoToStorage(rawReport);
   const { data, error } = await supabase
     .from('product_reports')
     .insert({ lookup_key: lookupKey, source, product_name: productName, ingredients_text: ingredientsText, report })
@@ -153,8 +155,9 @@ function diffProductChange(before, after) {
   return changes;
 }
 
-export async function adminUpdateProduct(id, { lookupKey, source, productName, ingredientsText, report }) {
+export async function adminUpdateProduct(id, { lookupKey, source, productName, ingredientsText, report: rawReport }) {
   requireSupabase();
+  const report = await moveInlinePhotoToStorage(rawReport);
   const { data: before } = await supabase.from('product_reports').select('product_name, lookup_key, ingredients_text, report').eq('id', id).maybeSingle();
 
   // product_nutrition.lookup_key is a foreign key into product_reports
