@@ -204,6 +204,7 @@ export async function searchProductsPage(query, { limit = 20, offset = 0 } = {})
         score: typeof row.score === 'number' ? row.score : null,
         verdict: row.verdict || null,
         imageUrl: row.image_url || null,
+        packSize: row.pack_size || null, // only once product_search_pack_size_migration.sql has run
       })),
       total: Number(data[0]?.total || 0),
     };
