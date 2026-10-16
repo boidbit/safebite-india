@@ -12,9 +12,22 @@ const LEVEL_LOOK = {
 };
 const LABEL_KEY = { fat: 'tlFat', satFat: 'tlSatFat', sugars: 'tlSugars', salt: 'tlSalt' };
 
-export default function NutritionTrafficLight({ light, t }) {
+// The levels are always per 100g/100ml (the scheme's own basis), while the
+// numbers under them on the Result page can be per serving -- so this block
+// says its basis ABOVE the tiles, and when a real serving is known each tile
+// also shows what that serving holds ("8g in 20g"), tying the two together.
+const inServing = (grams, servingGrams) => {
+  const v = Math.round(((grams * servingGrams) / 100) * 10) / 10;
+  return v === 0 && grams > 0 ? '<0.1' : String(v);
+};
+
+export default function NutritionTrafficLight({ light, t, servingGrams, servingUnit = 'g' }) {
+  const showServing = typeof servingGrams === 'number' && servingGrams > 0 && servingGrams !== 100;
   return (
     <div className="mb-3.5">
+      <p className="text-[12px] font-semibold mb-2" style={{ color: 'var(--label-2)' }}>
+        {t(light.isDrink ? 'tlBasisDrink' : 'tlBasisFood')}
+      </p>
       <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${light.items.length}, minmax(0, 1fr))` }}>
         {light.items.map((item, i) => {
           const look = LEVEL_LOOK[item.level];
@@ -26,14 +39,16 @@ export default function NutritionTrafficLight({ light, t }) {
             >
               <p className="text-[11px] font-semibold truncate" style={{ color: 'var(--label-2)' }}>{t(LABEL_KEY[item.key])}</p>
               <p className="text-[16px] font-extrabold tabular-nums leading-tight mt-0.5" style={{ color: 'var(--label-1)' }}>{item.grams}g</p>
+              {showServing && (
+                <p className="text-[10px] tabular-nums leading-tight mt-0.5" style={{ color: 'var(--label-3)' }}>
+                  {t('tlInServing', { amount: inServing(item.grams, servingGrams), serving: servingGrams, unit: servingUnit })}
+                </p>
+              )}
               <p className="text-[10.5px] font-bold uppercase tracking-wide mt-0.5" style={{ color: look.color }}>{t(look.key)}</p>
             </div>
           );
         })}
       </div>
-      <p className="text-[11px] mt-1.5" style={{ color: 'var(--label-3)' }}>
-        {t(light.isDrink ? 'tlBasisDrink' : 'tlBasisFood')}
-      </p>
     </div>
   );
 }

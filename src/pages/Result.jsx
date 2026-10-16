@@ -1210,8 +1210,19 @@ export default function Result() {
           <SectionHeader>{t('sectionNutrition')}</SectionHeader>
           <Group>
             <div className="px-4 py-3.5">
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <p className="text-[12px]" style={{ color: 'var(--label-3)' }}>
+              {/* The traffic lights are per 100g (their own heading, above
+                  them); the numbers below are per serving when a real one is
+                  known -- so each part says its own basis, split by a rule. */}
+              {trafficLight && (
+                <NutritionTrafficLight
+                  light={trafficLight}
+                  t={t}
+                  servingGrams={result.realNutrientsServingGrams}
+                  servingUnit={result.realNutrientsServingUnit || 'g'}
+                />
+              )}
+              <div className={`flex items-center justify-between gap-3 mb-3${trafficLight ? ' pt-3' : ''}`} style={trafficLight ? { borderTop: '1px solid var(--separator)' } : undefined}>
+                <p className={trafficLight ? 'text-[12px] font-semibold' : 'text-[12px]'} style={{ color: trafficLight ? 'var(--label-2)' : 'var(--label-3)' }}>
                   {result.realNutrientsServingGrams
                     ? t('nutritionPerServing', { grams: result.realNutrientsServingGrams, unit: result.realNutrientsServingUnit || 'g' })
                     : t('nutritionPer100g')}
@@ -1228,7 +1239,6 @@ export default function Result() {
                   </button>
                 )}
               </div>
-              {trafficLight && <NutritionTrafficLight light={trafficLight} t={t} />}
               <div className="grid grid-cols-3 gap-3">
                 {NUTRITION_TABLE_ROWS.filter((row) => typeof displayNutrients[row.key] === 'number').map((row) => (
                   <div key={row.key}>
