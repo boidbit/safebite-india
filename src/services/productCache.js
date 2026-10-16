@@ -399,9 +399,20 @@ export function dayOfYearSeed(date = new Date()) {
 export async function getDailySpotlight() {
   if (!isSupabaseConfigured) return { best: null, worst: null };
 
+  // The picks only change at midnight, so a visitor who comes back the same
+  // day (or opens Home twice) gets them from this device -- the spotlight
+  // used to cost 1.8 MB a visit.
+  const today = new Date().toISOString().slice(0, 10);
+  const cacheKey = `foodguard-spotlight-${today}`;
+  try {
+    const hit = JSON.parse(localStorage.getItem(cacheKey));
+    if (hit && (hit.best || hit.worst)) return hit;
+  } catch { /* no storage here (or nothing cached yet) */ }
+
+  // Step 1: just enough to rank -- name and score, ~100 KB for 1000 rows.
   const { data, error } = await supabase
     .from('product_reports')
-    .select('lookup_key, product_name, score:report->>overallScore, verdict:report->>verdict, brand:report->>brand, imageUrl:report->>imageUrl, flags:report->flags, positives:report->positives, isInfantFormula:report->>isInfantFormula')
+    .select('id, product_name, score:report->overallScore, isInfantFormula:report->>isInfantFormula')
     .in('review_status', VISIBLE_REVIEW_STATUSES)
     .limit(1000);
 
@@ -420,29 +431,39 @@ export async function getDailySpotlight() {
   const sorted = [...withScore].sort((a, b) => b.score - a.score);
   const poolSize = Math.min(20, sorted.length);
   const seed = dayOfYearSeed();
+  const bestRow = sorted[seed % poolSize];
+  const worstRow = sorted[sorted.length - 1 - (seed % poolSize)];
+
+  // Step 2: the card's own details, for the two products picked.
+  const { data: details } = await supabase
+    .from('product_reports')
+    .select('id, lookup_key, brand:report->>brand, imageUrl:report->>imageUrl, verdict:report->>verdict, flags:report->flags, positives:report->positives')
+    .in('id', [...new Set([bestRow.id, worstRow.id])]);
+  const detailOf = (row) => (details || []).find((d) => d.id === row.id) || {};
 
   // Up to 2 reasons each -- the positives/flags a real report already
   // computed (scoringEngine.js), not a new classification invented for
-  // this card. Lets the homepage teach by example what actually moved
-  // the score, instead of a bare "worth a closer look" with nothing to
-  // back it up. Best shows what went RIGHT (positives); worst shows
-  // what went WRONG (flags) -- picking whichever field happens to be
-  // non-empty would show a low scorer's positives instead of why it's
-  // actually flagged.
-  const toItem = (row, reasonField) => ({
-    lookupKey: row.lookup_key,
-    productName: row.product_name,
-    brand: row.brand || null,
-    imageUrl: row.imageUrl || null,
-    score: row.score,
-    verdict: row.verdict || null,
-    reasons: (row[reasonField] || []).slice(0, 2),
-  });
-
-  return {
-    best: toItem(sorted[seed % poolSize], 'positives'),
-    worst: toItem(sorted[sorted.length - 1 - (seed % poolSize)], 'flags'),
+  // this card. Best shows what went RIGHT (positives); worst shows what
+  // went WRONG (flags) -- picking whichever field happens to be non-empty
+  // would show a low scorer's positives instead of why it's actually flagged.
+  const toItem = (row, reasonField) => {
+    const d = detailOf(row);
+    return {
+      lookupKey: d.lookup_key,
+      productName: row.product_name,
+      brand: d.brand || null,
+      imageUrl: d.imageUrl || null,
+      score: row.score,
+      verdict: d.verdict || null,
+      reasons: (d[reasonField] || []).slice(0, 2),
+    };
   };
+
+  const result = { best: toItem(bestRow, 'positives'), worst: toItem(worstRow, 'flags') };
+  if (result.best.lookupKey || result.worst.lookupKey) {
+    try { localStorage.setItem(cacheKey, JSON.stringify(result)); } catch { /* private mode / no storage */ }
+  }
+  return result;
 }
 
 /**
@@ -485,36 +506,47 @@ const SAFE_SCORE_THRESHOLD = 65;
  * is both free and more trustworthy than asking a model to name a
  * product that may not even be in our database.
  */
-async function getCategoryProducts({ productName, lookupKey, limit, minScore }) {
-  if (!isSupabaseConfigured) return [];
+// The top-scoring products of each category, kept for 10 minutes and shared
+// by every product viewed in that category (and by the safer/similar lists).
+// It used to be one 60-full-report query per product view -- 600 KB -- for
+// three cards. Now: a halves-of-a-kilobyte list of names and scores first,
+// full reports only for the pool that is actually used, once per category.
+export const CATEGORY_POOL_SIZE = 30;
+const CATEGORY_POOL_TTL_MS = 10 * 60 * 1000;
+const categoryPools = new Map(); // category id -> { at, promise }
 
-  const category = findCategoryForProduct(productName);
-  if (!category) return [];
-
+async function loadCategoryPool(category) {
   const orFilter = category.keywords.map((k) => `product_name.ilike.%${k}%`).join(',');
 
-  const { data, error } = await supabase
+  // Ordered server-side by score -- a category like "chocolates" has 250+
+  // real rows, so without an explicit order Postgres hands back an arbitrary
+  // few that can miss every qualifying row purely by chance (confirmed live).
+  const { data: ranked, error } = await supabase
     .from('product_reports')
-    .select('lookup_key, product_name, report')
+    .select('id, product_name, score:report->overallScore')
     .in('review_status', VISIBLE_REVIEW_STATUSES)
     .or(orFilter)
-    .neq('lookup_key', lookupKey || '')
-    // Ordered server-side by score -- a category like "chocolates" has
-    // 250+ real rows, far more than the 60 this fetches, so without an
-    // explicit order Postgres hands back an arbitrary 60 that can miss
-    // every single qualifying (score >= minScore) row purely by chance.
-    // Confirmed live: the exact same query with no order intermittently
-    // returned zero safer alternatives for a real low-scoring product
-    // that genuinely had several in the catalog.
     .order('report->overallScore', { ascending: false })
-    .limit(60); // score lives inside the report JSON, so filter/slice client-side below
+    .limit(CATEGORY_POOL_SIZE * 3); // the ilike is a substring match; some rows are dropped below
+  if (error || !ranked) return [];
 
-  if (error || !data) return [];
+  // Whole-word match, as everywhere else (findCategoryForProduct): "Haldiram's"
+  // is not a spice just because it contains "haldi".
+  const pool = ranked
+    .filter((r) => r.product_name && typeof r.score === 'number' && findCategoryForProduct(r.product_name)?.id === category.id)
+    .slice(0, CATEGORY_POOL_SIZE);
+  if (!pool.length) return [];
 
-  return data
-    // ilike above is a substring match; keep only rows this same matcher
-    // puts in this category ("Haldiram's ..." is not a spice).
-    .filter((row) => row.product_name && findCategoryForProduct(row.product_name)?.id === category.id)
+  const { data: full, error: fullError } = await supabase
+    .from('product_reports')
+    .select('id, lookup_key, product_name, report')
+    .in('id', pool.map((r) => r.id));
+  if (fullError || !full) return [];
+  const byId = new Map(full.map((row) => [row.id, row]));
+
+  return pool
+    .map((r) => byId.get(r.id))
+    .filter(Boolean)
     .map((row) => ({
       lookupKey: row.lookup_key,
       productName: row.product_name,
@@ -524,19 +556,39 @@ async function getCategoryProducts({ productName, lookupKey, limit, minScore }) 
       verdict: row.report?.verdict || null,
       // Passed through so the caller can re-rank these by a specific
       // person's priorities (see personalAssessment.js) without a second
-      // query -- the full report JSON is already being fetched above, so
-      // carrying two more of its fields costs nothing extra.
+      // query.
       ingredients: row.report?.ingredients || [],
       realNutrients: row.report?.realNutrients || null,
-      // For the "swap and save" comparison (swapSavings.js) -- same
-      // already-fetched JSON, no extra query.
+      // For the "swap and save" comparison (swapSavings.js).
       nutrientsPer100: row.report?.nutrientsPer100 || null,
       realNutrientsServingGrams: row.report?.realNutrientsServingGrams ?? null,
       nutritionPanel: row.report?.nutritionPanel || null,
       foodType: row.report?.foodType || null,
       isCondimentOrSeasoning: row.report?.isCondimentOrSeasoning || false,
     }))
-    .filter((p) => typeof p.score === 'number' && (minScore == null || p.score >= minScore))
+    .filter((p) => typeof p.score === 'number');
+}
+
+function categoryPool(category) {
+  const hit = categoryPools.get(category.id);
+  if (hit && Date.now() - hit.at < CATEGORY_POOL_TTL_MS) return hit.promise;
+  const promise = loadCategoryPool(category);
+  categoryPools.set(category.id, { at: Date.now(), promise });
+  // Never keep an empty or failed answer around: the next view tries again.
+  promise.then((rows) => { if (!rows.length) categoryPools.delete(category.id); }, () => categoryPools.delete(category.id));
+  return promise;
+}
+
+async function getCategoryProducts({ productName, lookupKey, limit, minScore }) {
+  if (!isSupabaseConfigured) return [];
+
+  const category = findCategoryForProduct(productName);
+  if (!category) return [];
+
+  const pool = await categoryPool(category);
+  return pool
+    .filter((p) => p.lookupKey !== (lookupKey || ''))
+    .filter((p) => minScore == null || p.score >= minScore)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { getHistoryById, updateHistoryProductName, refreshHistoryEntry, saveToHistory, getScoreColor, getIngredientSeverity } from '../utils/storage';
-import { getCachedReport, getSaferAlternatives, getSimilarProducts, saveReport, getReportIdByLookupKey } from '../services/productCache';
+import { getCachedReport, getSaferAlternatives, getSimilarProducts, saveReport, getReportIdByLookupKey, CATEGORY_POOL_SIZE } from '../services/productCache';
 import { buildProductShareText, productShareUrl } from '../utils/share';
 import ShareSheet from '../components/ShareSheet';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
@@ -135,11 +135,11 @@ const MAIN_FACTORS_LIMIT = 4;
 // personal ranking could only reshuffle the same three products the
 // general score already picked.
 const ALTERNATIVES_SHOWN = 3;
-// 60 = everything the category query fetches anyway (productCache.js's
-// getCategoryProducts always reads 60 rows), so a bigger pool costs no
-// extra query -- and the "swap and save" pick (swapSavings.js) needs it:
-// like-for-like swaps are rare among just the top few by score.
-const ALTERNATIVES_POOL_SIZE = 60;
+// The whole category pool (productCache.js CATEGORY_POOL_SIZE, 30 top scorers, fetched
+// once per category and kept for 10 minutes): a pool bigger than the 3 shown lets a
+// personal ranking reorder real candidates, and the 'swap and save' pick
+// (swapSavings.js) needs more than the top few -- like-for-like swaps are rare there.
+const ALTERNATIVES_POOL_SIZE = CATEGORY_POOL_SIZE;
 
 // Short, direct answer to "should I eat this?" shown next to the fork
 // icon in the score hero -- deliberately a different word than the big
