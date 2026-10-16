@@ -12,6 +12,7 @@ import { getScoreColor, saveToHistory } from '../utils/storage';
 import { useFamily } from '../contexts/FamilyContext';
 import { buildComparisonRows, describeDifferences, scoreFitLabels, personalFitLabels } from '../services/compareProducts';
 import ProductImage from '../components/ProductImage';
+import { PUBLIC_APP_URL, whatsappShareUrl } from '../utils/share';
 
 function ScoreCell({ score, relativeLabel }) {
   if (typeof score !== 'number') {
@@ -62,6 +63,25 @@ export default function Compare() {
   const openProduct = (product) => {
     const historyId = saveToHistory(product, 'search');
     navigate(`/result/${historyId}`);
+  };
+
+  // The scores as numbers only -- no "winner" in the message; the person
+  // receiving it opens the app to see why. Native share sheet where there is
+  // one, WhatsApp otherwise.
+  const shareComparison = async () => {
+    const lines = products
+      .filter((p) => typeof p.overallScore === 'number')
+      .map((p) => `• ${p.productName} — ${p.overallScore}/100`);
+    const text = `Compared on FoodGuard India:\n${lines.join('\n')}\n\nCheck any packaged food: ${PUBLIC_APP_URL}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'FoodGuard India comparison', text });
+        return;
+      }
+    } catch (err) {
+      if (err?.name === 'AbortError') return; // the person closed the share sheet
+    }
+    window.open(whatsappShareUrl(text), '_blank', 'noopener');
   };
 
   if (products.length < 2) {
@@ -294,6 +314,48 @@ export default function Compare() {
           <p className="text-[13px] leading-relaxed" style={{ color: 'var(--label-1)' }}>{take.text}</p>
         </div>
       )}
+
+      {/* What to do next: open any compared product's full report, start a
+          new comparison, or send this one on. Up to 4 products, so the
+          reports are a list of rows (not side-by-side buttons). */}
+      <div className="mt-5">
+        <p className="text-[12.5px] font-semibold mb-2" style={{ color: 'var(--label-2)' }}>See a full report</p>
+        <div className="rounded-[16px] overflow-hidden" style={{ background: 'var(--bg-card)' }}>
+          {rows.map((r, i) => (
+            <button
+              key={r.lookupKey}
+              onClick={() => openProduct(products[i])}
+              className="tap-scale w-full flex items-center gap-3 px-3 py-2.5 text-left"
+              style={i ? { borderTop: '1px solid var(--separator)' } : undefined}
+            >
+              <ProductImage src={r.imageUrl} size={44} expandable={false} />
+              <span className="flex-1 min-w-0">
+                <span className="block text-[13.5px] font-semibold truncate" style={{ color: 'var(--label-1)' }}>{r.productName}</span>
+                {r.brand && <span className="block text-[11px] truncate" style={{ color: 'var(--label-3)' }}>{r.brand}</span>}
+              </span>
+              <ScoreCell score={r.overallScore} />
+              <span className="text-[18px] leading-none" style={{ color: 'var(--label-3)' }} aria-hidden="true">›</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={() => navigate('/compare')}
+          className="tap-scale flex-1 py-3 rounded-[12px] text-[14px] font-semibold"
+          style={{ background: 'var(--fill)', color: 'var(--label-1)' }}
+        >
+          ⚖️ Compare others
+        </button>
+        <button
+          onClick={shareComparison}
+          className="tap-scale flex-1 py-3 rounded-[12px] text-[14px] font-semibold text-white"
+          style={{ background: 'var(--tint)' }}
+        >
+          Share
+        </button>
+      </div>
 
       <p className="text-[11px] mt-4 text-center" style={{ color: 'var(--label-3)' }}>
         "—" means that product's label/scan didn't have a real number for this.
