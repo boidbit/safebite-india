@@ -161,7 +161,7 @@ function YearHeadline({ item, yearly, color, t }) {
 // `habitRow` (the quick health check, from Result.jsx) sits in the always-
 // visible part; `showDetails` opens the week/month/year tiles, the yearly
 // packets, the cut-down tip and the notes.
-export default function NutrientAddsUp({ projection, t, onShowAlternatives, showDetails = true, onToggleDetails, habitRow, onOpenBodyStory }) {
+export default function NutrientAddsUp({ projection, t, onShowAlternatives, showDetails = true, onToggleDetails, habitRow, onOpenBodyStory, onOpenFilm }) {
   const { serving, items } = projection;
   const [perWeek, setPerWeek] = useState(7);
   const [activeKey, setActiveKey] = useState(items[0].key);
@@ -239,15 +239,29 @@ export default function NutrientAddsUp({ projection, t, onShowAlternatives, show
 
       {/* The sugar body story, whenever this product has sugar to show --
           on every tab, not only Sugar's, so it's never one tap out of sight. */}
-      {onOpenBodyStory && sugarItem && (
-        <button
-          onClick={() => onOpenBodyStory({ key: 'sugar', teaspoons: sugarItem.teaspoonsPerServing, grams: sugarItem.gramsPerServing, servingGrams: serving.grams, unit: serving.unit, perWeek })}
-          className="tap-scale mt-2.5 inline-flex items-center gap-2 pl-1.5 pr-3.5 py-1.5 rounded-full text-[13px] font-bold"
-          style={{ background: `rgba(${LOOK.sugar.rgb}, 0.12)`, color: LOOK.sugar.color }}
-        >
-          <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px]" style={{ background: LOOK.sugar.color }} aria-hidden="true">▶</span>
-          {t('bsOpenSugar')}
-        </button>
+      {(onOpenBodyStory || onOpenFilm) && sugarItem && (
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {onOpenBodyStory && (
+            <button
+              onClick={() => onOpenBodyStory({ key: 'sugar', teaspoons: sugarItem.teaspoonsPerServing, grams: sugarItem.gramsPerServing, servingGrams: serving.grams, unit: serving.unit, perWeek })}
+              className="tap-scale inline-flex items-center gap-2 pl-1.5 pr-3.5 py-1.5 rounded-full text-[13px] font-bold"
+              style={{ background: `rgba(${LOOK.sugar.rgb}, 0.12)`, color: LOOK.sugar.color }}
+            >
+              <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px]" style={{ background: LOOK.sugar.color }} aria-hidden="true">▶</span>
+              {t('bsOpenSugar')}
+            </button>
+          )}
+          {onOpenFilm && (
+            <button
+              onClick={() => onOpenFilm({ grams: sugarItem.gramsPerServing, servingGrams: serving.grams, unit: serving.unit, perWeek })}
+              className="tap-scale inline-flex items-center gap-2 pl-1.5 pr-3.5 py-1.5 rounded-full text-[13px] font-bold"
+              style={{ background: 'var(--fill)', color: 'var(--label-1)' }}
+            >
+              <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px]" style={{ background: '#7c3aed' }} aria-hidden="true">▶</span>
+              {t('bjFilmOpen')}
+            </button>
+          )}
+        </div>
       )}
 
       <YearHeadline item={item} yearly={yearly} color={look.color} t={t} />

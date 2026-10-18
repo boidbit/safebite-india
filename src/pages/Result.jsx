@@ -7,6 +7,7 @@ import { getCachedReport, getSaferAlternatives, getSimilarProducts, saveReport, 
 import { buildProductShareText, productShareUrl } from '../utils/share';
 import ShareSheet from '../components/ShareSheet';
 import SugarJourney from '../components/body/SugarJourney';
+import SugarFilm from '../components/body/SugarFilm';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { renderShareCardImage } from '../utils/shareCard';
 import headerIcon from '../assets/header-icon.png';
@@ -265,6 +266,7 @@ export default function Result() {
   const [showShare, setShowShare] = useState(false);
   // The "what happens in your body" story open, with this product's numbers.
   const [bodyStory, setBodyStory] = useState(null);
+  const [film, setFilm] = useState(null);
   // "What this adds up to": week/month/year tiles and the rest on a tap.
   const [addsOpen, setAddsOpen] = useState(false);
   // "Refresh analysis" re-runs the AI on the label -- an admin tool, so only
@@ -1313,6 +1315,7 @@ export default function Result() {
                 onToggleDetails={() => setAddsOpen((open) => !open)}
                 habitRow={habitRow}
                 onOpenBodyStory={setBodyStory}
+                onOpenFilm={setFilm}
               />
             ) : (
               <div className="px-4 py-3.5">{habitRow}</div>
@@ -1606,6 +1609,17 @@ export default function Result() {
           unit={bodyStory.unit}
           perWeek={bodyStory.perWeek}
           onClose={() => setBodyStory(null)}
+          t={t}
+        />
+      )}
+      {film && (
+        <SugarFilm
+          productName={result.productName}
+          grams={film.grams}
+          servingGrams={film.servingGrams}
+          unit={film.unit}
+          perWeek={film.perWeek}
+          onClose={() => setFilm(null)}
           t={t}
         />
       )}
