@@ -116,7 +116,9 @@ export function extractNutrientsForHabitCheck(nutrition, servingSize = null) {
   // in the Nutrition section, not used by scoring. Same key names as
   // openFoodFacts.js produces, so the UI never has to care which source
   // a product's numbers came from.
-  const carbohydrateG = toG(parseAmount(nutrition['Carbohydrate'] || nutrition['Carbohydrates'] || nutrition['Total Carbohydrate']));
+  // Blinkit's own label is "Total Carbohydrates" (6,021 scraped rows) -- missing it here
+  // left every Blinkit report without carbs until it was added.
+  const carbohydrateG = toG(parseAmount(nutrition['Total Carbohydrates'] || nutrition['Carbohydrate'] || nutrition['Carbohydrates'] || nutrition['Total Carbohydrate']));
   const totalSugarG = toG(parseAmount(nutrition['Total Sugar'] || nutrition['Total Sugars'] || nutrition['Sugar']));
   const totalFatG = toG(parseAmount(nutrition['Total Fat'] || nutrition['Fat']));
   const fibreG = toG(parseAmount(nutrition['Dietary Fibre'] || nutrition['Dietary Fiber'] || nutrition['Fibre']));

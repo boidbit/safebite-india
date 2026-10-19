@@ -96,3 +96,11 @@ test('an ordinary sodium reading in mg is unaffected by the guard', () => {
   const result = extractNutrientsForHabitCheck({ Sodium: '450 mg', Energy: '400 kcal' });
   assert.equal(result.nutrients.sodiumMg, 450);
 });
+
+test('Blinkit\'s own "Total Carbohydrates" label is read (it was missed, so no Blinkit report had carbs)', () => {
+  const info = extractNutrientsForHabitCheck({ Energy: '494 kcal', Protein: '5 g', 'Total Fat': '28 g', 'Total Carbohydrates': '61 g' }, null);
+  assert.equal(info.nutrientsPer100.carbohydrateG, 61);
+  const served = extractNutrientsForHabitCheck({ Energy: '494 kcal', 'Total Carbohydrates': '61 g' }, '40 g');
+  assert.equal(served.nutrientsPer100.carbohydrateG, 61);
+  assert.equal(served.nutrients.carbohydrateG, 24.4);
+});
