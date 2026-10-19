@@ -112,10 +112,15 @@ export default function AdminBarcodeLinks() {
   const detailOf = (key) => assessment?.detailOf?.get(key);
   // Tied to more than one product -- never part of a bulk approve.
   const isConflict = (p) => p.competing > 0 || (verdictOf(p)?.reasons || []).some((r) => r.startsWith('This barcode was also'));
+  // The barcode is already one of our products -- scanning it opens that
+  // product anyway, so tying it to a second product would only duplicate it.
+  const isInCatalog = (p) => (verdictOf(p)?.reasons || []).some((r) => r.startsWith('This barcode is already'));
+  const isApprovable = (p) => !isConflict(p) && !isInCatalog(p);
 
   const all = rows || [];
   const safePairs = all.filter((p) => verdictOf(p)?.safe);
-  const inCatalogPairs = all.filter((p) => (verdictOf(p)?.reasons || []).some((r) => r.startsWith('This barcode is already')));
+  const inCatalogPairs = all.filter(isInCatalog);
+  const clashPairs = all.filter(isConflict);
   const shown = all.filter((p) => {
     if (status !== 'pending' || !assessment || safetyFilter === 'all') return true;
     return safetyFilter === 'safe' ? verdictOf(p)?.safe : !verdictOf(p)?.safe;
@@ -157,13 +162,18 @@ export default function AdminBarcodeLinks() {
   };
 
   const approveMany = (pairs, what) => {
-    const ok = pairs.filter((p) => !isConflict(p));
-    const skipped = pairs.length - ok.length;
+    const ok = pairs.filter(isApprovable);
+    const clashing = pairs.filter(isConflict).length;
+    const inCatalog = pairs.filter((p) => !isConflict(p) && isInCatalog(p)).length;
+    const skipped = [
+      clashing && `${clashing} tied to more than one product`,
+      inCatalog && `${inCatalog} already a product in our catalog`,
+    ].filter(Boolean).join(' and ');
     return runBulk({
       pairs: ok,
       fn: adminApproveBarcodeLinks,
       label: 'Approving',
-      confirmText: `Approve ${ok.length} ${what}? Scanning each will open its product for everyone.${skipped ? ` ${skipped} tied to more than one product are left for you to pick.` : ''} You can still reject any of them later from the Approved tab.`,
+      confirmText: `Approve ${ok.length} ${what}? Scanning each will open its product for everyone.${skipped ? ` Left out: ${skipped}.` : ''} You can still reject any of them later from the Approved tab.`,
     });
   };
 
@@ -238,6 +248,16 @@ export default function AdminBarcodeLinks() {
             <button disabled={busy} onClick={() => act(adminRejectBarcodeLink, p)} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--v-poor)' }}>Reject</button>
           </div>
         )}
+        {status === 'approved' && (
+          <button
+            disabled={busy}
+            onClick={() => window.confirm('Reject this approved link? Scanning this barcode will stop opening this product.') && act(adminRejectBarcodeLink, p)}
+            className="tap-scale text-[13px] font-semibold flex-shrink-0"
+            style={{ color: 'var(--v-poor)' }}
+          >
+            Reject
+          </button>
+        )}
       </div>
     );
   };
@@ -294,8 +314,20 @@ export default function AdminBarcodeLinks() {
                 label: 'Rejecting',
                 confirmText: `Reject ${inCatalogPairs.length} barcodes that are already a product in our catalog? Scanning them already opens that product, so these links aren't needed.`,
               }), 'var(--v-poor)', assessment ? inCatalogPairs.length : 0)}
+              {bulkButton('Reject all that clash', () => runBulk({
+                pairs: clashPairs,
+                fn: adminRejectBarcodeLinks,
+                label: 'Rejecting',
+                confirmText: `Reject ${clashPairs.length} barcodes that are tied to more than one product? Each one has another product on the same barcode, so at least one of them is wrong -- better no link than a wrong one. Nothing is deleted: they move to the Rejected tab.`,
+              }), 'var(--v-poor)', assessment ? clashPairs.length : 0)}
             </div>
           </div>
+          {assessment && (
+            <p className="text-[12px] mt-2.5" style={{ color: 'var(--label-3)' }}>
+              Quickest order: <strong>1.</strong> Approve all safe · <strong>2.</strong> Reject all already in catalog · <strong>3.</strong> Reject all that clash.
+              When in doubt, reject: a missing link just shows “product not found”, a wrong link shows the wrong product.
+            </p>
+          )}
           {(selectedPairs.length > 0 || progress) && (
             <div className="flex items-center gap-2 flex-wrap mt-3 pt-3" style={{ borderTop: '1px solid var(--separator)' }}>
               {progress ? (
@@ -326,7 +358,7 @@ export default function AdminBarcodeLinks() {
         ? groups.map(([brand, pairs]) => {
           const keys = pairs.map(pairKey);
           const allOn = keys.every((k) => selected.has(k));
-          const approvable = pairs.filter((p) => !isConflict(p));
+          const approvable = pairs.filter(isApprovable);
           return (
             <div key={brand} className="mb-5">
               <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
