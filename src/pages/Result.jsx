@@ -39,6 +39,8 @@ import LabelXray from '../components/LabelXray';
 import NutritionTrafficLight from '../components/NutritionTrafficLight';
 import ClaimCheckCard from '../components/ClaimCheckCard';
 import { checkClaims } from '../services/claimCheck';
+import { nutritionIssues } from '../services/dataHealth';
+import { nutritionRemark } from '../utils/nutritionRemarks';
 import { buildTrafficLight } from '../services/trafficLight';
 import { swapSavings } from '../services/swapSavings';
 import StoryCards from '../components/StoryCards';
@@ -510,6 +512,15 @@ export default function Result() {
   // Claims in the name ("Sugar Free") checked against the saved nutrition table
   // and ingredient list -- plain arithmetic on what the report already holds.
   const claimUnit = result.foodType === 'beverage' || result.realNutrientsServingUnit === 'ml' ? 'ml' : 'g';
+  // Nutrition figures that can't all be right ("saturated fat more than total
+  // fat"): the traffic lights, claim check and adds-up card are paused and a note
+  // says why. Worked out from the report every time, never stored -- once the
+  // figures are corrected the note and the pause go away on their own.
+  const nutritionReview = result.nutrientsPer100 ? nutritionIssues({
+    n: result.nutrientsPer100,
+    ingredientsText: result.ingredientsText || (result.ingredients || []).map((i) => i.name).join(', '),
+  }) : [];
+  const nutritionPaused = nutritionReview.length > 0;
   const claimChecks = checkClaims({
     productName: result.productName,
     brand: result.brand,
@@ -571,7 +582,9 @@ export default function Result() {
   // this product (swapSavings.js). The spelled-out best swap is the
   // first-ranked alternative that also scores higher -- a lower-scoring
   // "similar product" is never suggested as a swap.
-  const savingsByKey = Object.fromEntries(alternatives.map((item) => [item.lookupKey, swapSavings(result, item)]));
+  // Nothing to compare when this product's own figures are under review: "80 g less
+  // saturated fat" would be worked out from the very number that's wrong.
+  const savingsByKey = Object.fromEntries(alternatives.map((item) => [item.lookupKey, nutritionPaused ? [] : swapSavings(result, item)]));
   // From the WHOLE pool (already sorted best-first), not just the three
   // cards shown -- the best like-for-like swap is often further down.
   const bestSwapItem = (result.overallScore || 0) < 65
@@ -683,7 +696,7 @@ export default function Result() {
   // to tell. See nutrientProjection.js / sugarProjection.js for every guardrail.
   const nutrientProjection = result.isInfantFormula ? null : buildNutrientProjections(result);
   // Low/Medium/High tiles for the Nutrition section -- always per 100g/ml.
-  const trafficLight = buildTrafficLight(result);
+  const trafficLight = nutritionPaused ? null : buildTrafficLight(result);
   const scrollToAlternatives = () => document.getElementById('alternatives-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   // For the "Why did this score X?" modal -- every ingredient that
@@ -1226,6 +1239,18 @@ export default function Result() {
               {/* The traffic lights are per 100g (their own heading, above
                   them); the numbers below are per serving when a real one is
                   known -- so each part says its own basis, split by a rule. */}
+              {nutritionPaused && (
+                <div className="mb-3 rounded-[12px] px-3.5 py-3" style={{ background: 'var(--fill)', borderLeft: '3px solid var(--v-moderate)' }}>
+                  <p className="text-[13.5px] font-semibold" style={{ color: 'var(--label-1)' }}>⚠️ {t('nutritionReviewTitle')}</p>
+                  <p className="text-[12.5px] mt-1" style={{ color: 'var(--label-2)' }}>{t('nutritionReviewIntro')}</p>
+                  <ul className="mt-1.5 space-y-0.5 list-disc pl-4">
+                    {nutritionReview.slice(0, 4).map((issue) => (
+                      <li key={`${issue.kind}-${issue.nutrient || ''}`} className="text-[12.5px]" style={{ color: 'var(--label-1)' }}>{nutritionRemark(issue, t, claimUnit)}</li>
+                    ))}
+                  </ul>
+                  <p className="text-[11.5px] mt-1.5" style={{ color: 'var(--label-3)' }}>{t('nutritionReviewOutro')}</p>
+                </div>
+              )}
               {trafficLight && (
                 <NutritionTrafficLight
                   light={trafficLight}
@@ -1242,7 +1267,8 @@ export default function Result() {
                 </p>
                 {/* Only offered when there's real calorie data to log against
                     -- see canLogIntake in intakeLog.js. No estimation path. */}
-                {canLogIntake(result) && (
+                {/* Not while the figures are under review: they'd go into the person's intake log. */}
+                {canLogIntake(result) && !nutritionPaused && (
                   <button
                     onClick={() => setShowLogModal(true)}
                     className="tap-scale flex-shrink-0 px-3 py-1.5 rounded-full text-[12px] font-semibold"
@@ -1267,7 +1293,7 @@ export default function Result() {
         </>
       )}
 
-      {view === 'overview' && claimChecks.length > 0 && (
+      {view === 'overview' && !nutritionPaused && claimChecks.length > 0 && (
         <>
           <SectionHeader>🔎 {t('claimCheckTitle')}</SectionHeader>
           <Group>
@@ -1294,7 +1320,7 @@ export default function Result() {
           check, its own link to the full breakdown) always in view; the
           week/month/year tiles, yearly packets and notes on a tap. Pure
           quantity from the label, never a claim about anyone's body. */}
-      {view === 'overview' && (nutrientProjection || habitDisplay) && (
+      {view === 'overview' && !nutritionPaused && (nutrientProjection || habitDisplay) && (
         <>
           <SectionHeader>🥄 {t('addsUpTitle')}</SectionHeader>
           <Group>

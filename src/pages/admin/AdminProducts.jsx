@@ -11,11 +11,16 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import AdminLayout from './AdminLayout';
 import PhotoCropModal from './PhotoCropModal';
-import { adminListReviewQueue, adminReviewCounts, adminSetReviewStatus, adminForgetDuplicateNames, adminProductThumb, adminGetProductRow, REVIEW_TABS, DEFAULT_REVIEW_TAB } from '../../services/adminReviewRepo';
+import { adminListReviewQueue, adminReviewCounts, adminSetReviewStatus, adminForgetDuplicateNames, adminForgetNutritionReview, adminProductThumb, adminGetProductRow, REVIEW_TABS, DEFAULT_REVIEW_TAB } from '../../services/adminReviewRepo';
 import { adminDeleteProduct, adminUpdateProduct } from '../../services/adminProductsRepo';
 import { getScoreColor } from '../../utils/storage';
 import { parseSize, sizeLabel } from '../../utils/productFamilies';
 import { CATEGORY_KEYWORDS } from '../../data/categoryKeywords';
+import { STRINGS, interpolate } from '../../i18n/strings';
+import { nutritionRemark } from '../../utils/nutritionRemarks';
+
+// The admin panel is English: the same remark the product page shows a reader.
+const remarkEn = (issue) => nutritionRemark(issue, (key, params) => interpolate(STRINGS.en[key], params));
 import { FOOD_TYPES } from '../../services/foodType';
 
 const PAGE_SIZES = [25, 50, 100, 'all'];
@@ -51,7 +56,7 @@ const SORT_OPTIONS = [
 
 const INITIAL_FILTERS = {
   status: DEFAULT_REVIEW_TAB, search: '', brand: '', foodType: '', categoryId: '', source: '',
-  scoreMin: '', scoreMax: '', hasImage: '', hasNutrition: '', hasPackSize: '', problemsOnly: false, duplicateNames: false,
+  scoreMin: '', scoreMax: '', hasImage: '', hasNutrition: '', hasPackSize: '', problemsOnly: false, duplicateNames: false, nutritionReview: false,
   addedWithinDays: '', barcode: '', hasBarcode: '', sort: 'newest', pageSize: 25,
 };
 const sizeOf = (f) => (f.pageSize === 'all' ? Infinity : Number(f.pageSize) || 25);
@@ -150,6 +155,11 @@ function ProductRow({ row, isSelected, onToggle, busy, onStatus, onCrop, onDelet
           {row.barcode ? <span className="font-mono">{row.barcode} · </span> : 'no barcode · '}
           {typeof thumb?.ingredientCount === 'number' ? `${thumb.ingredientCount} ingredients` : '… ingredients'}{r.nutrientsPer100 ? ' · nutrition' : ' · no nutrition'}
         </p>
+        {row.nutritionIssues?.length > 0 && (
+          <p className="text-[11px] mt-0.5" style={{ color: 'var(--v-moderate)' }} title={row.nutritionIssues.map(remarkEn).join('\n')}>
+            ⚠ {remarkEn(row.nutritionIssues[0])}{row.nutritionIssues.length > 1 ? ` (+${row.nutritionIssues.length - 1} more)` : ''}
+          </p>
+        )}
       </div>
       <span className="truncate" style={{ color: 'var(--label-2)' }}>{r.brand || '—'}</span>
       {(() => {
@@ -236,6 +246,7 @@ export default function AdminProducts() {
           hasPackSize: f.hasPackSize,
           problemsOnly: f.problemsOnly,
           duplicateNames: f.duplicateNames,
+          nutritionReview: f.nutritionReview,
           addedWithinDays: f.addedWithinDays !== '' ? Number(f.addedWithinDays) : null,
           barcode: f.barcode,
           hasBarcode: f.hasBarcode,
@@ -279,6 +290,7 @@ export default function AdminProducts() {
     try {
       await adminSetReviewStatus(products, status);
       adminForgetDuplicateNames();
+      adminForgetNutritionReview();
       await load(filters, page);
     } catch (err) {
       window.alert(err.message);
@@ -292,6 +304,7 @@ export default function AdminProducts() {
     try {
       await adminDeleteProduct(id, name);
       adminForgetDuplicateNames();
+      adminForgetNutritionReview();
       await load(filters, page);
     } catch (err) {
       window.alert(err.message);
@@ -424,6 +437,14 @@ export default function AdminProducts() {
         >
           <input type="checkbox" checked={filters.duplicateNames} onChange={(e) => setFilter('duplicateNames', e.target.checked)} />
           Same name twice
+        </label>
+        <label
+          className="flex items-center gap-2 px-3 py-2 rounded-[10px] text-[13px] font-semibold cursor-pointer"
+          style={{ background: 'var(--fill)', color: 'var(--label-1)' }}
+          title="Products whose nutrition figures can't all be right (e.g. saturated fat more than total fat). The product page pauses its traffic lights and claim check for these. A product leaves this list as soon as its figures are fixed."
+        >
+          <input type="checkbox" checked={filters.nutritionReview} onChange={(e) => setFilter('nutritionReview', e.target.checked)} />
+          Nutrition under review
         </label>
         {filtersActive && (
           <button onClick={() => setFilters({ ...INITIAL_FILTERS, status: filters.status, sort: filters.sort, pageSize: filters.pageSize })} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--label-3)' }}>

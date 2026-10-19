@@ -10,6 +10,7 @@ import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { barcodeKey, upsertProductNutrition } from './productCache.js';
 import { logActivity } from './adminActivityRepo.js';
 import { moveInlinePhotoToStorage } from './productPhotoStorage.js';
+import { adminForgetNutritionReview, adminForgetDuplicateNames } from './adminReviewRepo.js';
 
 function requireSupabase() {
   if (!isSupabaseConfigured) throw new Error('Supabase isn’t configured.');
@@ -191,6 +192,9 @@ export async function adminUpdateProduct(id, { lookupKey, source, productName, i
   // saveReport() does for a real scan. Harmless no-op when report has
   // no realNutrients at all (see upsertProductNutrition's own guard).
   await upsertProductNutrition(lookupKey, productName, report);
+  // The fix may take it out of "Nutrition under review" / "Same name twice": recompute those next time.
+  adminForgetNutritionReview();
+  adminForgetDuplicateNames();
 
   const changes = before ? diffProductChange(before, { productName, lookupKey, ingredientsText, report }) : null;
   logActivity({ action: 'update', targetType: 'product', targetId: id, productName, details: changes && Object.keys(changes).length ? { changes } : null });

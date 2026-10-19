@@ -13,6 +13,7 @@ import { logActivities } from './adminActivityRepo.js';
 import { chunk } from '../utils/chunk.js';
 import { duplicateNameIds, exactNameKey } from '../utils/duplicateNames.js';
 import { parsePack } from './productFamilies.js';
+import { nutritionIssues } from './dataHealth.js';
 
 const UPDATE_BATCH = 100; // ids per request (a uuid is ~37 characters of URL)
 
@@ -82,6 +83,36 @@ async function idsWithDuplicateNames() {
   return ids;
 }
 
+// Products whose nutrition figures can't all be right (dataHealth.js
+// nutritionIssues), with the reasons -- the "Nutrition under review" filter.
+// Worked out from the saved figures, never stored: a product whose figures were
+// corrected simply isn't in the next list. Kept 5 minutes; an edit or a status
+// change clears it (adminForgetNutritionReview) so a fixed product leaves at once.
+let reviewCache = { at: 0, map: null };
+async function nutritionIssueMap() {
+  if (reviewCache.map && Date.now() - reviewCache.at < DUPES_TTL_MS) return reviewCache.map;
+  const map = new Map();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from('product_reports')
+      .select('id, ingredients_text, n:report->nutrientsPer100')
+      .neq('review_status', 'rejected')
+      .order('id', { ascending: true })
+      .range(from, from + 999);
+    if (error) throw new Error(error.message);
+    for (const r of data || []) {
+      const issues = r.n ? nutritionIssues({ n: r.n, ingredientsText: r.ingredients_text }) : [];
+      if (issues.length) map.set(r.id, issues);
+    }
+    if (!data || data.length < 1000) break;
+  }
+  reviewCache = { at: Date.now(), map };
+  return map;
+}
+
+export function adminForgetNutritionReview() {
+  reviewCache = { at: 0, map: null };
+}
+
 /** Forget the remembered duplicates -- after products were merged, hidden or renamed. */
 export function adminForgetDuplicateNames() {
   dupesCache = { at: 0, ids: null };
@@ -128,6 +159,7 @@ export async function adminListReviewQueue({
   hasPackSize = '',
   problemsOnly = false,
   duplicateNames = false,
+  nutritionReview = false,
   addedWithinDays = null,
   barcode = '',
   hasBarcode = '',
@@ -144,6 +176,11 @@ export async function adminListReviewQueue({
   if (barcodeIds && barcodeIds.length === 0) return { rows: [], count: 0 };
   const dupIds = duplicateNames ? await idsWithDuplicateNames() : null;
   if (dupIds && dupIds.length === 0) return { rows: [], count: 0 };
+  const reviewMap = nutritionReview ? await nutritionIssueMap() : null;
+  // The id-list filters, combined: a product has to be in every list that's on.
+  let idList = dupIds;
+  if (reviewMap) idList = idList ? idList.filter((id) => reviewMap.has(id)) : [...reviewMap.keys()];
+  if (idList && idList.length === 0) return { rows: [], count: 0 };
   // Fixed once, so every chunk of "All" asks about the same moment.
   const addedSince = typeof addedWithinDays === 'number' && addedWithinDays > 0
     ? new Date(Date.now() - addedWithinDays * 86400000).toISOString()
@@ -195,11 +232,11 @@ export async function adminListReviewQueue({
   // rest a thousand at a time (the API's own cap), side by side.
   let ids;
   let count;
-  if (dupIds) {
+  if (idList) {
     // The duplicates are a few hundred ids -- too many for one URL ("Bad
     // Request"), so ask 100 at a time (the other filters still apply) and
     // order and page them here, by name, so the copies sit next to each other.
-    const found = await inParallel(chunk(dupIds, 100), async (piece) => {
+    const found = await inParallel(chunk(idList, 100), async (piece) => {
       const { data, error } = await build().in('id', piece).range(0, 99);
       if (error) throw new Error(error.message);
       return data || [];
@@ -238,7 +275,7 @@ export async function adminListReviewQueue({
     ...r,
     report: { brand, packSize, overallScore, foodType, nutrientsPer100 },
   }));
-  if (dupIds) {
+  if (idList) {
     const size = (r) => parsePack(r.report.packSize)?.size ?? Infinity;
     rows.sort((a, b) => exactNameKey(a.product_name).localeCompare(exactNameKey(b.product_name)) || size(a) - size(b) || a.id.localeCompare(b.id));
     rows = rows.slice(offset, Number.isFinite(limit) ? offset + limit : undefined);
@@ -254,7 +291,11 @@ export async function adminListReviewQueue({
     for (const l of links || []) if (!linked.has(l.lookup_key)) linked.set(l.lookup_key, l.barcode);
   });
   return {
-    rows: rows.map((r) => ({ ...r, barcode: r.lookup_key.startsWith('barcode:') ? r.lookup_key.slice('barcode:'.length) : linked.get(r.lookup_key) || null })),
+    rows: rows.map((r) => ({
+      ...r,
+      barcode: r.lookup_key.startsWith('barcode:') ? r.lookup_key.slice('barcode:'.length) : linked.get(r.lookup_key) || null,
+      nutritionIssues: reviewMap?.get(r.id) || null,
+    })),
     count: count || 0,
   };
 }

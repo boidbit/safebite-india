@@ -68,3 +68,21 @@ test('identical long ingredient lists on different products are flagged; pack si
   assert.equal(groups.length, 1);
   assert.deepEqual(groups[0].rows.map((r) => r.id), ['a', 'b']);
 });
+
+test('nutritionIssues gives structured remarks, and nothing once the figures are right', async () => {
+  const { nutritionIssues } = await import('./dataHealth.js');
+  const kinds = (row) => nutritionIssues(row).map((i) => i.kind);
+  assert.deepEqual(nutritionIssues({ n: { saturatedFatG: 8.3, totalFatG: 6.6 } }), [{ kind: 'satOverFat', sat: 8.3, fat: 6.6 }]);
+  assert.deepEqual(kinds({ n: { carbohydrateG: 516.7, proteinG: 60, totalFatG: 80, caloriesKcal: 180 } }), ['over100', 'macrosOver100', 'calories']);
+  assert.deepEqual(nutritionIssues({ n: { totalSugarG: 0 }, ingredientsText: 'Water, Sugar' }), [{ kind: 'sugarZeroListed', value: 0, word: 'Sugar' }]);
+  assert.deepEqual(kinds({ n: { sodiumMg: 0 }, ingredientsText: 'Peanuts, Salt' }), ['sodiumZeroSalt']);
+  // the same product after its figures were fixed: out of review
+  assert.deepEqual(nutritionIssues({ n: { saturatedFatG: 4.4, totalFatG: 6.6 } }), []);
+  assert.deepEqual(nutritionIssues({ n: null }), []);
+});
+
+test('a small real amount is not a conflict: only a table that says zero is', () => {
+  assert.deepEqual(ids({ n: { totalSugarG: 0.38 }, ingredientsText: 'Whole Wheat Flour, Sugar, Salt' }), []);
+  assert.deepEqual(ids({ n: { sodiumMg: 4.1 }, ingredientsText: 'Water, Salt, Cumin' }), []);
+  assert.deepEqual(ids({ n: { totalFatG: 0.3 }, ingredientsText: 'Rice Flour, Oil' }), []);
+});
