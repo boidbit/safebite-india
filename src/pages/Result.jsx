@@ -37,6 +37,8 @@ import NutrientAddsUp from '../components/NutrientAddsUp';
 import { isNativeApp } from '../services/notifications';
 import LabelXray from '../components/LabelXray';
 import NutritionTrafficLight from '../components/NutritionTrafficLight';
+import ClaimCheckCard from '../components/ClaimCheckCard';
+import { checkClaims } from '../services/claimCheck';
 import { buildTrafficLight } from '../services/trafficLight';
 import { swapSavings } from '../services/swapSavings';
 import StoryCards from '../components/StoryCards';
@@ -505,6 +507,17 @@ export default function Result() {
   // whoever's currently active -- a hard safety constraint, unlike
   // Personal FoodGuard above (see services/allergenCenter.js).
   const allergenWarnings = getAllergenWarnings(result, profiles);
+  // Claims in the name ("Sugar Free") checked against the saved nutrition table
+  // and ingredient list -- plain arithmetic on what the report already holds.
+  const claimUnit = result.foodType === 'beverage' || result.realNutrientsServingUnit === 'ml' ? 'ml' : 'g';
+  const claimChecks = checkClaims({
+    productName: result.productName,
+    brand: result.brand,
+    nutrientsPer100: result.nutrientsPer100,
+    ingredients: result.ingredients,
+    isDrink: claimUnit === 'ml',
+    isInfantFormula: result.isInfantFormula,
+  });
   const openFlagModal = () => {
     setFlagReason('');
     setFlagRemarks('');
@@ -1250,6 +1263,15 @@ export default function Result() {
                 ))}
               </div>
             </div>
+          </Group>
+        </>
+      )}
+
+      {view === 'overview' && claimChecks.length > 0 && (
+        <>
+          <SectionHeader>🔎 {t('claimCheckTitle')}</SectionHeader>
+          <Group>
+            <ClaimCheckCard claims={claimChecks} t={t} unit={claimUnit} onReport={openFlagModal} />
           </Group>
         </>
       )}
