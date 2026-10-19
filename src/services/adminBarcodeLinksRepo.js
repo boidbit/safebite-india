@@ -8,6 +8,7 @@ import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { logActivity } from './adminActivityRepo.js';
 import { assessBarcodeLinks, brandKey } from './barcodeLinkSafety.js';
 import { blinkitLookupKey } from './blinkitProductsRepo.js';
+import { chunk } from '../utils/chunk.js';
 
 function requireSupabase() {
   if (!isSupabaseConfigured) throw new Error('Supabase isn’t configured.');
@@ -80,9 +81,11 @@ export async function adminApprovedBarcodeFor(lookupKey) {
 /**
  * Pending pairs judged by barcodeLinkSafety.js, plus each pair's brand
  * (filled in for links saved before the brand column) and product photo.
- * @returns {Promise<{ verdicts: Map<string, { safe: boolean, reasons: string[] }>,
- *   brandOf: Map<string, string|null>, imageOf: Map<string, string|null> }>}
- *   verdicts/brandOf keyed "barcode|lookupKey", imageOf by lookupKey
+ * @returns {Promise<{ verdicts: Map<string, { safe: boolean, reasons: string[], conflicts: string[] }>,
+ *   brandOf: Map<string, string|null>, imageOf: Map<string, string|null>,
+ *   detailOf: Map<string, { name, source, pack, brand, score, status, image }> }>}
+ *   verdicts/brandOf keyed "barcode|lookupKey", imageOf and detailOf by lookupKey.
+ *   detailOf covers the pairs that share their barcode with another product, and those other products.
  */
 // The check reads the whole catalog (~9 MB). It's remembered for 5 minutes so
 // the Dashboard, this page and a reload don't each download it again -- and
@@ -117,13 +120,13 @@ export async function adminAssessBarcodeLinks(pairs) {
 
 async function assessBarcodeLinksUncached(pairs) {
   requireSupabase();
-  const empty = { verdicts: new Map(), brandOf: new Map(), imageOf: new Map() };
+  const empty = { verdicts: new Map(), brandOf: new Map(), imageOf: new Map(), detailOf: new Map() };
   if (pairs.length === 0) return empty;
 
   const [otherLinks, reports, blinkit] = await Promise.all([
     allRows(() => supabase.from('barcode_links').select('barcode, lookup_key, brand').in('status', ['pending', 'approved'])),
     allRows(() => supabase.from('product_reports').select('lookup_key, brand:report->>brand, image:report->>imageUrl')),
-    allRows(() => supabase.from('blinkit_products').select('source, brand, product_name, optimized_image_url')),
+    allRows(() => supabase.from('blinkit_products').select('source, brand, product_name, optimized_image_url, pack_size')),
   ]);
   const reportByKey = new Map(reports.map((r) => [r.lookup_key, r]));
   const blinkitByKey = new Map(blinkit.map((b) => [blinkitLookupKey(b.source, b.brand, b.product_name), b]));
@@ -159,7 +162,37 @@ async function assessBarcodeLinksUncached(pairs) {
     knownBarcodes,
     productsByBrand,
   });
-  return { verdicts, brandOf, imageOf };
+  const detailOf = await loadConflictDetails(pairs, verdicts, blinkitByKey);
+  return { verdicts, brandOf, imageOf, detailOf };
+}
+
+// Name, source and pack size of each product that shares a barcode with a
+// pending pair, and of the pair's own product -- only those few hundred rows,
+// slim fields only, not the whole catalog again.
+async function loadConflictDetails(pairs, verdicts, blinkitByKey) {
+  const keys = new Set();
+  for (const p of pairs) {
+    const v = verdicts.get(`${p.barcode}|${p.lookupKey}`);
+    if (!v?.conflicts.length) continue;
+    keys.add(p.lookupKey);
+    v.conflicts.forEach((k) => keys.add(k));
+  }
+  const detailOf = new Map();
+  for (const piece of chunk([...keys], 40)) {
+    const { data, error } = await supabase.from('product_reports')
+      .select('id, lookup_key, product_name, source, review_status, brand:report->>brand, pack:report->>packSize, score:report->overallScore, image:report->>imageUrl')
+      .in('lookup_key', piece);
+    if (error) break; // the warnings still show; only the side-by-side details are missing
+    for (const r of data || []) {
+      detailOf.set(r.lookup_key, { id: r.id, name: r.product_name, source: r.source, pack: r.pack, brand: r.brand, score: r.score, status: r.review_status, image: r.image });
+    }
+  }
+  // A product that only exists as a scraped row so far (no report yet).
+  for (const k of keys) {
+    const row = blinkitByKey.get(k);
+    if (!detailOf.has(k) && row) detailOf.set(k, { name: row.product_name, source: row.source || 'blinkit', pack: row.pack_size, brand: row.brand, score: null, status: 'not yet a report', image: row.optimized_image_url });
+  }
+  return detailOf;
 }
 
 /**

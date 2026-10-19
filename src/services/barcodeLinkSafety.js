@@ -16,6 +16,8 @@
 //      in our catalog, so there's no sibling flavour/pack it could belong to
 // Pure: the caller loads the data (adminBarcodeLinksRepo.js).
 
+import { parsePack, nameTokens } from './productFamilies.js';
+
 export const COMPANY_PREFIX_LENGTH = 7;
 const SKIP_WORDS = new Set(['the', 'a', 'an']);
 
@@ -36,7 +38,9 @@ const prefixOf = (barcode) => barcode.slice(0, COMPANY_PREFIX_LENGTH);
  * @param {Set<string>} context.catalogBarcodes - barcodes already a product_reports key ("barcode:<code>")
  * @param {Array<{ barcode, lookupKey, brand }>} context.knownBarcodes - barcodes with a known brand
  * @param {Map<string, number>} [context.productsByBrand] - catalog products per brandKey()
- * @returns {Map<string, { safe: boolean, reasons: string[] }>} keyed "barcode|lookupKey"
+ * @returns {Map<string, { safe: boolean, reasons: string[], conflicts: string[] }>} keyed "barcode|lookupKey";
+ *   `conflicts` are the lookup keys of the OTHER products this barcode is also tied to (or is) --
+ *   so the admin can see which ones, not just how many.
  */
 export function assessBarcodeLinks(links, { otherLinks = [], catalogBarcodes = new Set(), knownBarcodes = [], productsByBrand = new Map() } = {}) {
   const productsByBarcode = new Map();
@@ -60,7 +64,12 @@ export function assessBarcodeLinks(links, { otherLinks = [], catalogBarcodes = n
     const others = [...(productsByBarcode.get(link.barcode) || [])].filter((k) => k !== link.lookupKey);
     if (others.length) reasons.push(`This barcode was also found for ${others.length} other product${others.length === 1 ? '' : 's'}`);
 
-    if (catalogBarcodes.has(link.barcode)) reasons.push('This barcode is already a product in our catalog');
+    const conflicts = new Set(others);
+    if (catalogBarcodes.has(link.barcode)) {
+      reasons.push('This barcode is already a product in our catalog');
+      conflicts.add(`barcode:${link.barcode}`); // the catalog product IS this barcode
+    }
+    conflicts.delete(link.lookupKey);
 
     const brand = brandKey(link.brand);
     const sameBrand = (byBrand.get(brand) || []).filter((k) => k.lookupKey !== link.lookupKey && k.barcode !== link.barcode);
@@ -75,7 +84,31 @@ export function assessBarcodeLinks(links, { otherLinks = [], catalogBarcodes = n
       reasons.push(`Company code ${prefixOf(link.barcode)} doesn’t match ${link.brand}’s other barcodes (${[...new Set(sameBrand.map((k) => prefixOf(k.barcode)))].slice(0, 3).join(', ')})`);
     }
 
-    out.set(`${link.barcode}|${link.lookupKey}`, { safe: reasons.length === 0, reasons });
+    out.set(`${link.barcode}|${link.lookupKey}`, { safe: reasons.length === 0, reasons, conflicts: [...conflicts] });
   }
   return out;
+}
+
+/**
+ * What to make of two products sharing one barcode. A barcode is one pack of
+ * one product, so two different pack sizes can't both be right; the same pack
+ * and name is the same product saved twice.
+ * @param {{ name?: string, pack?: string|null }} own   the product the barcode is being tied to
+ * @param {{ name?: string, pack?: string|null }} other the product that already has / is also tied to it
+ * @returns {{ kind: 'different-pack'|'same-product'|'same-pack'|'unknown-pack', text: string }}
+ */
+export function conflictHint(own, other) {
+  const a = parsePack(own.pack) || parsePack(own.name);
+  const b = parsePack(other.pack) || parsePack(other.name);
+  if (a && b && a.key !== b.key) {
+    return { kind: 'different-pack', text: `Different pack sizes (${a.label} vs ${b.label}). One barcode is one pack, so one of the two is probably on the wrong barcode.` };
+  }
+  if (a && b) {
+    const x = nameTokens(own.name), y = nameTokens(other.name);
+    const same = x.size > 0 && x.size === y.size && [...x].every((w) => y.has(w));
+    return same
+      ? { kind: 'same-product', text: `Same pack size (${a.label}) and same name — most likely the same product saved twice. Keep one.` }
+      : { kind: 'same-pack', text: `Same pack size (${a.label}) but different names — compare the photos: the same product named two ways, or a different flavour.` };
+  }
+  return { kind: 'unknown-pack', text: 'Pack size is missing on one of them — compare the photos and names.' };
 }

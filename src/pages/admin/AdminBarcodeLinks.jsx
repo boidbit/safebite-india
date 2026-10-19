@@ -15,6 +15,7 @@ import {
   adminListBarcodeLinks, adminApproveBarcodeLink, adminRejectBarcodeLink,
   adminAssessBarcodeLinks, adminApproveBarcodeLinks, adminRejectBarcodeLinks, adminForgetBarcodeCheck,
 } from '../../services/adminBarcodeLinksRepo';
+import { conflictHint } from '../../services/barcodeLinkSafety';
 
 const SAFETY_FILTERS = [
   { id: 'all', label: 'All' },
@@ -30,7 +31,36 @@ const TABS = [
 
 const SOURCE_LABEL = { name_search: 'typed name', photo: 'pack photo', off_name: 'Open Food Facts name', blinkit_photo: 'Blinkit photo (barcode read twice)' };
 
+// Where a saved product came from (product_reports.source).
+const PRODUCT_SOURCE = { barcode: 'barcode scan / Open Food Facts', blinkit: 'Blinkit scrape', text: 'pasted label text', image: 'label photo', search: 'search' };
+const HINT_COLOR = { 'different-pack': 'var(--v-poor)', 'same-product': 'var(--v-moderate)', 'same-pack': 'var(--v-moderate)', 'unknown-pack': 'var(--label-3)' };
+
 const pairKey = (p) => `${p.barcode}|${p.lookupKey}`;
+
+// One product in the side-by-side: photo, name, and where it came from, its pack size and score.
+function ProductLine({ label, d, lookupKey }) {
+  const bits = [
+    PRODUCT_SOURCE[d?.source] || d?.source || 'unknown source',
+    d?.pack ? `pack ${d.pack}` : 'no pack size',
+    typeof d?.score === 'number' ? `score ${d.score}` : null,
+    d?.status || null,
+  ].filter(Boolean);
+  return (
+    <div className="flex items-center gap-2.5 mt-1.5">
+      <ProductImage src={d?.image} size={36} expandable={false} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[12.5px] truncate" style={{ color: 'var(--label-1)' }}>
+          <span className="text-[10.5px] font-bold uppercase tracking-wide mr-1.5" style={{ color: 'var(--label-3)' }}>{label}</span>
+          {d?.name || lookupKey}
+        </p>
+        <p className="text-[11.5px] truncate" style={{ color: 'var(--label-3)' }}>{d?.brand ? `${d.brand} · ` : ''}{bits.join(' · ')}</p>
+      </div>
+      {d?.id && (
+        <a href={`#/admin/products/${d.id}/edit`} target="_blank" rel="noreferrer" className="tap-scale text-[12.5px] font-semibold flex-shrink-0" style={{ color: 'var(--tint)' }}>Edit</a>
+      )}
+    </div>
+  );
+}
 
 export default function AdminBarcodeLinks() {
   const [status, setStatus] = useState('pending');
@@ -79,6 +109,7 @@ export default function AdminBarcodeLinks() {
   const verdictOf = (p) => assessment?.verdicts.get(pairKey(p));
   const brandOf = (p) => assessment?.brandOf.get(pairKey(p)) || p.brand || '';
   const imageOf = (p) => assessment?.imageOf.get(p.lookupKey) || null;
+  const detailOf = (key) => assessment?.detailOf?.get(key);
   // Tied to more than one product -- never part of a bulk approve.
   const isConflict = (p) => p.competing > 0 || (verdictOf(p)?.reasons || []).some((r) => r.startsWith('This barcode was also'));
 
@@ -175,6 +206,21 @@ export default function AdminBarcodeLinks() {
             <p className="text-[12px] mt-1 font-semibold" style={{ color: 'var(--v-moderate)' }}>
               ⚠ This barcode was also tied to {p.competing} other product{p.competing === 1 ? '' : 's'} — check which one is right.
             </p>
+          )}
+          {status === 'pending' && v?.conflicts?.length > 0 && (
+            <div className="mt-2 rounded-[10px] px-2.5 py-1.5" style={{ background: 'var(--fill)' }}>
+              <ProductLine label="This one" d={detailOf(p.lookupKey)} lookupKey={p.lookupKey} />
+              {v.conflicts.map((k) => {
+                const other = detailOf(k);
+                const hint = other && detailOf(p.lookupKey) ? conflictHint(detailOf(p.lookupKey), other) : null;
+                return (
+                  <div key={k}>
+                    <ProductLine label="Same barcode" d={other} lookupKey={k} />
+                    {hint && <p className="text-[11.5px] mt-1 ml-[46px] font-semibold" style={{ color: HINT_COLOR[hint.kind] }}>{hint.text}</p>}
+                  </div>
+                );
+              })}
+            </div>
           )}
           {status === 'pending' && v && (
             v.safe ? (
