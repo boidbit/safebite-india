@@ -76,6 +76,8 @@ export function tableProblems(n) {
   for (const k of ['proteinG', 'totalFatG', 'carbohydrateG', 'totalSugarG', 'addedSugarG', 'saturatedFatG', 'fibreG']) {
     if (num(n[k]) !== null && n[k] > 100.5) out.push({ kind: 'over100', nutrient: k, value: n[k] });
   }
+  // Pure salt is ~39,300 mg sodium per 100 g: more than that is a unit slip (g read as mg x1000).
+  if (num(n.sodiumMg) !== null && n.sodiumMg > 40000) out.push({ kind: 'sodiumTooHigh', value: n.sodiumMg });
   if (sat !== null && fat !== null && sat > fat * 1.05 + 0.1) out.push({ kind: 'satOverFat', sat, fat });
   if (trans !== null && fat !== null && trans > fat * 1.05 + 0.1) out.push({ kind: 'transOverFat', trans, fat });
   if (added !== null && total !== null && added > total * 1.05 + 0.1) out.push({ kind: 'addedOverTotal', added, total });
@@ -139,6 +141,7 @@ export const CHECKS = [
       const text = {
         negative: (p) => `${p.nutrient} is negative`,
         over100: (p) => `${p.nutrient} ${p.value} g per 100 g`,
+        sodiumTooHigh: (p) => `sodium ${p.value} mg per 100 g (more than pure salt)`,
         satOverFat: (p) => `saturated fat ${p.sat} > total fat ${p.fat}`,
         transOverFat: (p) => `trans fat ${p.trans} > total fat ${p.fat}`,
         addedOverTotal: (p) => `added sugar ${p.added} > total sugar ${p.total}`,

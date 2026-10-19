@@ -6,6 +6,7 @@
 const KEY = {
   negative: 'reviewNegative',
   over100: 'reviewOver100',
+  sodiumTooHigh: 'reviewSodiumTooHigh',
   satOverFat: 'reviewSatOverFat',
   transOverFat: 'reviewTransOverFat',
   addedOverTotal: 'reviewAddedOverTotal',

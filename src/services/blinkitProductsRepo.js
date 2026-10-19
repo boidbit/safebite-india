@@ -141,6 +141,16 @@ export function extractNutrientsForHabitCheck(nutrition, servingSize = null) {
   if (typeof totalSugarG === 'number' && totalSugarG !== addedSugarG) {
     nutrients.totalSugarG = totalSugarG;
   }
+  // Added sugar can't be more than total sugar. On Blinkit it is when the
+  // "Added Sugar" row was copied from the pack's per-SERVING column while the
+  // rest are per 100 (7UP Tropical: 38 g per can vs 10 g per 100 ml; checked
+  // against the pack photos, 30 of 54 wrong Blinkit tables). The total is the
+  // per-100 figure, so it stays as the one sugar figure and the added row goes.
+  if (typeof nutrients.totalSugarG === 'number' && typeof nutrients.addedSugarG === 'number'
+    && nutrients.addedSugarG > nutrients.totalSugarG * 1.05 + 0.1) {
+    nutrients.addedSugarG = nutrients.totalSugarG;
+    delete nutrients.totalSugarG;
+  }
 
   if (Object.keys(nutrients).length === 0) return null;
   const parsedServing = parseQuantityText(servingSize);

@@ -86,3 +86,9 @@ test('a small real amount is not a conflict: only a table that says zero is', ()
   assert.deepEqual(ids({ n: { sodiumMg: 4.1 }, ingredientsText: 'Water, Salt, Cumin' }), []);
   assert.deepEqual(ids({ n: { totalFatG: 0.3 }, ingredientsText: 'Rice Flour, Oil' }), []);
 });
+
+test('sodium above what pure salt contains is a unit slip', async () => {
+  const { nutritionIssues } = await import('./dataHealth.js');
+  assert.deepEqual(nutritionIssues({ n: { sodiumMg: 557500 } }), [{ kind: 'sodiumTooHigh', value: 557500 }]);
+  assert.deepEqual(nutritionIssues({ n: { sodiumMg: 2416 } }), []);
+});

@@ -104,3 +104,14 @@ test('Blinkit\'s own "Total Carbohydrates" label is read (it was missed, so no B
   assert.equal(served.nutrientsPer100.carbohydrateG, 61);
   assert.equal(served.nutrients.carbohydrateG, 24.4);
 });
+
+test('an "Added Sugar" bigger than "Total Sugar" (copied from the per-serving column) is not kept', () => {
+  // 7UP Tropical on Blinkit: total 10 g per 100 ml, "added" 38 g = the whole can
+  const info = extractNutrientsForHabitCheck({ Energy: '39 kcal', 'Total Sugar': '10 g', 'Added Sugar': '38 g' }, null);
+  assert.equal(info.nutrientsPer100.addedSugarG, 10);
+  assert.equal(info.nutrientsPer100.totalSugarG, undefined);
+  // a real split stays as it is
+  const split = extractNutrientsForHabitCheck({ 'Total Sugar': '22.5 g', 'Added Sugar': '16.6 g' }, null);
+  assert.equal(split.nutrientsPer100.addedSugarG, 16.6);
+  assert.equal(split.nutrientsPer100.totalSugarG, 22.5);
+});
