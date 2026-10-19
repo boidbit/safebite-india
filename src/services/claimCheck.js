@@ -93,6 +93,18 @@ function sugarLimit(n, limit) {
   return sugar === null ? noFigure('sugars') : figureCheck('sugars', sugar, 'g', within(sugar, limit));
 }
 
+/**
+ * "Sugar free" / "low sugar" count ALL sugars, natural ones too. When a product
+ * fails only because of natural sugar (the label shows added sugar 0 g, the
+ * total is high -- honey, dates, fruit), say so: the verdict stays, the reader
+ * gets the whole picture.
+ */
+function naturalOnlyNote(n, table) {
+  const total = num(n?.totalSugarG);
+  const added = num(n?.addedSugarG);
+  return table.state === 'bad' && total !== null && added !== null && added <= 0 ? [{ kind: 'naturalOnly', value: total, state: 'info' }] : [];
+}
+
 function sodiumLimit(n, limitMg) {
   const sodium = num(n?.sodiumMg);
   return sodium === null ? noFigure('sodium') : figureCheck('sodium', sodium, 'mg', within(sodium, limitMg));
@@ -117,14 +129,15 @@ function evaluate(id, p) {
   switch (id) {
     case 'sugarFree': {
       const table = sugarLimit(n, LIMITS.sugarFree);
-      const checks = [table];
+      const checks = [table, ...naturalOnlyNote(n, table)];
       const ing = sugarIng();
       if (ing.state === 'bad') checks.push(ingredientCheck('sugar', ing));
       return { limit: { cmp: 'atMost', value: LIMITS.sugarFree, unit: 'g' }, checks };
     }
     case 'lowSugar': {
       const limit = p.isDrink ? LIMITS.lowSugarDrink : LIMITS.lowSugarFood;
-      return { limit: { cmp: 'atMost', value: limit, unit: 'g' }, checks: [sugarLimit(n, limit)] };
+      const table = sugarLimit(n, limit);
+      return { limit: { cmp: 'atMost', value: limit, unit: 'g' }, checks: [table, ...naturalOnlyNote(n, table)] };
     }
     case 'noAddedSugar':
     case 'unsweetened': {

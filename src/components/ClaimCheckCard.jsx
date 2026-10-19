@@ -28,6 +28,8 @@ function evidenceLine(check, t, basis) {
       return t('claimEvNoFigure', { nutrient: t(NUTRIENT_LABEL[check.nutrient]).toLowerCase() });
     case 'noIngredients':
       return t('claimEvNoIngredients');
+    case 'naturalOnly':
+      return t('claimEvNaturalOnly', { value: round(check.value) });
     case 'natural':
       return t('claimEvNatural', { value: round(check.value), basis });
     case 'ingredients':

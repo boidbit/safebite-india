@@ -42,6 +42,17 @@ test('sugar free: with no split, the single sugar figure is the sugar figure (as
   assert.equal(one('Sugar Free Biscuit', null).verdict, 'unknown');
 });
 
+test('a natural-sugar failure says so: added 0 g, total high', () => {
+  const honey = one('Honey Tasties 0% Sugar', { totalSugarG: 76, addedSugarG: 0 }, ings('Honey', 'Strawberry'));
+  assert.equal(honey.verdict, 'mismatch');
+  assert.ok(honey.checks.some((c) => c.kind === 'naturalOnly' && c.value === 76));
+  // With real added sugar there is no such note.
+  assert.ok(!one('Sugar Free Cake', { totalSugarG: 20, addedSugarG: 12 }).checks.some((c) => c.kind === 'naturalOnly'));
+  // A single sugar figure (no split) can not tell natural from added.
+  assert.ok(!one('Sugar Free Cake', { addedSugarG: 20 }).checks.some((c) => c.kind === 'naturalOnly'));
+  assert.ok(one('Low Sugar Juice', { totalSugarG: 9, addedSugarG: 0 }).checks.some((c) => c.kind === 'naturalOnly'));
+});
+
 test('sugar free: sugar in the ingredient list is a mismatch even when the table says 0', () => {
   const c = one('Sugar Free Cookies', { totalSugarG: 0 }, ings('Wheat Flour', 'Sugar', 'Butter'));
   assert.equal(c.verdict, 'mismatch');
