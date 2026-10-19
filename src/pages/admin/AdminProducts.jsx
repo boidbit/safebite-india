@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import AdminLayout from './AdminLayout';
 import PhotoCropModal from './PhotoCropModal';
-import { adminListReviewQueue, adminReviewCounts, adminSetReviewStatus, adminProductThumb, adminGetProductRow, REVIEW_TABS, DEFAULT_REVIEW_TAB } from '../../services/adminReviewRepo';
+import { adminListReviewQueue, adminReviewCounts, adminSetReviewStatus, adminForgetDuplicateNames, adminProductThumb, adminGetProductRow, REVIEW_TABS, DEFAULT_REVIEW_TAB } from '../../services/adminReviewRepo';
 import { adminDeleteProduct, adminUpdateProduct } from '../../services/adminProductsRepo';
 import { getScoreColor } from '../../utils/storage';
 import { parseSize, sizeLabel } from '../../utils/productFamilies';
@@ -51,7 +51,7 @@ const SORT_OPTIONS = [
 
 const INITIAL_FILTERS = {
   status: DEFAULT_REVIEW_TAB, search: '', brand: '', foodType: '', categoryId: '', source: '',
-  scoreMin: '', scoreMax: '', hasImage: '', hasNutrition: '', hasPackSize: '', problemsOnly: false,
+  scoreMin: '', scoreMax: '', hasImage: '', hasNutrition: '', hasPackSize: '', problemsOnly: false, duplicateNames: false,
   addedWithinDays: '', barcode: '', hasBarcode: '', sort: 'newest', pageSize: 25,
 };
 const sizeOf = (f) => (f.pageSize === 'all' ? Infinity : Number(f.pageSize) || 25);
@@ -235,6 +235,7 @@ export default function AdminProducts() {
           hasNutrition: f.hasNutrition,
           hasPackSize: f.hasPackSize,
           problemsOnly: f.problemsOnly,
+          duplicateNames: f.duplicateNames,
           addedWithinDays: f.addedWithinDays !== '' ? Number(f.addedWithinDays) : null,
           barcode: f.barcode,
           hasBarcode: f.hasBarcode,
@@ -277,6 +278,7 @@ export default function AdminProducts() {
     setBusy(true);
     try {
       await adminSetReviewStatus(products, status);
+      adminForgetDuplicateNames();
       await load(filters, page);
     } catch (err) {
       window.alert(err.message);
@@ -289,6 +291,7 @@ export default function AdminProducts() {
     if (!window.confirm(`Delete "${name || 'this product'}"? This can't be undone.`)) return;
     try {
       await adminDeleteProduct(id, name);
+      adminForgetDuplicateNames();
       await load(filters, page);
     } catch (err) {
       window.alert(err.message);
@@ -413,6 +416,14 @@ export default function AdminProducts() {
         <label className="flex items-center gap-2 px-3 py-2 rounded-[10px] text-[13px] font-semibold cursor-pointer" style={{ background: 'var(--fill)', color: 'var(--label-1)' }}>
           <input type="checkbox" checked={filters.problemsOnly} onChange={(e) => setFilter('problemsOnly', e.target.checked)} />
           Flagged or data issue
+        </label>
+        <label
+          className="flex items-center gap-2 px-3 py-2 rounded-[10px] text-[13px] font-semibold cursor-pointer"
+          style={{ background: 'var(--fill)', color: 'var(--label-1)' }}
+          title="Products whose name is exactly the same as another product's (capitals and spacing ignored). Same name with a different pack size is not counted."
+        >
+          <input type="checkbox" checked={filters.duplicateNames} onChange={(e) => setFilter('duplicateNames', e.target.checked)} />
+          Same name twice
         </label>
         {filtersActive && (
           <button onClick={() => setFilters({ ...INITIAL_FILTERS, status: filters.status, sort: filters.sort, pageSize: filters.pageSize })} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--label-3)' }}>

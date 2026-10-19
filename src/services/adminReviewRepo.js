@@ -11,6 +11,8 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { logActivities } from './adminActivityRepo.js';
 import { chunk } from '../utils/chunk.js';
+import { duplicateNameIds, exactNameKey } from '../utils/duplicateNames.js';
+import { parsePack } from './productFamilies.js';
 
 const UPDATE_BATCH = 100; // ids per request (a uuid is ~37 characters of URL)
 
@@ -56,6 +58,35 @@ async function lookupKeysWithOpenProblems() {
   return [...new Set([...(issues.data || []), ...(flags.data || [])].map((r) => r.lookup_key))];
 }
 
+// Ids of every product that shares its exact name with another one of the same
+// pack size (utils/duplicateNames.js). The whole catalog, slim fields only, is
+// read once and kept 5 minutes -- changing a filter doesn't read it again.
+// Rejected products are left out: those are copies already hidden.
+const DUPES_TTL_MS = 5 * 60 * 1000;
+let dupesCache = { at: 0, ids: null };
+async function idsWithDuplicateNames() {
+  if (dupesCache.ids && Date.now() - dupesCache.at < DUPES_TTL_MS) return dupesCache.ids;
+  const products = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from('product_reports')
+      .select('id, product_name, packSize:report->>packSize')
+      .neq('review_status', 'rejected')
+      .order('id', { ascending: true })
+      .range(from, from + 999);
+    if (error) throw new Error(error.message);
+    products.push(...(data || []).map((r) => ({ id: r.id, productName: r.product_name, packSize: r.packSize })));
+    if (!data || data.length < 1000) break;
+  }
+  const ids = [...duplicateNameIds(products)];
+  dupesCache = { at: Date.now(), ids };
+  return ids;
+}
+
+/** Forget the remembered duplicates -- after products were merged, hidden or renamed. */
+export function adminForgetDuplicateNames() {
+  dupesCache = { at: 0, ids: null };
+}
+
 /**
  * @param {object} opts
  * @param {keyof REVIEW_TABS} [opts.status] - which review tab
@@ -96,6 +127,7 @@ export async function adminListReviewQueue({
   hasNutrition = '',
   hasPackSize = '',
   problemsOnly = false,
+  duplicateNames = false,
   addedWithinDays = null,
   barcode = '',
   hasBarcode = '',
@@ -110,6 +142,8 @@ export async function adminListReviewQueue({
   const digits = barcode.replace(/\D/g, '');
   const barcodeIds = digits ? await productIdsWithBarcode(digits) : null;
   if (barcodeIds && barcodeIds.length === 0) return { rows: [], count: 0 };
+  const dupIds = duplicateNames ? await idsWithDuplicateNames() : null;
+  if (dupIds && dupIds.length === 0) return { rows: [], count: 0 };
   // Fixed once, so every chunk of "All" asks about the same moment.
   const addedSince = typeof addedWithinDays === 'number' && addedWithinDays > 0
     ? new Date(Date.now() - addedWithinDays * 86400000).toISOString()
@@ -159,19 +193,34 @@ export async function adminListReviewQueue({
 
   // The first chunk of ids also brings the total; "All" then fetches the
   // rest a thousand at a time (the API's own cap), side by side.
-  const pageEnd = Number.isFinite(limit) ? offset + limit : Infinity;
-  const first = await build().range(offset, Math.min(pageEnd, offset + 1000) - 1);
-  if (first.error) throw new Error(first.error.message);
-  const count = first.count || 0;
-  const end = Math.min(pageEnd, count);
-  const starts = [];
-  for (let from = offset + 1000; from < end; from += 1000) starts.push(from);
-  const rest = await inParallel(starts, async (from) => {
-    const { data, error } = await build().range(from, Math.min(end, from + 1000) - 1);
-    if (error) throw new Error(error.message);
-    return data || [];
-  });
-  const ids = [first.data || [], ...rest].flat().map((r) => r.id);
+  let ids;
+  let count;
+  if (dupIds) {
+    // The duplicates are a few hundred ids -- too many for one URL ("Bad
+    // Request"), so ask 100 at a time (the other filters still apply) and
+    // order and page them here, by name, so the copies sit next to each other.
+    const found = await inParallel(chunk(dupIds, 100), async (piece) => {
+      const { data, error } = await build().in('id', piece).range(0, 99);
+      if (error) throw new Error(error.message);
+      return data || [];
+    });
+    ids = found.flat().map((r) => r.id);
+    count = ids.length;
+  } else {
+    const pageEnd = Number.isFinite(limit) ? offset + limit : Infinity;
+    const first = await build().range(offset, Math.min(pageEnd, offset + 1000) - 1);
+    if (first.error) throw new Error(first.error.message);
+    count = first.count || 0;
+    const end = Math.min(pageEnd, count);
+    const starts = [];
+    for (let from = offset + 1000; from < end; from += 1000) starts.push(from);
+    const rest = await inParallel(starts, async (from) => {
+      const { data, error } = await build().range(from, Math.min(end, from + 1000) - 1);
+      if (error) throw new Error(error.message);
+      return data || [];
+    });
+    ids = [first.data || [], ...rest].flat().map((r) => r.id);
+  }
 
   const byId = new Map();
   const chunks = [];
@@ -185,10 +234,15 @@ export async function adminListReviewQueue({
     if (error) throw new Error(error.message);
     for (const r of data || []) byId.set(r.id, r);
   });
-  const rows = ids.map((id) => byId.get(id)).filter(Boolean).map(({ brand, packSize, overallScore, foodType, nutrientsPer100, ...r }) => ({
+  let rows = ids.map((id) => byId.get(id)).filter(Boolean).map(({ brand, packSize, overallScore, foodType, nutrientsPer100, ...r }) => ({
     ...r,
     report: { brand, packSize, overallScore, foodType, nutrientsPer100 },
   }));
+  if (dupIds) {
+    const size = (r) => parsePack(r.report.packSize)?.size ?? Infinity;
+    rows.sort((a, b) => exactNameKey(a.product_name).localeCompare(exactNameKey(b.product_name)) || size(a) - size(b) || a.id.localeCompare(b.id));
+    rows = rows.slice(offset, Number.isFinite(limit) ? offset + limit : undefined);
+  }
 
   // Each row's barcode: its own key's, or one approved in Barcode matches.
   const linked = new Map();
