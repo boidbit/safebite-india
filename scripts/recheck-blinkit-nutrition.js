@@ -204,30 +204,36 @@ if (!Object.keys(urlBySlug).length) {
 // When the pack prints only a per-serving column with no amount ("1 Can"), the serving is the pack.
 const fallbackAmount = (r) => r.servG || parsePack(r.packSize)?.size || parsePack(r.product_name)?.size || null;
 
-// Photos already read on an earlier run are reused: no second Gemini call, no second page visit.
-const cachedPhoto = new Map();
+// Every product checked is written to the JSON straight away, so a run that is
+// stopped (laptop off) loses nothing: the next run reuses what's there -- no
+// second Gemini call, no second page visit -- and carries on with the rest.
+// Only a page that couldn't be opened is tried again.
+const JSON_FILE = '../blinkit-nutrition-recheck.json';
+const store = new Map();
 try {
-  for (const x of JSON.parse(fs.readFileSync('../blinkit-nutrition-recheck.json', 'utf8'))) if (x.photo) cachedPhoto.set(x.product, x);
+  for (const x of JSON.parse(fs.readFileSync(JSON_FILE, 'utf8'))) store.set(x.product, x);
 } catch { /* first run */ }
+const keep = (res) => { store.set(res.product, res); fs.writeFileSync(JSON_FILE, JSON.stringify([...store.values()], null, 1)); };
 
 const results = [];
 for (const r of flagged.slice(0, LIMIT)) {
-  const prev = cachedPhoto.get(r.product_name);
-  if (prev) {
-    const res = { product: r.product_name, saved: clean(r.n), servingG: r.servG ?? null, url: prev.url, text: prev.text, textNow: prev.textNow, photo: prev.photo };
-    Object.assign(res, diagnose(res, fallbackAmount(r)));
+  const prev = store.get(r.product_name);
+  if (prev && !['fetch-failed', 'no-page-url'].includes(prev.verdict)) {
+    const res = { ...prev, product: r.product_name, saved: clean(r.n), servingG: r.servG ?? null };
+    if (res.photo) Object.assign(res, diagnose(res, fallbackAmount(r)));
     results.push(res);
-    console.log(`  ${res.verdict.padEnd(24)} ${r.product_name.slice(0, 60)} (cached photo ${res.photo.photoNo})`);
+    keep(res);
+    console.log(`  ${res.verdict.padEnd(24)} ${r.product_name.slice(0, 60)} (already checked)`);
     continue;
   }
   const row = byKey.get(r.lookup_key) || byName.get(r.product_name.toLowerCase());
   const res = { product: r.product_name, saved: clean(r.n), servingG: r.servG ?? null };
   const url = urlBySlug[slugOf(row?.product_name || r.product_name)];
-  if (!url) { results.push({ ...res, verdict: 'no-page-url' }); console.log(`  no page URL: ${r.product_name}`); continue; }
+  if (!url) { results.push({ ...res, verdict: 'no-page-url' }); keep({ ...res, verdict: 'no-page-url' }); console.log(`  no page URL: ${r.product_name}`); continue; }
   res.url = url;
   res.text = textNumbers(row?.nutrition);
   const html = await fetchText(url);
-  if (!html) { results.push({ ...res, verdict: 'fetch-failed' }); console.log(`  fetch failed: ${r.product_name}`); continue; }
+  if (!html) { results.push({ ...res, verdict: 'fetch-failed' }); keep({ ...res, verdict: 'fetch-failed' }); console.log(`  fetch failed: ${r.product_name}`); continue; }
   res.textNow = textNumbers(pageNutrition(html));
 
   let photo = null;
@@ -249,6 +255,7 @@ for (const r of flagged.slice(0, LIMIT)) {
     res.verdict = agreement(res.text, res.textNow) === 1 ? 'no-photo-text-unchanged' : 'no-photo-text-changed';
   }
   results.push(res);
+  keep(res);
   console.log(`  ${res.verdict.padEnd(24)} ${r.product_name.slice(0, 60)}${res.photo ? ` (photo ${res.photo.photoNo})` : ''}`);
   await sleep(1500);
 }
@@ -260,5 +267,5 @@ const show = (o) => (o ? Object.entries(o).map(([k, v]) => `${k}=${v}`).join(' '
 const csv = ['product,verdict,fields,saved_per100,blinkit_text,photo_per100,photo_per_serving,serving_g,url'];
 for (const x of results) csv.push([x.product, x.verdict, (x.fields || []).join(' '), show(x.saved), show(x.text), show(x.photo?.per100), show(x.photo?.perServing), x.servingG ?? '', x.url ?? ''].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','));
 fs.writeFileSync('../blinkit-nutrition-recheck.csv', `﻿${csv.join('\n')}\n`);
-fs.writeFileSync('../blinkit-nutrition-recheck.json', JSON.stringify(results, null, 1));
+// (the JSON was written after every product -- see keep())
 console.log('CSV: ../blinkit-nutrition-recheck.csv');
