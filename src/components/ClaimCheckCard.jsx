@@ -33,6 +33,7 @@ function evidenceLine(check, t, basis) {
     case 'natural':
       return t('claimEvNatural', { value: round(check.value), basis });
     case 'ingredients':
+      if (check.state === 'conflict') return t('claimEvConflict', { names: check.names.join(', ') });
       if (check.state === 'bad') return t(check.what === 'sweetener' ? 'claimEvSweetener' : 'claimEvIngFound', { names: check.names.join(', ') });
       return t(check.what === 'salt' ? 'claimEvIngNoneSalt' : 'claimEvIngNoneSugar');
     default:
@@ -57,7 +58,7 @@ export default function ClaimCheckCard({ claims, t, unit = 'g', onReport }) {
         const label = t(CLAIM_LABEL[claim.id]);
         const verdict = VERDICT[claim.verdict];
         // What decided it first: the failed checks, then the passed ones; at most three lines.
-        const order = { bad: 0, ok: 1, info: 2, unknown: 3 };
+        const order = { bad: 0, conflict: 1, ok: 2, info: 3, unknown: 4 };
         const lines = [...claim.checks]
           .sort((a, b) => order[a.state] - order[b.state])
           .map((c) => evidenceLine(c, t, unit))

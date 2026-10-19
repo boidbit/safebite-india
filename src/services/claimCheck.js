@@ -13,7 +13,10 @@
 // decides.
 //
 // Three outcomes per claim: 'match', 'mismatch', 'unknown' (not enough data).
-// A figure that is missing is never guessed -- that is 'unknown'.
+// A figure that is missing is never guessed -- that is 'unknown'. So is a
+// conflict: the nutrition table says 0 g sugar but the ingredient list names
+// sugar. One of the two saved lists is wrong, and which one can't be told from
+// here, so the claim is neither confirmed nor called a mismatch.
 //
 // Sugar convention (see trafficLight.js): totalSugarG is the label's "total
 // sugars" and only exists when the label splits total from added; otherwise
@@ -115,9 +118,11 @@ function fibreAtLeast(n, limit) {
   return fibre === null ? noFigure('fibre') : figureCheck('fibre', fibre, 'g', atLeast(fibre, limit));
 }
 
-// bad anywhere -> mismatch; else a figure/ingredient check that came out ok -> match; else unknown.
+// bad anywhere -> mismatch; saved data that disagree -> unknown; else a
+// figure/ingredient check that came out ok -> match; else unknown.
 function verdictOf(checks) {
   if (checks.some((c) => c.state === 'bad')) return 'mismatch';
+  if (checks.some((c) => c.state === 'conflict')) return 'unknown';
   if (checks.some((c) => c.state === 'ok')) return 'match';
   return 'unknown';
 }
@@ -131,7 +136,8 @@ function evaluate(id, p) {
       const table = sugarLimit(n, LIMITS.sugarFree);
       const checks = [table, ...naturalOnlyNote(n, table)];
       const ing = sugarIng();
-      if (ing.state === 'bad') checks.push(ingredientCheck('sugar', ing));
+      // Sugar listed but the table says none: the two disagree -- not a mismatch.
+      if (ing.state === 'bad') checks.push(table.state === 'ok' ? { ...ingredientCheck('sugar', ing), state: 'conflict' } : ingredientCheck('sugar', ing));
       return { limit: { cmp: 'atMost', value: LIMITS.sugarFree, unit: 'g' }, checks };
     }
     case 'lowSugar': {
@@ -155,9 +161,10 @@ function evaluate(id, p) {
       return { limit: { cmp: 'notAdded', what: 'sugar' }, checks };
     }
     case 'saltFree': {
-      const checks = [sodiumLimit(n, LIMITS.sodiumFreeMg)];
+      const table = sodiumLimit(n, LIMITS.sodiumFreeMg);
+      const checks = [table];
       const ing = scanIngredients(p.ingredients, SALT_ING);
-      if (ing.state === 'bad') checks.push(ingredientCheck('salt', ing));
+      if (ing.state === 'bad') checks.push(table.state === 'ok' ? { ...ingredientCheck('salt', ing), state: 'conflict' } : ingredientCheck('salt', ing));
       return { limit: { cmp: 'atMost', value: LIMITS.sodiumFreeMg, unit: 'mg' }, checks };
     }
     case 'lowSodium':

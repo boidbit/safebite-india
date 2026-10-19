@@ -53,10 +53,15 @@ test('a natural-sugar failure says so: added 0 g, total high', () => {
   assert.ok(one('Low Sugar Juice', { totalSugarG: 9, addedSugarG: 0 }).checks.some((c) => c.kind === 'naturalOnly'));
 });
 
-test('sugar free: sugar in the ingredient list is a mismatch even when the table says 0', () => {
-  const c = one('Sugar Free Cookies', { totalSugarG: 0 }, ings('Wheat Flour', 'Sugar', 'Butter'));
-  assert.equal(c.verdict, 'mismatch');
-  assert.deepEqual(c.checks.find((x) => x.kind === 'ingredients').names, ['Sugar']);
+test('sugar free: sugar in the ingredient list against a table that says 0 is a conflict, not a mismatch', () => {
+  const c = one('7UP Zero Sugar', { addedSugarG: 0 }, ings('Carbonated Water', 'Sugar', 'Citric Acid'));
+  assert.equal(c.verdict, 'unknown');
+  const conflict = c.checks.find((x) => x.kind === 'ingredients');
+  assert.equal(conflict.state, 'conflict');
+  assert.deepEqual(conflict.names, ['Sugar']);
+  // Sugar listed and the table can't clear it, or the table agrees it is not free of sugar: both are real mismatches.
+  assert.equal(one('Sugar Free Cookies', {}, ings('Wheat Flour', 'Sugar', 'Butter')).verdict, 'mismatch');
+  assert.equal(one('Sugar Free Cookies', { totalSugarG: 12 }, ings('Wheat Flour', 'Sugar', 'Butter')).verdict, 'mismatch');
   // A sugar alcohol or a "sugar free" sweetener is not sugar.
   assert.equal(one('Sugar Free Cookies', { totalSugarG: 0 }, ings('Wheat Flour', 'Sugar Alcohol (Maltitol)', 'Butter')).verdict, 'match');
 });
@@ -95,7 +100,9 @@ test('low sugar uses 5 g for food and 2.5 g for drinks', () => {
 test('salt / sodium claims', () => {
   assert.equal(one('Salt Free Seasoning', { sodiumMg: 3 }).verdict, 'match');
   assert.equal(one('Salt Free Seasoning', { sodiumMg: 80 }).verdict, 'mismatch');
-  assert.equal(one('Salt Free Seasoning', { sodiumMg: 3 }, ings('Pepper', 'Rock Salt')).verdict, 'mismatch');
+  assert.equal(one('Salt Free Seasoning', { sodiumMg: 3 }, ings('Pepper', 'Rock Salt')).verdict, 'unknown'); // table and list disagree
+  assert.equal(one('Salt Free Seasoning', { sodiumMg: 300 }, ings('Pepper', 'Rock Salt')).verdict, 'mismatch');
+  assert.equal(one('Salt Free Seasoning', {}, ings('Pepper', 'Rock Salt')).verdict, 'mismatch');
   assert.equal(one('Low Sodium Cracker', { sodiumMg: 120 }).verdict, 'match');
   assert.equal(one('Low Sodium Cracker', { sodiumMg: 130 }).verdict, 'match');
   assert.equal(one('Low Sodium Cracker', { sodiumMg: 140 }).verdict, 'mismatch');
