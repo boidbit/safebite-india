@@ -96,15 +96,21 @@ export function asBlinkitAttributes(per100) {
  */
 export async function nutritionFromPhotos(productName, imageUrls, { photo, packAmount = null, maxPhotos = 8, gapMs = 4200, isImpossible = () => false } = {}) {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Gemini's "high demand" errors pass in a minute or so: two more tries before giving up.
+  const read = async (buf, opts) => {
+    for (let tryNo = 1; ; tryNo++) {
+      try { return await readNutritionPhoto(buf, productName, opts); } catch (e) { if (tryNo === 3) throw e; await wait(30000 * tryNo); }
+    }
+  };
   for (const [i, url] of imageUrls.slice(0, maxPhotos).entries()) {
     const buf = await photo(url);
     if (!buf) continue;
     let first;
-    try { first = await readNutritionPhoto(buf, productName); } catch { return { failed: 'photo read failed (quota?)' }; }
+    try { first = await read(buf); } catch (e) { return { failed: `photo read failed: ${String(e.message).slice(0, 40)}` }; }
     await wait(gapMs);
     if (!first?.hasNutritionTable) continue;
     let second;
-    try { second = await readNutritionPhoto(buf, productName, { check: true }); } catch { return { failed: 'second read failed (quota?)' }; }
+    try { second = await read(buf, { check: true }); } catch (e) { return { failed: `second read failed: ${String(e.message).slice(0, 40)}` }; }
     await wait(gapMs);
     const one = per100FromPhoto(first, packAmount).table;
     const two = per100FromPhoto(second, packAmount).table;
