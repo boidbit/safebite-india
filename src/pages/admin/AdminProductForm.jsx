@@ -620,18 +620,23 @@ export default function AdminProductForm({ copyMode = false }) {
 
       if (foundIngredientsText) setIngredientsText(foundIngredientsText);
       if (foundProductName && !productName.trim()) setProductName(foundProductName);
+      // The photo is the pack itself, so what it shows replaces what's in the
+      // form -- the reason to read it is usually that the saved figures are wrong
+      // (a "0 g fat" from Blinkit's text). Figures the photo doesn't show are kept.
+      const replaced = [];
       if (Object.keys(mergedNutrition).length > 0) {
-        setNutrients((prev) => {
-          const next = { ...prev };
-          for (const [k, v] of Object.entries(mergedNutrition)) {
-            if (next[k] === undefined || next[k] === '') next[k] = v;
+        for (const [k, v] of Object.entries(mergedNutrition)) {
+          const old = nutrients[k];
+          if (old !== undefined && old !== '' && Number(old) !== v) {
+            replaced.push(`${NUTRIENT_FIELDS.find((f) => f.key === k)?.label || k} ${old} → ${v}`);
           }
-          return next;
-        });
+        }
+        setNutrients((prev) => ({ ...prev, ...mergedNutrition }));
       }
-      if (foundServingGrams && !servingGrams) setServingGrams(foundServingGrams);
+      if (foundServingGrams) setServingGrams(foundServingGrams);
 
       const messages = [];
+      if (replaced.length) messages.push(`Updated from the photo: ${replaced.join(', ')}.`);
       if (!foundIngredientsText) {
         messages.push(anyReadable ? 'No ingredients list found in these photos — type it in manually.' : "Couldn't read these photos clearly.");
       }
