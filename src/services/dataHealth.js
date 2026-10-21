@@ -50,15 +50,34 @@ const find = (text, re, strip) => {
 
 // ---- Structured findings: what the product page and the admin list show as remarks.
 
+/** The top-level ingredients ("Wheat Flour, Sugar, Spices (Chilli, Salt)" -> 3 entries). */
+export function topLevelIngredients(text) {
+  const parts = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of String(text || '')) {
+    if ('([{'.includes(ch)) depth++;
+    else if (')]}'.includes(ch)) depth = Math.max(0, depth - 1);
+    if ((ch === ',' || ch === ';') && depth === 0) { parts.push(cur.trim()); cur = ''; } else cur += ch;
+  }
+  if (cur.trim()) parts.push(cur.trim());
+  return parts.filter(Boolean);
+}
+
 /**
- * Table says NONE of a nutrient, the ingredient list names it: { value, word } or null.
- * Zero only: a chapati with 0.4 g sugar can honestly list sugar, a table showing
- * 0 g while the list has sugar can't both be right.
+ * Table says NONE of a nutrient, the ingredient list names it among its MAIN
+ * ingredients: { value, word, at, of } or null.
+ * Zero only: a chapati with 0.4 g sugar can honestly list sugar. And only in the
+ * first half of the list (ingredients are listed by weight): sugar or salt near the
+ * end, after the spices, is little enough to round to 0 on the label.
  */
 function zeroButListed(value, limit, text, word, strip) {
   if (value === null || value > limit) return null;
-  const w = find(text, word, strip);
-  return w ? { value, word: w } : null;
+  const parts = topLevelIngredients(text);
+  const at = parts.findIndex((p) => find(p, word, strip));
+  if (at < 0) return null;
+  if (at + 1 > Math.ceil(parts.length / 2)) return null; // a minor ingredient
+  return { value, word: find(parts[at], word, strip), at: at + 1, of: parts.length };
 }
 const ZERO_G = 0.05;
 const ZERO_MG = 0.5;

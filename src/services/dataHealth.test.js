@@ -8,16 +8,16 @@ test('table says no sugar but the ingredient list names sugar', () => {
   assert.deepEqual(ids({ n: { totalSugarG: 0 }, ingredientsText: 'Carbonated Water, Sugar, Acids' }), ['sugarZeroButListed']);
   assert.deepEqual(ids({ n: { totalSugarG: 0 }, ingredientsText: 'Water, Sugar Free Sweetener, Sugar Alcohol (Maltitol)' }), []);
   assert.deepEqual(ids({ n: { totalSugarG: 12 }, ingredientsText: 'Water, Sugar' }), []);
-  assert.deepEqual(ids({ n: { addedSugarG: 0 }, ingredientsText: 'Water, Honey' }), ['sugarZeroButListed']);
+  assert.deepEqual(ids({ n: { addedSugarG: 0 }, ingredientsText: 'Honey, Water, Lemon' }), ['sugarZeroButListed']);
   // dextrose / glucose / fructose are a lower, separate check (often a trace)
   assert.deepEqual(ids({ n: { totalSugarG: 0 }, ingredientsText: 'Chicken, Water, Dextrose' }), ['sugarZeroButDextrose']);
   assert.deepEqual(ids({ n: { totalSugarG: 0 }, ingredientsText: 'Water, Sugar, Dextrose' }), ['sugarZeroButListed']);
 });
 
 test('table says no sodium or no fat but the list has salt / oil', () => {
-  assert.deepEqual(ids({ n: { sodiumMg: 0 }, ingredientsText: 'Peanuts, Salt' }), ['sodiumZeroButSalt']);
+  assert.deepEqual(ids({ n: { sodiumMg: 0 }, ingredientsText: 'Salt, Peanuts, Spices' }), ['sodiumZeroButSalt']);
   assert.deepEqual(ids({ n: { sodiumMg: 300 }, ingredientsText: 'Peanuts, Salt' }), []);
-  assert.deepEqual(ids({ n: { totalFatG: 0 }, ingredientsText: 'Wheat Flour, Palm Oil' }), ['fatZeroButFatListed']);
+  assert.deepEqual(ids({ n: { totalFatG: 0 }, ingredientsText: 'Wheat Flour, Palm Oil, Salt' }), ['fatZeroButFatListed']);
   assert.deepEqual(ids({ n: { totalFatG: 0 }, ingredientsText: 'Skimmed Milk Powder, Wheat' }), []);
 });
 
@@ -74,8 +74,8 @@ test('nutritionIssues gives structured remarks, and nothing once the figures are
   const kinds = (row) => nutritionIssues(row).map((i) => i.kind);
   assert.deepEqual(nutritionIssues({ n: { saturatedFatG: 8.3, totalFatG: 6.6 } }), [{ kind: 'satOverFat', sat: 8.3, fat: 6.6 }]);
   assert.deepEqual(kinds({ n: { carbohydrateG: 516.7, proteinG: 60, totalFatG: 80, caloriesKcal: 180 } }), ['over100', 'macrosOver100', 'calories']);
-  assert.deepEqual(nutritionIssues({ n: { totalSugarG: 0 }, ingredientsText: 'Water, Sugar' }), [{ kind: 'sugarZeroListed', value: 0, word: 'Sugar' }]);
-  assert.deepEqual(kinds({ n: { sodiumMg: 0 }, ingredientsText: 'Peanuts, Salt' }), ['sodiumZeroSalt']);
+  assert.deepEqual(nutritionIssues({ n: { totalSugarG: 0 }, ingredientsText: 'Water, Sugar, Acids' }), [{ kind: 'sugarZeroListed', value: 0, word: 'Sugar', at: 2, of: 3 }]);
+  assert.deepEqual(kinds({ n: { sodiumMg: 0 }, ingredientsText: 'Salt, Peanuts, Spices' }), ['sodiumZeroSalt']);
   // the same product after its figures were fixed: out of review
   assert.deepEqual(nutritionIssues({ n: { saturatedFatG: 4.4, totalFatG: 6.6 } }), []);
   assert.deepEqual(nutritionIssues({ n: null }), []);
@@ -91,4 +91,13 @@ test('sodium above what pure salt contains is a unit slip', async () => {
   const { nutritionIssues } = await import('./dataHealth.js');
   assert.deepEqual(nutritionIssues({ n: { sodiumMg: 557500 } }), [{ kind: 'sodiumTooHigh', value: 557500 }]);
   assert.deepEqual(nutritionIssues({ n: { sodiumMg: 2416 } }), []);
+});
+
+test('sugar or salt far down the list can round to 0 on the label: not a conflict', () => {
+  assert.deepEqual(ids({ n: { sodiumMg: 0 }, ingredientsText: 'Peanuts, Palm Oil, Gram Flour, Spices, Salt' }), []);
+  assert.deepEqual(ids({ n: { totalSugarG: 0 }, ingredientsText: 'Rice, Lentils, Oil, Chilli, Cumin, Sugar' }), []);
+  // a sub-list in brackets is one ingredient: "Spices (Salt, Chilli)" is the 2nd of 2, not the 3rd of 4
+  assert.deepEqual(ids({ n: { sodiumMg: 0 }, ingredientsText: 'Potato, Spices (Salt, Chilli)' }), []);
+  // the main ingredient: the table can't be right
+  assert.deepEqual(ids({ n: { totalSugarG: 0 }, ingredientsText: 'Jaggery' }), ['sugarZeroButListed']);
 });
