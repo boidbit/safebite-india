@@ -15,6 +15,7 @@ import { resolveServing } from './servingResolver.js';
 import { applyRealNutrientCap } from './scoringEngine.js';
 import { applyNutritionDensityCeiling } from './nutritionDensity.js';
 import { buildDailyHabitCheck, isSmallPortionFood } from './dailyHabitCheck.js';
+import { sugarFromCarbs } from './sugarProxy.js';
 
 /**
  * @param {object} report - already scored by buildReport, with foodType /
@@ -32,6 +33,7 @@ export function finalizeScore(report, { nutrientsInfo, packSize } = {}) {
   delete report.overallScoreBeforeDensity;
   delete report.nutritionDensity;
   delete report.scoreNote;
+  delete report.sugarCountedFromCarbs;
 
   // Re-decide the serving now that foodType is known -- the producer's
   // servingGrams can be the per-100g basis mislabelled as a serving
@@ -61,10 +63,18 @@ export function finalizeScore(report, { nutrientsInfo, packSize } = {}) {
   const isSmallDoseType = report.foodType === 'condiment' || report.foodType === 'supplement';
   if (nutrientsInfo && !report.isCondimentOrSeasoning && !report.isInfantFormula && !isSmallDoseType && !isSmallPortionFood(report.productName, servingGrams)) {
     const habitCheck = buildDailyHabitCheck(report.realNutrients, servingGrams, servingUnit);
-    if (habitCheck) {
-      report.dailyHabitCheck = habitCheck;
-      applyRealNutrientCap(report, habitCheck);
+    if (habitCheck) report.dailyHabitCheck = habitCheck;
+    // Jaggery/honey whose pack prints carbohydrate but no sugar: the cap counts
+    // the carbohydrate as sugar (sugarProxy.js). Only the cap -- the check the
+    // app shows is built from the label's own figures above.
+    const sugarG = sugarFromCarbs(report);
+    let forCap = habitCheck;
+    if (sugarG !== null) {
+      report.sugarCountedFromCarbs = sugarG;
+      const scaled = servingGrams ? Math.round((sugarG * servingGrams) / 100 * 100) / 100 : sugarG;
+      forCap = buildDailyHabitCheck({ ...report.realNutrients, addedSugarG: scaled }, servingGrams, servingUnit) || habitCheck;
     }
+    if (forCap) applyRealNutrientCap(report, forCap);
   }
 
   // Runs last so it only ever lowers the score.
