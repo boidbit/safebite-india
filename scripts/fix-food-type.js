@@ -12,13 +12,18 @@
 //     resumes where it left off;
 //   - reads only the slim fields to decide, and the full report only for the
 //     products that change.
-// Products the rules still can't place stay 'other' (left for AI or a person).
+// Where the type comes from, first that answers: the product's name (+ its
+// ingredients for frying), Blinkit's own shelf for it (blinkit_products.category),
+// then the kind the AI summary names ("This chocolate bar is…"). Products none of
+// these can place stay 'other' (left for a person).
 //
 //   node --env-file=.env scripts/fix-food-type.js            (preview: CSV of what would change)
 //   node --env-file=.env scripts/fix-food-type.js --apply    (saves)
 import fs from 'fs';
 import { supabase } from '../src/services/supabaseClient.js';
-import { classifyFoodType } from '../src/services/foodType.js';
+import { classifyFoodType, kindFromSummary } from '../src/services/foodType.js';
+import { foodTypeForBlinkitCategory } from '../src/data/blinkitCategoryFoodType.js';
+import { blinkitLookupKey } from '../src/services/blinkitProductsRepo.js';
 import { applyNutritionDensityCeiling } from '../src/services/nutritionDensity.js';
 
 const APPLY = process.argv.includes('--apply');
@@ -53,18 +58,33 @@ function withType(report, { foodType, isDeepFried }) {
 }
 
 const rows = await all(() => supabase.from('product_reports')
-  .select('id, product_name, review_status, ingredients_text, ft:report->>foodType, fts:report->>foodTypeSource, infant:report->>isInfantFormula')
+  .select('id, lookup_key, product_name, review_status, ingredients_text, ft:report->>foodType, fts:report->>foodTypeSource, infant:report->>isInfantFormula, summary:report->>summary')
   .neq('review_status', 'rejected').order('id'));
 const untyped = rows.filter((r) => (!r.ft || r.ft === 'other') && r.fts !== 'admin' && r.infant !== 'true');
+const shelves = await all(() => supabase.from('blinkit_products').select('source, brand, product_name, category').order('product_name'));
+const shelfByKey = new Map(shelves.map((b) => [blinkitLookupKey(b.source, b.brand, b.product_name), b.category]));
+
+/** { foodType, isDeepFried, from } -- or null when nothing places it. */
+function decide(r) {
+  const c = classifyFoodType({ productName: r.product_name, ingredientNames: String(r.ingredients_text || '').split(',').map((x) => x.trim()) });
+  if (c.foodType !== 'other') return { ...c, from: 'name' };
+  const shelf = foodTypeForBlinkitCategory(shelfByKey.get(r.lookup_key));
+  if (shelf) return { foodType: shelf, isDeepFried: shelf === 'fried-snack', from: `blinkit shelf ${shelfByKey.get(r.lookup_key)}` };
+  const kind = kindFromSummary(r.summary);
+  const k = kind ? classifyFoodType({ productName: kind }) : null;
+  if (k && k.foodType !== 'other') return { ...k, from: `summary "${kind}"` };
+  return null;
+}
+
 const plan = [];
 for (const r of untyped) {
   if (progress[r.id]) continue;
-  const c = classifyFoodType({ productName: r.product_name, ingredientNames: String(r.ingredients_text || '').split(',').map((s) => s.trim()) });
-  if (c.foodType !== 'other') plan.push({ r, c });
+  const c = decide(r);
+  if (c) plan.push({ r, c });
 }
 console.log(`products without a food type: ${untyped.length} | already done earlier: ${Object.keys(progress).length} | the rules can place now: ${plan.length}${APPLY ? '' : '  -- preview, nothing is saved'}`);
 
-const csv = ['product,status,food_type,deep_fried,score_before,score_after'];
+const csv = ['product,status,food_type,from,deep_fried,score_before,score_after'];
 const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 const types = {};
 let scoreChanged = 0, failed = 0;
@@ -74,12 +94,12 @@ for (const [i, { r, c }] of plan.entries()) {
   const next = withType(data.report, c);
   types[c.foodType] = (types[c.foodType] || 0) + 1;
   if (next.overallScore !== data.report.overallScore) scoreChanged++;
-  csv.push([r.product_name, r.review_status, c.foodType, c.isDeepFried, data.report.overallScore, next.overallScore].map(cell).join(','));
+  csv.push([r.product_name, r.review_status, c.foodType, c.from, c.isDeepFried, data.report.overallScore, next.overallScore].map(cell).join(','));
   if (APPLY) {
     fs.appendFileSync(BACKUP, `${JSON.stringify({ id: r.id, product: r.product_name, at: new Date().toISOString(), report: data.report })}\n`);
     const { error: saveErr } = await supabase.from('product_reports').update({ report: next, updated_at: new Date().toISOString() }).eq('id', r.id);
     if (saveErr) { failed++; console.error(`${r.product_name}: ${saveErr.message}`); continue; }
-    progress[r.id] = { product: r.product_name, foodType: c.foodType, before: data.report.overallScore, after: next.overallScore };
+    progress[r.id] = { product: r.product_name, foodType: c.foodType, from: c.from, before: data.report.overallScore, after: next.overallScore };
     fs.writeFileSync(PROGRESS, JSON.stringify(progress, null, 1));
   }
   if ((i + 1) % 200 === 0) console.log(`  ${i + 1} / ${plan.length}`);

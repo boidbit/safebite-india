@@ -119,3 +119,25 @@ test('the new words do not pull existing products into the wrong type', () => {
   assert.equal(t('Amul Butter'), 'oil-fat');
   assert.equal(t('Chicken Masala'), 'condiment');
 });
+
+test('the kind a summary names, and what it maps to', async () => {
+  const { kindFromSummary } = await import('./foodType.js');
+  assert.equal(kindFromSummary('This popcorn is mostly simple corn, though it uses palmolein.'), 'popcorn');
+  assert.equal(kindFromSummary('These edamame beans are a simple, protein-rich snack.'), 'edamame beans');
+  assert.equal(kindFromSummary('Not the healthiest option on the shelf, but not the worst either.'), null);
+  const t = (productName) => classifyFoodType({ productName }).foodType;
+  assert.equal(t('chocolate bar'), 'sweet-snack');
+  assert.equal(t('digestive mint'), 'sweet-snack');
+  assert.equal(t('cooking medium'), 'oil-fat');
+  assert.equal(t('Chyawanprash'), 'supplement');
+  assert.equal(t('pitted green olives'), 'condiment');
+});
+
+test('a Blinkit shelf maps to a food type, a mixed shelf to none', async () => {
+  const { foodTypeForBlinkitCategory } = await import('../data/blinkitCategoryFoodType.js');
+  assert.equal(foodTypeForBlinkitCategory('namkeen-snacks'), 'fried-snack');
+  assert.equal(foodTypeForBlinkitCategory('cakes-rolls'), 'sweet-snack');
+  assert.equal(foodTypeForBlinkitCategory('ghee-vanaspati'), 'oil-fat');
+  assert.equal(foodTypeForBlinkitCategory('gourmet-bakery'), null);
+  assert.equal(foodTypeForBlinkitCategory(null), null);
+});
