@@ -96,14 +96,14 @@ async function main() {
       products = []; found = [];
     };
     for (const p of todo) {
-      const result = await scrapeProduct(p.url, p.category, { useAI: false, useImageFallback: true, readBarcode: true });
+      const result = await scrapeProduct(p.url, p.category, { useAI: false, useImageFallback: true, readBarcode: true, readNutritionPhoto: true });
       await sleep(PAGE_GAP_MS);
       totals.opened++; left--;
       if (result.error) { totals.skipped++; totals.byReason[result.error] = (totals.byReason[result.error] || 0) + 1; console.log(`   skip  ${p.slug.slice(0, 50)} -- ${result.error}`); continue; }
       const prod = result.product;
       products.push(prod);
       if (result.barcode) { found.push({ barcode: result.barcode, product: prod }); totals.barcodes++; }
-      console.log(`   ${result.viaImage ? 'img' : 'ok '}  ${prod.product_name.slice(0, 54).padEnd(54)} ${prod.pack_size || ''}${result.barcode ? `  [barcode ${result.barcode}]` : ''}`);
+      console.log(`   ${result.viaImage ? 'img' : 'ok '}  ${prod.product_name.slice(0, 54).padEnd(54)} ${prod.pack_size || ''}${result.barcode ? `  [barcode ${result.barcode}]` : ''}${result.nutritionSource ? `  [nutrition: ${result.nutritionSource}]` : ''}`);
       if (products.length >= SAVE_EVERY) await flush();
     }
     await flush();

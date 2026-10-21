@@ -19,6 +19,8 @@ import { isBundleListing } from './bundleListing.js';
 import { optimizeAndUploadBlinkitImage } from './blinkitImageOptimizer.js';
 import { isValidGtin, readBarcodesFromPhoto, confirmBarcode } from './barcodeReader.js';
 import { isMultiPackListing, isSampleListing } from './packNormalize.js';
+import { nutritionFromPhotos, asBlinkitAttributes } from './nutritionPhotoRead.js';
+import { tableProblems } from './dataHealth.js';
 
 const SITEMAP_INDEX = 'https://blinkit.com/sitemap.xml';
 // A real browser UA, not a self-identifying bot string. Manual testing
@@ -418,7 +420,7 @@ export function isComboListing(productName) {
   return isBundleListing(productName);
 }
 
-export async function scrapeProduct(url, category, { useAI = false, useImageFallback = false, readBarcode = false } = {}) {
+export async function scrapeProduct(url, category, { useAI = false, useImageFallback = false, readBarcode = false, readNutritionPhoto = false } = {}) {
   const html = await fetchText(url);
   if (!html) return { error: 'fetch failed' };
 
@@ -477,10 +479,27 @@ export async function scrapeProduct(url, category, { useAI = false, useImageFall
 
   const barcode = readBarcode ? await barcodeFromGallery(images, photo, barcodeReads) : null;
 
-  const nutrition = {};
+  let nutrition = {};
   for (const field of NUTRITION_FIELDS) {
     if (attributes[field]) nutrition[field] = attributes[field];
   }
+
+  // The pack photo first: Blinkit's own text mixes up columns (added sugar per
+  // serving next to the rest per 100 g). The table on the photo counts only when
+  // two reads of it agree and it isn't impossible; otherwise Blinkit's text stays.
+  // No pack size as the serving here: a per-serving-only table without a
+  // printed serving size falls back to the text.
+  let nutritionSource = Object.keys(nutrition).length ? 'text' : null;
+  if (readNutritionPhoto) {
+    const res = await nutritionFromPhotos(productName, images, { photo, isImpossible: (t) => tableProblems(t).length > 0 });
+    if (res.per100) {
+      nutrition = asBlinkitAttributes(res.per100);
+      nutritionSource = `photo ${res.photoNo}`;
+    } else if (nutritionSource) {
+      nutritionSource = `text (${res.failed})`;
+    }
+  }
+  if (nutritionSource) nutrition['Nutrition source'] = nutritionSource;
 
   // "Unit (with options)" is the human-readable pack size shown to a
   // shopper on the page itself (e.g. "500 g", "2 x 2 kg") -- falls back
@@ -528,6 +547,7 @@ export async function scrapeProduct(url, category, { useAI = false, useImageFall
     viaAI,
     viaImage,
     barcode,
+    nutritionSource,
     product: {
       product_name: productName,
       brand,
