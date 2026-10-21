@@ -88,3 +88,34 @@ test('real masala/spice/condiment products are unaffected by the meal exclusion'
   assert.equal(t('Ginger Garlic Paste').foodType, 'condiment');
   assert.equal(t('Kissan Tomato Ketchup').foodType, 'condiment');
 });
+
+test('names that say what they are without the generic word', () => {
+  const t = (productName) => classifyFoodType({ productName }).foodType;
+  assert.equal(t('Cadbury Dairy Milk'), 'sweet-snack');
+  assert.equal(t('Mother Dairy Milk'), 'dairy');
+  assert.equal(t('Dharwad Peda by Daadi\'s'), 'sweet-snack');
+  assert.equal(t('Kinley Water 500ml'), 'beverage');
+  assert.equal(t('Rose Water'), 'other');
+  assert.equal(t('Chamomile Herbal Infusion Bags'), 'beverage');
+  assert.equal(t('Belse Black Roasted Ground Coffee'), 'beverage');
+  assert.equal(t('Aashirvaad Double Roasted Sooji Rava'), 'staple');
+  assert.equal(t('Tata Sampann Unpolished Toor Dal'), 'staple');
+  assert.equal(t('Kashvik Idly Batter'), 'staple');
+  assert.equal(t('Brown Hing Powder'), 'condiment');
+  assert.equal(t('Chilli Flakes'), 'condiment');
+  assert.equal(t("Kellogg's Corn Flakes Original"), 'staple');
+  assert.equal(t('Pintola All Natural Crunchy Almond Butter'), 'condiment');
+  assert.equal(t('Bonne Maman Blackberry Preserve'), 'condiment');
+  assert.equal(t('Godrej Yummiez French Fries'), 'fried-snack');
+  assert.equal(t('OK Hyderabadi Veg Biriyani'), 'ready-meal');
+  assert.equal(t('Nestle NAN Excellapro'), 'infant');
+});
+
+test('the new words do not pull existing products into the wrong type', () => {
+  const t = (productName) => classifyFoodType({ productName }).foodType;
+  assert.equal(t('Maggi Masala Noodles'), 'ready-meal');
+  assert.equal(t("Haldiram's Aloo Bhujia"), 'fried-snack');
+  assert.equal(t('Lay\'s Chile Limon Chips'), 'fried-snack');
+  assert.equal(t('Amul Butter'), 'oil-fat');
+  assert.equal(t('Chicken Masala'), 'condiment');
+});
