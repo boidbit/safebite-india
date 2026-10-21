@@ -779,6 +779,32 @@ export default function AdminProductForm({ copyMode = false }) {
         packSize: packSize.trim() || null,
         nutritionPanel: buildNutritionPanel(),
       };
+      // The figures in the form are what the app shows: Save writes them to
+      // nutrientsPer100 / realNutrients too, not only to the panel. Before,
+      // that happened only after "Recalculate", so figures typed in (or read
+      // from the pack photo) and saved straight away never reached the product
+      // page. When they changed, the score is redone the way Recalculate does
+      // it -- the summary and recommendation are kept.
+      const nutrientsInfo = buildNutrientsInfo();
+      if (nutrientsInfo) {
+        const sorted = (o) => JSON.stringify(Object.keys(o || {}).sort().map((k) => [k, o[k]]));
+        const changed = sorted(report.nutrientsPer100) !== sorted(nutrientsInfo.nutrientsPer100);
+        finalReport.nutrientsPer100 = nutrientsInfo.nutrientsPer100;
+        finalReport.realNutrients = nutrientsInfo.nutrients;
+        finalReport.realNutrientsServingGrams = nutrientsInfo.servingGrams ?? null;
+        finalReport.realNutrientsServingUnit = nutrientsInfo.servingUnit || 'g';
+        if (changed && Array.isArray(report.ingredients) && report.ingredients.length) {
+          const recalculated = buildReport(report.ingredients, {
+            productName: finalReport.productName,
+            brand: finalReport.brand,
+            imageUrl: finalReport.imageUrl,
+            packSize: finalReport.packSize,
+          });
+          for (const k of ['overallScore', 'verdict', 'flags', 'positives']) if (recalculated[k] !== undefined) finalReport[k] = recalculated[k];
+          delete finalReport.overallScoreBeforeDensity;
+          finalizeScore(finalReport, { nutrientsInfo, packSize: finalReport.packSize || undefined });
+        }
+      }
       // Identity of the product. A new product gets barcode:/text: as
       // before, but an EDIT keeps the key it already has unless a barcode
       // was typed. Recomputing it from the edited ingredients (or turning
