@@ -25,6 +25,10 @@ const RULES = [
   // a "Bingo Buttermilk" is a drink, a "Chocos Cereal" is a cereal, a
   // "Choco Chips" bag is baking chips, a KitKat "wafer" is a chocolate bar.
   { type: 'beverage', re: /\b(buttermilk|sharbat|lassi|drink|juice|beverage|(mineral|sparkling|drinking|soda|tonic) water|ginger ale|herbal infusion|infusion|tea bags?|green tea|herbal tea|kahwa|chamomile|cocktail mix|mocktail|horlicks|bourn ?vita|boost|complan|malt drink|smoothies?|glucon-?d|crush|falooda)\b/i },
+  // Drinks sold under the brand name alone ("Thums Up 300ml can", "Mountain dew 250ml").
+  { type: 'beverage', re: /\b(mountain dew|thums up|coca[- ]?cola|coke|pepsi|sprite|fanta|7 ?up|limca|mirinda|appy( fizz)?|frooti|maaza|slice|real fruit|tropicana|minute maid|paper ?boat|red bull|monster|sting|yakult|bisleri|kinley|aquafina|gatorade|glucon-?d|electral|frestea|swing)\b/i, notRe: /\b(chips|biscuits?|cookies?|cake|bread|buns?|pizza|cheese|of life)\b/i },
+  // Biscuit brands sold under the name alone ("Krack Jack", "Marie light").
+  { type: 'sweet-snack', re: /\b(marie|krack ?jack|monaco|parle[- ]?g|good ?day|hide (&|and) seek|bourbon|jim ?jam|oreo|dark fantasy|50[- ]?50|little hearts|happy happy|milk bikis|cream cracker|nutri ?choice)\b/i, notRe: /\b(chips|namkeen|nachos|wafers)\b/i },
   // Bottled water -- but not rose/kewra water (cooking) or water chestnut.
   { type: 'beverage', re: /\bwater\b/i, notRe: /\b(rose|kewra|chestnut)\b/i },
   { type: 'staple', re: /\bcereals?\b/i },

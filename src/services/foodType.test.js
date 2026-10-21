@@ -141,3 +141,12 @@ test('a Blinkit shelf maps to a food type, a mixed shelf to none', async () => {
   assert.equal(foodTypeForBlinkitCategory('gourmet-bakery'), null);
   assert.equal(foodTypeForBlinkitCategory(null), null);
 });
+
+test('brand-only names: drinks and biscuits, without catching ordinary words', () => {
+  const t = (productName) => classifyFoodType({ productName }).foodType;
+  assert.equal(t('Thums Up 300ml can'), 'beverage');
+  assert.equal(t('Mountain dew 250ml'), 'beverage');
+  assert.equal(t('Mountain Dew Chips'), 'fried-snack');
+  assert.equal(t('Krack Jack'), 'sweet-snack');
+  assert.equal(t('Slice of Life Bread'), 'staple');
+});
