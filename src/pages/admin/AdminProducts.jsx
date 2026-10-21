@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import AdminLayout from './AdminLayout';
 import PhotoCropModal from './PhotoCropModal';
+import ReviewReasonModal from './ReviewReasonModal';
 import { adminListReviewQueue, adminReviewCounts, adminSetReviewStatus, adminForgetDuplicateNames, adminForgetNutritionReview, adminProductThumb, adminGetProductRow, REVIEW_TABS, DEFAULT_REVIEW_TAB } from '../../services/adminReviewRepo';
 import { adminDeleteProduct, adminUpdateProduct } from '../../services/adminProductsRepo';
 import { getScoreColor } from '../../utils/storage';
@@ -56,7 +57,7 @@ const SORT_OPTIONS = [
 
 const INITIAL_FILTERS = {
   status: DEFAULT_REVIEW_TAB, search: '', brand: '', foodType: '', categoryId: '', source: '',
-  scoreMin: '', scoreMax: '', hasImage: '', hasNutrition: '', hasPackSize: '', problemsOnly: false, duplicateNames: false, nutritionReview: false,
+  scoreMin: '', scoreMax: '', hasImage: '', hasNutrition: '', hasPackSize: '', problemsOnly: false, duplicateNames: false, nutritionReview: false, needsPhoto: false,
   addedWithinDays: '', barcode: '', hasBarcode: '', sort: 'newest', pageSize: 25,
 };
 const sizeOf = (f) => (f.pageSize === 'all' ? Infinity : Number(f.pageSize) || 25);
@@ -155,6 +156,9 @@ function ProductRow({ row, isSelected, onToggle, busy, onStatus, onCrop, onDelet
           {row.barcode ? <span className="font-mono">{row.barcode} · </span> : 'no barcode · '}
           {typeof thumb?.ingredientCount === 'number' ? `${thumb.ingredientCount} ingredients` : '… ingredients'}{r.nutrientsPer100 ? ' · nutrition' : ' · no nutrition'}
         </p>
+        {row.reviewNote && (
+          <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--label-2)' }} title={row.reviewNote}>📝 {row.reviewNote}</p>
+        )}
         {row.nutritionIssues?.length > 0 && (
           <p className="text-[11px] mt-0.5" style={{ color: 'var(--v-moderate)' }} title={row.nutritionIssues.map(remarkEn).join('\n')}>
             ⚠ {remarkEn(row.nutritionIssues[0])}{row.nutritionIssues.length > 1 ? ` (+${row.nutritionIssues.length - 1} more)` : ''}
@@ -186,7 +190,7 @@ function ProductRow({ row, isSelected, onToggle, busy, onStatus, onCrop, onDelet
           <button disabled={busy} onClick={() => onStatus(product, 'approved')} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--v-good)' }}>Approve</button>
         )}
         {row.review_status !== 'rejected' && (
-          <button disabled={busy} onClick={() => window.confirm(`Reject "${row.product_name}"? It'll stay out of the app.`) && onStatus(product, 'rejected')} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--v-poor)' }}>Reject</button>
+          <button disabled={busy} onClick={() => onStatus(product, 'rejected')} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--v-poor)' }}>Reject</button>
         )}
         <details className="relative">
           <summary className="tap-scale list-none cursor-pointer text-[15px] px-1" style={{ color: 'var(--label-3)' }} title="More">⋯</summary>
@@ -247,6 +251,7 @@ export default function AdminProducts() {
           problemsOnly: f.problemsOnly,
           duplicateNames: f.duplicateNames,
           nutritionReview: f.nutritionReview,
+          needsPhoto: f.needsPhoto,
           addedWithinDays: f.addedWithinDays !== '' ? Number(f.addedWithinDays) : null,
           barcode: f.barcode,
           hasBarcode: f.hasBarcode,
@@ -285,19 +290,23 @@ export default function AdminProducts() {
     return () => clearTimeout(timer);
   }, [filters, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const setStatus = async (products, status) => {
+  // { products, status } while the reason box is open.
+  const [askReason, setAskReason] = useState(null);
+  const setStatus = async (products, status, reason = '') => {
     setBusy(true);
     try {
-      await adminSetReviewStatus(products, status);
+      await adminSetReviewStatus(products, status, reason);
       adminForgetDuplicateNames();
       adminForgetNutritionReview();
       await load(filters, page);
+      setAskReason(null);
     } catch (err) {
       window.alert(err.message);
     } finally {
       setBusy(false);
     }
   };
+  const askThenSetStatus = (products, status) => setAskReason({ products, status });
 
   const handleDelete = async (id, name) => {
     if (!window.confirm(`Delete "${name || 'this product'}"? This can't be undone.`)) return;
@@ -446,6 +455,14 @@ export default function AdminProducts() {
           <input type="checkbox" checked={filters.nutritionReview} onChange={(e) => setFilter('nutritionReview', e.target.checked)} />
           Nutrition under review
         </label>
+        <label
+          className="flex items-center gap-2 px-3 py-2 rounded-[10px] text-[13px] font-semibold cursor-pointer"
+          style={{ background: 'var(--fill)', color: 'var(--label-1)' }}
+          title="Products whose nutrition table is wrong and can only be fixed from the pack photo (Blinkit's text differs from the pack). Approving one closes its issue."
+        >
+          <input type="checkbox" checked={filters.needsPhoto} onChange={(e) => setFilter('needsPhoto', e.target.checked)} />
+          Needs pack photo
+        </label>
         {filtersActive && (
           <button onClick={() => setFilters({ ...INITIAL_FILTERS, status: filters.status, sort: filters.sort, pageSize: filters.pageSize })} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--label-3)' }}>
             Clear filters
@@ -457,12 +474,12 @@ export default function AdminProducts() {
       {selected.size > 0 && (
         <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-[12px]" style={{ background: 'var(--tint-bg)' }}>
           <span className="text-[13px] font-semibold" style={{ color: 'var(--label-1)' }}>{selected.size} selected</span>
-          <button disabled={busy} onClick={() => setStatus(selectedProducts, 'approved')} className="tap-scale px-3 py-1.5 rounded-[8px] text-[13px] font-semibold text-white" style={{ background: 'var(--v-good)' }}>
+          <button disabled={busy} onClick={() => askThenSetStatus(selectedProducts, 'approved')} className="tap-scale px-3 py-1.5 rounded-[8px] text-[13px] font-semibold text-white" style={{ background: 'var(--v-good)' }}>
             Approve & publish
           </button>
           <button
             disabled={busy}
-            onClick={() => window.confirm(`Reject ${selected.size} product(s)? They'll stay out of the app.`) && setStatus(selectedProducts, 'rejected')}
+            onClick={() => askThenSetStatus(selectedProducts, 'rejected')}
             className="tap-scale px-3 py-1.5 rounded-[8px] text-[13px] font-semibold"
             style={{ background: 'var(--v-poor-bg)', color: 'var(--v-poor)' }}
           >
@@ -501,7 +518,7 @@ export default function AdminProducts() {
                 isSelected={selected.has(row.id)}
                 onToggle={toggle}
                 busy={busy}
-                onStatus={setStatus}
+                onStatus={askThenSetStatus}
                 onCrop={setCroppingRow}
                 onDelete={handleDelete}
               />
@@ -535,6 +552,16 @@ export default function AdminProducts() {
         </div>
       )}
 
+      {askReason && (
+        <ReviewReasonModal
+          status={askReason.status}
+          count={askReason.products.length}
+          name={askReason.products.length === 1 ? askReason.products[0].productName : undefined}
+          busy={busy}
+          onConfirm={(reason) => setStatus(askReason.products, askReason.status, reason)}
+          onClose={() => !busy && setAskReason(null)}
+        />
+      )}
       {croppingRow && (
         <PhotoCropModal
           imageUrl={croppingRow.imageUrl}

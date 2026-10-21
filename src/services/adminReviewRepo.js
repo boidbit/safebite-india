@@ -158,6 +158,7 @@ export async function adminListReviewQueue({
   hasNutrition = '',
   hasPackSize = '',
   problemsOnly = false,
+  needsPhoto = false,
   duplicateNames = false,
   nutritionReview = false,
   addedWithinDays = null,
@@ -170,6 +171,8 @@ export async function adminListReviewQueue({
   requireSupabase();
   const order = SORTS[sort] || SORTS.newest;
   const problemKeys = problemsOnly ? await lookupKeysWithOpenProblems() : null;
+  const photoKeys = needsPhoto ? await lookupKeysNeedingPhoto() : null;
+  if (photoKeys && photoKeys.length === 0) return { rows: [], count: 0 }; // an empty IN() would match everything
   if (problemKeys && problemKeys.length === 0) return { rows: [], count: 0 }; // an empty IN() would match everything
   const digits = barcode.replace(/\D/g, '');
   const barcodeIds = digits ? await productIdsWithBarcode(digits) : null;
@@ -222,6 +225,7 @@ export async function adminListReviewQueue({
     else if (hasPackSize === 'no') query = query.or('report->>packSize.is.null,report->>packSize.eq.');
     if (addedSince) query = query.gte('created_at', addedSince);
     if (problemKeys) query = query.in('lookup_key', problemKeys);
+    if (photoKeys) query = query.in('lookup_key', photoKeys);
     if (hasBarcode === 'yes') query = query.ilike('lookup_key', 'barcode:%');
     else if (hasBarcode === 'no') query = query.not('lookup_key', 'ilike', 'barcode:%');
     if (barcodeIds) query = query.in('id', barcodeIds);
@@ -290,9 +294,18 @@ export async function adminListReviewQueue({
     const { data: links } = await supabase.from('barcode_links').select('lookup_key, barcode').eq('status', 'approved').in('lookup_key', keys);
     for (const l of links || []) if (!linked.has(l.lookup_key)) linked.set(l.lookup_key, l.barcode);
   });
+  // The latest approve/reject note for each row on this page (activity log).
+  const reasons = new Map();
+  await inParallel(chunk(rows.map((r) => String(r.id)), 100), async (ids) => {
+    const { data: logs } = await supabase.from('admin_activity_log').select('target_id, action, details, created_at')
+      .eq('target_type', 'product').in('target_id', ids).in('action', ['approve_product', 'reject_product'])
+      .order('created_at', { ascending: false });
+    for (const l of logs || []) if (!reasons.has(l.target_id)) reasons.set(l.target_id, l);
+  });
   return {
     rows: rows.map((r) => ({
       ...r,
+      reviewNote: reasons.get(String(r.id))?.details?.reason || null,
       barcode: r.lookup_key.startsWith('barcode:') ? r.lookup_key.slice('barcode:'.length) : linked.get(r.lookup_key) || null,
       nutritionIssues: reviewMap?.get(r.id) || null,
     })),
@@ -377,7 +390,26 @@ export async function adminReviewCounts() {
  * @param {Array<{ id: string, productName?: string }>} products
  * @param {'approved'|'rejected'|'pending'} status
  */
-export async function adminSetReviewStatus(products, status) {
+/**
+ * Open data issues that start with this are "the nutrition table is wrong and
+ * only the pack photo can fix it" (scripts/flag-needs-pack-photo.js) -- the
+ * "Needs pack photo" filter. Approving the product closes it.
+ */
+export const NEEDS_PHOTO_PREFIX = 'Needs pack photo';
+
+async function lookupKeysNeedingPhoto() {
+  const { data, error } = await supabase.from('product_data_issues').select('lookup_key')
+    .eq('status', 'open').like('reason', `${NEEDS_PHOTO_PREFIX}%`).not('lookup_key', 'is', null);
+  if (error) throw new Error(error.message);
+  return [...new Set((data || []).map((r) => r.lookup_key))];
+}
+
+/**
+ * @param {Array<{ id: string, productName?: string }>} products
+ * @param {'approved'|'rejected'|'pending'} status
+ * @param {string} [reason] - why (optional), kept with the approve/reject in the activity log
+ */
+export async function adminSetReviewStatus(products, status, reason = '') {
   requireSupabase();
   if (!['approved', 'rejected', 'pending'].includes(status)) throw new Error(`Unknown review status: ${status}`);
   if (products.length === 0) return;
@@ -398,7 +430,7 @@ export async function adminSetReviewStatus(products, status) {
       .from('product_reports')
       .update({ review_status: status, reviewed_at: reviewedAt, reviewed_by: reviewedBy })
       .in('id', piece.map((p) => p.id))
-      .select('id, review_status');
+      .select('id, lookup_key, review_status');
     const progress = done ? ` ${done} of ${products.length} were already changed; run it again to finish the rest.` : '';
     if (error) throw new Error(`${error.message}.${progress}`);
 
@@ -408,7 +440,13 @@ export async function adminSetReviewStatus(products, status) {
     if ((data || []).length < piece.length || notChanged.length > 0) {
       throw new Error(`The review status didn’t change — sign in again as admin and retry.${progress}`);
     }
-    await logActivities(piece.map((p) => ({ action, targetType: 'product', targetId: p.id, productName: p.productName || null })));
+    const note = String(reason || '').trim();
+    await logActivities(piece.map((p) => ({ action, targetType: 'product', targetId: p.id, productName: p.productName || null, details: note ? { reason: note } : null })));
+    if (status === 'approved') {
+      // Fixed and approved: it no longer needs the pack photo.
+      await supabase.from('product_data_issues').update({ status: 'resolved', resolved_at: new Date().toISOString() })
+        .in('lookup_key', data.map((r) => r.lookup_key)).eq('status', 'open').like('reason', `${NEEDS_PHOTO_PREFIX}%`);
+    }
     done += piece.length;
   }
 }
