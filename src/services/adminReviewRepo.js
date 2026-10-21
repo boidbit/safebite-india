@@ -170,10 +170,10 @@ export async function adminListReviewQueue({
 } = {}) {
   requireSupabase();
   const order = SORTS[sort] || SORTS.newest;
-  const problemKeys = problemsOnly ? await lookupKeysWithOpenProblems() : null;
-  const photoKeys = needsPhoto ? await lookupKeysNeedingPhoto() : null;
-  if (photoKeys && photoKeys.length === 0) return { rows: [], count: 0 }; // an empty IN() would match everything
-  if (problemKeys && problemKeys.length === 0) return { rows: [], count: 0 }; // an empty IN() would match everything
+  const problemIds = problemsOnly ? await idsForLookupKeys(await lookupKeysWithOpenProblems()) : null;
+  if (problemIds && problemIds.length === 0) return { rows: [], count: 0 }; // an empty IN() would match everything
+  const photoIds = needsPhoto ? await idsForLookupKeys(await lookupKeysNeedingPhoto()) : null;
+  if (photoIds && photoIds.length === 0) return { rows: [], count: 0 };
   const digits = barcode.replace(/\D/g, '');
   const barcodeIds = digits ? await productIdsWithBarcode(digits) : null;
   if (barcodeIds && barcodeIds.length === 0) return { rows: [], count: 0 };
@@ -183,6 +183,11 @@ export async function adminListReviewQueue({
   // The id-list filters, combined: a product has to be in every list that's on.
   let idList = dupIds;
   if (reviewMap) idList = idList ? idList.filter((id) => reviewMap.has(id)) : [...reviewMap.keys()];
+  for (const ids of [problemIds, photoIds]) {
+    if (!ids) continue;
+    const set = new Set(ids);
+    idList = idList ? idList.filter((id) => set.has(id)) : ids;
+  }
   if (idList && idList.length === 0) return { rows: [], count: 0 };
   // Fixed once, so every chunk of "All" asks about the same moment.
   const addedSince = typeof addedWithinDays === 'number' && addedWithinDays > 0
@@ -224,8 +229,6 @@ export async function adminListReviewQueue({
     if (hasPackSize === 'yes') query = query.not('report->>packSize', 'is', null).neq('report->>packSize', '');
     else if (hasPackSize === 'no') query = query.or('report->>packSize.is.null,report->>packSize.eq.');
     if (addedSince) query = query.gte('created_at', addedSince);
-    if (problemKeys) query = query.in('lookup_key', problemKeys);
-    if (photoKeys) query = query.in('lookup_key', photoKeys);
     if (hasBarcode === 'yes') query = query.ilike('lookup_key', 'barcode:%');
     else if (hasBarcode === 'no') query = query.not('lookup_key', 'ilike', 'barcode:%');
     if (barcodeIds) query = query.in('id', barcodeIds);
@@ -397,6 +400,25 @@ export async function adminReviewCounts() {
  */
 export const NEEDS_PHOTO_PREFIX = 'Needs pack photo';
 
+// A lookup key with a quote, comma or bracket ('crispy "n" crunchy nachos
+// (cheese)') breaks a PostgREST IN() list -- the whole list then matches only
+// part of what it should. Those keys are asked one at a time.
+const ODD_KEY = /[",()]/;
+async function idsForLookupKeys(keys) {
+  const ids = new Set();
+  const plain = keys.filter((k) => !ODD_KEY.test(k));
+  for (const piece of chunk(plain, 100)) {
+    const { data, error } = await supabase.from('product_reports').select('id').in('lookup_key', piece);
+    if (error) throw new Error(error.message);
+    for (const r of data || []) ids.add(r.id);
+  }
+  for (const k of keys.filter((x) => ODD_KEY.test(x))) {
+    const { data } = await supabase.from('product_reports').select('id').eq('lookup_key', k);
+    for (const r of data || []) ids.add(r.id);
+  }
+  return [...ids];
+}
+
 async function lookupKeysNeedingPhoto() {
   const { data, error } = await supabase.from('product_data_issues').select('lookup_key')
     .eq('status', 'open').like('reason', `${NEEDS_PHOTO_PREFIX}%`).not('lookup_key', 'is', null);
@@ -444,8 +466,13 @@ export async function adminSetReviewStatus(products, status, reason = '') {
     await logActivities(piece.map((p) => ({ action, targetType: 'product', targetId: p.id, productName: p.productName || null, details: note ? { reason: note } : null })));
     if (status === 'approved') {
       // Fixed and approved: it no longer needs the pack photo.
-      await supabase.from('product_data_issues').update({ status: 'resolved', resolved_at: new Date().toISOString() })
-        .in('lookup_key', data.map((r) => r.lookup_key)).eq('status', 'open').like('reason', `${NEEDS_PHOTO_PREFIX}%`);
+      const closed = { status: 'resolved', resolved_at: new Date().toISOString() };
+      const keys = data.map((r) => r.lookup_key);
+      const plain = keys.filter((k) => !ODD_KEY.test(k));
+      if (plain.length) await supabase.from('product_data_issues').update(closed).in('lookup_key', plain).eq('status', 'open').like('reason', `${NEEDS_PHOTO_PREFIX}%`);
+      for (const k of keys.filter((x) => ODD_KEY.test(x))) {
+        await supabase.from('product_data_issues').update(closed).eq('lookup_key', k).eq('status', 'open').like('reason', `${NEEDS_PHOTO_PREFIX}%`);
+      }
     }
     done += piece.length;
   }
