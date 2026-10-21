@@ -22,13 +22,17 @@ const WHY = {
 };
 
 const recheck = JSON.parse(fs.readFileSync('../blinkit-nutrition-recheck.json', 'utf8')).filter((x) => x.photo && WHY[x.verdict]);
+// Every Blinkit report (slim), matched by name here: names with quotes, commas
+// or brackets ('Act II Crispy "n" Crunchy Nachos') can't go into an IN() filter.
+const wanted = new Set(recheck.map((x) => x.product));
 const rows = [];
-for (let i = 0; i < recheck.length; i += 40) {
+for (let f = 0; ; f += 1000) {
   const { data, error } = await supabase.from('product_reports')
     .select('lookup_key, product_name, source, review_status, ingredients_text, n:report->nutrientsPer100, score:report->overallScore, verdict:report->>verdict')
-    .eq('source', 'blinkit').in('product_name', recheck.slice(i, i + 40).map((x) => x.product));
+    .eq('source', 'blinkit').neq('review_status', 'rejected').order('id').range(f, f + 999);
   if (error) throw new Error(error.message);
-  rows.push(...data);
+  rows.push(...data.filter((r) => wanted.has(r.product_name)));
+  if (data.length < 1000) break;
 }
 const verdictOf = new Map(recheck.map((x) => [x.product, x]));
 const still = rows.filter((r) => nutritionIssues({ n: r.n, ingredientsText: r.ingredients_text }).length > 0);
