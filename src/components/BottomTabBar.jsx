@@ -10,7 +10,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 const TABS = [
   { path: '/', key: 'navScan', icon: '🔍' },
   { path: '/history', key: 'navHistory', icon: '📋' },
-  { path: '/news', key: 'navNews', icon: '📰' },
+  { path: '/discover', key: 'navDiscover', icon: '🧭' },
   { path: '/settings', key: 'navSettings', icon: '⚙️' },
 ];
 
