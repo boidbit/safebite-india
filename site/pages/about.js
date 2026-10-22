@@ -1,5 +1,5 @@
 // site/pages/about.js
-import { APP_URL, CONTACT_EMAIL, soonPill } from '../layout.js';
+import { APP_URL, CONTACT_EMAIL, playButton } from '../layout.js';
 
 export default function about() {
   return {
@@ -25,8 +25,8 @@ export default function about() {
 </ul>
 
 <h2>Get the app</h2>
-<p>FoodGuard works in any browser — <a href="${APP_URL}">open the web app</a>, nothing to install.</p>
-<p>${soonPill()}</p>
+<p>Install the free Android app from Google Play, or <a href="${APP_URL}">open the web app</a> in any browser — nothing to install.</p>
+<p>${playButton({ place: 'about' })}</p>
 
 <h2>Contact</h2>
 <p>Questions, a product that looks wrong, a brand that wants a label corrected, or a partnership idea — write to <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>. We read everything.</p>

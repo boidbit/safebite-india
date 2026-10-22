@@ -1,5 +1,5 @@
 // site/pages/home.js -- foodguards.space
-import { APP_URL, esc, soonPill } from '../layout.js';
+import { APP_URL, PLAY_URL, esc, playButton } from '../layout.js';
 
 const TIER_COLOR = { Excellent: 'var(--t-excellent)', Good: 'var(--t-good)', Moderate: 'var(--t-moderate)', Poor: 'var(--t-poor)', 'Very Poor': 'var(--t-verypoor)' };
 
@@ -49,7 +49,7 @@ const FAQ = [
   ['Is this medical or diet advice?', 'No. The score describes an ingredient list, not your health. Allergies, pregnancy, diabetes or any medical condition — please talk to a doctor or a registered dietitian.'],
   ["Does a low score mean a product is unsafe?", 'No. Everything sold legally in India meets FSSAI rules. A low score means the ingredient list leans on things worth eating less often — refined flour, added sugar, certain additives — not that the food is dangerous.'],
   ['A product looks wrong. What do I do?', 'Use the report option on the product in the app, or write to us. New products are checked by a person before they go live, and reported mistakes are fixed quickly.'],
-  ['Is there an iPhone app?', 'Not yet — the web app works in Safari on iPhone. Type or photograph the barcode, or a photo of the label. The Android app is coming soon to Google Play.'],
+  ['Is there an iPhone app?', 'Not yet — the web app works in Safari on iPhone. Type or photograph the barcode, or a photo of the label. On Android, <a href="' + PLAY_URL + '" target="_blank" rel="noopener">get the app on Google Play</a>.'],
 ];
 
 export default function home({ stats }) {
@@ -70,7 +70,7 @@ export default function home({ stats }) {
       <p class="lead">Scan the barcode or snap the ingredients. FoodGuard tells you what each ingredient is, which ones are <span class="mark">worth a second look</span>, and scores the whole pack from 0 to 100 — in seconds.</p>
       <div class="hero-ctas">
         <a class="btn btn-primary" href="${APP_URL}">Open the web app →</a>
-        ${soonPill()}
+        ${playButton({ place: 'hero' })}
       </div>
       <div class="hero-stat">
         ${total ? `<div><b>${total}</b><span>foods checked</span></div>` : ''}
@@ -124,6 +124,22 @@ ${shelf.length >= 6 ? `<section class="shelf-sec" aria-label="Products already c
       <div class="label-row"><div class="n">02</div><div><h3>Score</h3><p>Every ingredient is looked up and explained. The pack gets one score, 0 to 100, with the reasons.</p></div></div>
       <div class="label-row"><div class="n">03</div><div><h3>Swap</h3><p>See better-scoring products from the same shelf, so the next pick is an easy one.</p></div></div>
     </div>
+  </div>
+</section>
+
+<section class="showcase">
+  <div class="wrap">
+    <div class="section-head center">
+      <div class="eyebrow">The app</div>
+      <h2>In your pocket, at the shelf.</h2>
+      <p>Scan, see the score, read the reasons — all on one phone screen. Free on Android.</p>
+    </div>
+    <div class="shots">
+      <figure><div class="phone-frame"><img src="/assets/app-home.webp" alt="FoodGuard home screen with scan button" width="540" height="960" /></div><figcaption>Scan or search</figcaption></figure>
+      <figure class="mid"><div class="phone-frame"><img src="/assets/app-score.webp" alt="A product's 0 to 100 score with verdict" width="540" height="960" /></div><figcaption>One clear score</figcaption></figure>
+      <figure><div class="phone-frame"><img src="/assets/app-details.webp" alt="Ingredient-by-ingredient explanations" width="540" height="960" /></div><figcaption>Every ingredient explained</figcaption></figure>
+    </div>
+    <div class="showcase-cta">${playButton({ place: 'showcase' })}</div>
   </div>
 </section>
 
@@ -183,9 +199,9 @@ ${examples.length ? `<section>
     <div class="cta-band">
       <div>
         <h2>Your next grocery run, decoded.</h2>
-        <p>Open FoodGuard in your browser — nothing to install. The Android app is coming soon.</p>
+        <p>Free on Android, and in any browser — no sign-up, nothing to pay.</p>
       </div>
-      <a class="btn" href="${APP_URL}">Open the web app →</a>
+      <div class="cta-actions">${playButton({ place: 'cta' })}<a class="btn" href="${APP_URL}">Use the web app →</a></div>
     </div>
   </div>
 </section>
