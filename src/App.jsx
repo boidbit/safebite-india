@@ -277,8 +277,10 @@ export default function App() {
   // WhatsApp link: that person came to read one specific report, and
   // three intro slides in front of it is a good way to lose them. They
   // still get onboarding the next time they open the app on its own.
+  // Same for a label pasted on the website (#/?paste=, see Home.jsx).
   const [showOnboarding, setShowOnboarding] = useState(() => {
-    if (window.location.hash.startsWith('#/p/') || window.location.hash.startsWith('#/admin')) return false;
+    const hash = window.location.hash;
+    if (hash.startsWith('#/p/') || hash.startsWith('#/admin') || hash.startsWith('#/?paste=')) return false;
     try { return !localStorage.getItem(ONBOARDING_KEY); } catch { return false; }
   });
 
