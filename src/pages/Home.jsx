@@ -66,9 +66,12 @@ function BarcodeIcon() {
 
 export default function Home() {
   const { t, language } = useLanguage();
-  const [searchParams] = useSearchParams();
-  const [mode, setMode] = useState('search'); // 'search' | 'text' | 'image' | 'barcode'
-  const [text, setText] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  // The website's "Paste a label" box (site/assets/home.js) opens
+  // /app/#/?paste=<ingredients>: start in Paste with it filled in, and run it.
+  const pastedFromSite = useRef((searchParams.get('paste') || '').trim().slice(0, 4000));
+  const [mode, setMode] = useState(() => (pastedFromSite.current ? 'text' : 'search')); // 'search' | 'text' | 'image' | 'barcode'
+  const [text, setText] = useState(pastedFromSite.current);
   const [textProductName, setTextProductName] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [imageFile, setImageFile] = useState(null);
@@ -488,6 +491,15 @@ export default function Home() {
       setLoading(false);
     }
   };
+
+  // Once only: the address loses ?paste first, so coming Back from the
+  // report lands on Home rather than analysing the same text again.
+  useEffect(() => {
+    if (!pastedFromSite.current) return;
+    pastedFromSite.current = '';
+    setSearchParams({}, { replace: true });
+    handleAnalyze();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleBarcodeDetected = (code) => {
     setShowScanner(false);

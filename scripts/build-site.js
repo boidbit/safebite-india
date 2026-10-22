@@ -10,12 +10,13 @@
 // reports -- Supabase egress); without Supabase env it builds without them.
 import fs from 'fs';
 import path from 'path';
-import { layout, SITE_URL } from '../site/layout.js';
+import { layout, SITE_URL, APP_URL } from '../site/layout.js';
 import home from '../site/pages/home.js';
 import howWeScore from '../site/pages/how-we-score.js';
 import about from '../site/pages/about.js';
 import disclaimer from '../site/pages/disclaimer.js';
 import notFound from '../site/pages/not-found.js';
+import rankings, { buildRankings } from '../site/pages/rankings.js';
 import { verdictFor } from '../src/services/scoringEngine.js';
 import { assignSlugs, productPage, productPath, productsDirectory, alternativesFor } from '../site/products.js';
 
@@ -24,7 +25,7 @@ const OUT = 'dist';
 // signed off. --products=10 builds a small sample locally; --products=all
 // (or SITE_PRODUCT_PAGES=all) builds every live/approved product.
 const productsArg = (process.argv.find((a) => a.startsWith('--products=')) || '').split('=')[1] || process.env.SITE_PRODUCT_PAGES || '';
-const PAGES = [home, howWeScore, about, disclaimer];
+const PAGES = [home, rankings, howWeScore, about, disclaimer];
 
 // Only products an admin has APPROVED appear on the website -- not ones
 // that are live but never reviewed, pending, rejected, or have an open
@@ -220,6 +221,8 @@ if (productsArg) {
   const bySlug = new Map(catalog.filter((p) => built.has(p.id)).map((p) => [p.id, productPath(p)]));
   for (const item of [...(stats?.examples || []), ...(stats?.shelf || [])]) item.href = bySlug.get(item.id) || null;
   if (stats) stats.productCount = productsArg === 'all' ? catalog.length : chosen.length;
+  // League tables (/rankings/, and the home page's top three), from the whole catalog.
+  if (stats) stats.rankings = buildRankings(catalog, (p) => bySlug.get(p.id) || `${APP_URL}#/p/${encodeURIComponent(p.id)}`);
 
   console.log(`website: ${chosen.length} product pages + /products/ (${stale.length} fetched from Supabase, ${chosen.length - stale.length} from cache)`);
   for (const p of chosen.slice(0, 12)) console.log(`  ${p.verdict.padEnd(9)} ${productPath(p)}`);

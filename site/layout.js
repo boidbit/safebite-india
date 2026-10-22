@@ -37,11 +37,11 @@ ${FORWARD_OLD_APP_LINKS}
 <meta property="og:description" content="${esc(description)}" />
 <meta property="og:url" content="${url}" />
 <meta property="og:image" content="${ogImage}" />
-<meta name="theme-color" content="#0f5132" />
+<meta name="theme-color" content="#121110" />
 <link rel="icon" type="image/png" href="/assets/logo.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/assets/site.css" />
 ${path === '/' ? `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'MobileApplication', name: 'FoodGuard India', operatingSystem: 'ANDROID', applicationCategory: 'HealthApplication', url: PLAY_URL, offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' } })}</script>` : ''}
 </head>
@@ -50,7 +50,8 @@ ${path === '/' ? `<script type="application/ld+json">${JSON.stringify({ '@contex
   <div class="wrap">
     <a class="brand" href="/"><img src="/assets/logo.png" alt="" width="32" height="32" />FoodGuard<small>INDIA</small></a>
     <nav class="nav-links" aria-label="Main">
-      <a href="/products/">Products</a>
+      <a href="/rankings/">Rankings</a>
+      <a class="hide-sm" href="/products/">Products</a>
       <a class="hide-sm" href="/how-we-score/">How we score</a>
       <a class="hide-sm" href="/about/">About</a>
       <a class="btn btn-ghost btn-sm hide-sm" href="${APP_URL}">Web app</a>
@@ -71,6 +72,7 @@ ${body}
       <div>
         <h4>Product</h4>
         <a href="/products/">All products</a>
+        <a href="/rankings/">Rankings by category</a>
         <a href="${PLAY_URL}" target="_blank" rel="noopener">Android app (Google Play)</a>
         <a href="${APP_URL}">Open the web app</a>
         <a href="/how-we-score/">How we score</a>
