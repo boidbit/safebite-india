@@ -3,6 +3,7 @@
 export const SITE_URL = 'https://foodguards.space';
 export const APP_URL = '/app/';
 export const CONTACT_EMAIL = 'hello@foodguards.space';
+export const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.foodguard.india';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -11,8 +12,11 @@ export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&a
 // there, route intact -- before anything renders.
 const FORWARD_OLD_APP_LINKS = `<script>if (location.hash.indexOf('#/') === 0) location.replace('/app/' + location.search + location.hash);</script>`;
 
-export function soonPill() {
-  return `<span class="pill-soon"><span aria-hidden="true">▶</span><span><b>Android app</b>Coming soon to Google Play</span></span>`;
+const PLAY_ICON = `<svg viewBox="0 0 24 26" width="22" height="24" aria-hidden="true"><path fill="#00d7fe" d="M1.2.9C.9 1.2.7 1.7.7 2.3v21.4c0 .6.2 1.1.5 1.4l.1.1L13.3 13V12.8L1.3.8z"/><path fill="#ffce00" d="m17.3 17-4-4v-.3l4-4 .1.1 4.7 2.7c1.3.8 1.3 2 0 2.8z"/><path fill="#f43249" d="M17.4 16.900 13.300 12.800 1.200 24.900c.4.500 1.200.5 2 .1z"/><path fill="#00f076" d="M17.400 8.700 3.200.8C2.400.3 1.600.4 1.200.9l12.100 12z"/></svg>`;
+
+// The "Get it on Google Play" button -- the one place the Play Store link lives.
+export function playButton({ place = 'site' } = {}) {
+  return `<a class="play-btn" href="${PLAY_URL}" target="_blank" rel="noopener" data-place="${place}" aria-label="Get FoodGuard India on Google Play">${PLAY_ICON}<span><small>GET IT ON</small>Google Play</span></a>`;
 }
 
 export function layout({ path, title, description, body, scripts = [], ogImage = `${SITE_URL}/assets/app-score.webp` }) {
@@ -39,6 +43,7 @@ ${FORWARD_OLD_APP_LINKS}
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/assets/site.css" />
+${path === '/' ? `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'MobileApplication', name: 'FoodGuard India', operatingSystem: 'ANDROID', applicationCategory: 'HealthApplication', url: PLAY_URL, offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' } })}</script>` : ''}
 </head>
 <body>
 <header class="nav">
@@ -48,7 +53,8 @@ ${FORWARD_OLD_APP_LINKS}
       <a href="/products/">Products</a>
       <a class="hide-sm" href="/how-we-score/">How we score</a>
       <a class="hide-sm" href="/about/">About</a>
-      <a class="btn btn-primary btn-sm" href="${APP_URL}">Open the app</a>
+      <a class="btn btn-ghost btn-sm hide-sm" href="${APP_URL}">Web app</a>
+      <a class="btn btn-primary btn-sm" href="${PLAY_URL}" target="_blank" rel="noopener">Get the app</a>
     </nav>
   </div>
 </header>
@@ -65,6 +71,7 @@ ${body}
       <div>
         <h4>Product</h4>
         <a href="/products/">All products</a>
+        <a href="${PLAY_URL}" target="_blank" rel="noopener">Android app (Google Play)</a>
         <a href="${APP_URL}">Open the web app</a>
         <a href="/how-we-score/">How we score</a>
         <a href="/#faq">FAQ</a>
