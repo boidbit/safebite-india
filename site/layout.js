@@ -37,7 +37,7 @@ ${FORWARD_OLD_APP_LINKS}
 <meta property="og:description" content="${esc(description)}" />
 <meta property="og:url" content="${url}" />
 <meta property="og:image" content="${ogImage}" />
-<meta name="theme-color" content="#121110" />
+<meta name="theme-color" content="#fbf7ee" />
 <link rel="icon" type="image/png" href="/assets/logo.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

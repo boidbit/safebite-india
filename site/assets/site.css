@@ -1,30 +1,30 @@
 /* foodguards.space -- the website (the app itself is at /app/).
-   Deliberately not the app's look: a dark editorial, "the front sells,
-   the back tells" -- ink-black paper, a serif display face, hot orange
-   for the things worth a second look. */
+   Deliberately not the app's look: printed-label editorial, "the front
+   sells, the back tells" -- paper, ink, a serif display face, and hot
+   orange for the things worth a second look. */
 
 :root {
-  color-scheme: dark;
-  --paper: #121110;
-  --paper-2: #1a1917;
-  --card: #1f1d1a;
-  --ink: #f4efe6;
-  --ink-2: #c9c2b5;
-  --ink-3: #a39c8e;
-  --rule: #f4efe6;
-  --hair: #34312c;
-  --leaf: #6fcf97;
-  --leaf-2: #8ee0ad;
-  --leaf-soft: #1f3a2b;
-  --accent: #ff6a3d;
-  --accent-2: #ff8a5c;
+  color-scheme: light;
+  --paper: #fbf7ee;
+  --paper-2: #f3ecdd;
+  --card: #fffdf8;
+  --ink: #1b1a17;
+  --ink-2: #4a463f;
+  --ink-3: #6b6559;
+  --rule: #1b1a17;
+  --hair: #e3dccd;
+  --leaf: #0f5132;
+  --leaf-2: #157347;
+  --leaf-soft: #dcefe3;
+  --accent: #e8501f;
+  --accent-2: #c2410c;
   --saffron: #f6c945;
-  --tomato: #ff5a4a;
-  --t-excellent: #3ec26b;
-  --t-good: #9bd357;
-  --t-moderate: #f2c230;
-  --t-poor: #ff8a3d;
-  --t-verypoor: #ff5a4a;
+  --tomato: #c8432b;
+  --t-excellent: #1e8e3e;
+  --t-good: #5aa832;
+  --t-moderate: #e0a100;
+  --t-poor: #e8710a;
+  --t-verypoor: #c8432b;
   --display: 'DM Serif Display', Georgia, 'Times New Roman', serif;
   --body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
@@ -158,7 +158,7 @@ section { padding: 84px 0; }
 .cta-band { background: var(--accent); color: #121110; border-radius: 28px; padding: 54px 40px; display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: center; }
 .cta-band h2 { color: #121110; }
 .cta-band p { color: #3a1a0e; margin: 12px 0 0; font-size: 17px; }
-.cta-band .btn { background: #121110; color: var(--ink); border-color: #121110; }
+.cta-band .btn { background: #121110; color: #fbf7ee; border-color: #121110; }
 @media (max-width: 720px) { .cta-band { grid-template-columns: 1fr; padding: 40px 24px; } }
 
 /* ---- Prose pages ---- */
@@ -312,7 +312,7 @@ footer .fine { margin-top: 30px; font-size: 12.5px; color: var(--ink-3); max-wid
 .fvb-badge { display: inline-block; margin-top: 18px; background: #121110; color: var(--saffron); border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 14px; }
 .fvb-back { background: var(--card); padding: 36px; display: grid; gap: 20px; align-content: start; color: var(--ink-3); }
 .fvb-label { margin: 0; font: 15px/1.9 var(--mono); color: var(--ink); }
-.fvb-label mark { background: #5a2a1c; color: #ffb08f; padding: 1px 4px; border-radius: 4px; }
+.fvb-label mark { background: #fde0d3; color: #9a2f0c; padding: 1px 4px; border-radius: 4px; }
 .fvb-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; color: var(--ink-2); font-size: 15.5px; }
 .fvb-points b { color: var(--ink); }
 .fvb-foot { border-top: 1px solid var(--hair); padding-top: 16px; font-size: 14px; color: var(--ink-3); }
@@ -410,7 +410,7 @@ footer .fine { margin-top: 30px; font-size: 12.5px; color: var(--ink-3); max-wid
   .nav-links .btn-sm { padding: 7px 13px; }
 }
 
-/* ==== Dark editorial: the shared pieces, restyled ==== */
+/* ==== Editorial: the shared pieces, restyled ==== */
 body { font-synthesis: none; }
 h1, h2, h3, .label-title, .label-row .n, .hero-stat b, .ring span, .p-verdict, .shelf-badge, .scale b, .faq summary, .brand { font-weight: 400; }
 h1, h2 { letter-spacing: -0.01em; }
@@ -425,10 +425,10 @@ h1, h2 { letter-spacing: -0.01em; }
 .card .ico svg { width: 26px; height: 26px; }
 .label { background: var(--card); }
 .phone-frame { border-color: #2a2824; box-shadow: none; }
-.shots .phone-frame { border-color: #2a2824; box-shadow: 0 30px 60px rgba(0,0,0,.45); }
+.shots .phone-frame { border-color: #2a2824; box-shadow: 0 24px 50px rgba(27,26,23,.18); }
 .showcase { background: var(--paper-2); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
 .shelf-pack { border: 1px solid var(--hair); box-shadow: none; }
-.shelf-badge { color: #121110; border-color: var(--paper); }
+.shelf-badge { color: #fff; border-color: var(--paper); }
 .play-btn { border-color: #5c5850; }
 .note { border-left-color: var(--accent); }
 .az a:hover { background: var(--ink); color: var(--paper); }
