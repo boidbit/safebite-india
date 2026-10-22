@@ -9,13 +9,18 @@ import { findCategoryForProduct } from '../../src/services/productCache.js';
 const TIER_COLOR = { Excellent: 'var(--t-excellent)', Good: 'var(--t-good)', Moderate: 'var(--t-moderate)', Poor: 'var(--t-poor)', 'Very Poor': 'var(--t-verypoor)' };
 const TOP = 20;
 
-/** [{ id, label, total, items: [{ name, brand, href, score, verdict }] }], best first; categories with fewer than 3 products left out. */
-export function buildRankings(catalog, pathFor) {
+function byCategory(catalog) {
   const byCat = new Map(CATEGORY_KEYWORDS.map((c) => [c.id, []]));
   for (const p of catalog) {
     const cat = findCategoryForProduct(p.name);
     if (cat && byCat.has(cat.id)) byCat.get(cat.id).push(p);
   }
+  return byCat;
+}
+
+/** [{ id, label, total, items: [{ id, name, brand, imageUrl, href, score, verdict }] }], best first; categories with fewer than 3 products left out. */
+export function buildRankings(catalog, pathFor) {
+  const byCat = byCategory(catalog);
   return CATEGORY_KEYWORDS
     .map((c) => {
       const all = byCat.get(c.id).sort((a, b) => b.score - a.score || (b.scan_count || 0) - (a.scan_count || 0));
@@ -23,11 +28,30 @@ export function buildRankings(catalog, pathFor) {
         id: c.id,
         label: c.label,
         total: all.length,
-        items: all.slice(0, TOP).map((p) => ({ name: p.name, brand: p.brand, href: pathFor(p), score: p.score, verdict: p.verdict })),
+        items: all.slice(0, TOP).map((p) => ({ id: p.id, name: p.name, brand: p.brand, imageUrl: p.imageUrl || null, href: pathFor(p), score: p.score, verdict: p.verdict })),
       };
     })
     .filter((c) => c.total >= 3)
     .sort((a, b) => b.total - a.total);
+}
+
+/**
+ * One swap per category, for the app's Discover tab: the most-scanned
+ * Poor or Moderate pack (never a Very Poor one singled out, as on the
+ * home page) and the best pack on the same shelf, at least 20 points up.
+ */
+export function buildSwaps(catalog, { limit = 8 } = {}) {
+  const slim = (p) => ({ id: p.id, name: p.name, brand: p.brand, imageUrl: p.imageUrl || null, score: p.score, verdict: p.verdict });
+  const swaps = [];
+  for (const [category, all] of byCategory(catalog)) {
+    const best = [...all].sort((a, b) => b.score - a.score || (b.scan_count || 0) - (a.scan_count || 0))[0];
+    if (!best || best.score < 65) continue;
+    const from = all
+      .filter((p) => p.score >= 25 && p.score < 65 && best.score - p.score >= 20)
+      .sort((a, b) => (b.scan_count || 0) - (a.scan_count || 0))[0];
+    if (from) swaps.push({ category, from: slim(from), to: slim(best) });
+  }
+  return swaps.slice(0, limit);
 }
 
 /** One category's table; `limit` shows the first few with a link to the rest. */

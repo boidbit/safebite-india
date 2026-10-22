@@ -37,7 +37,7 @@ import MyIntake from './pages/MyIntake';
 import Category from './pages/Category';
 import PopularSearches from './pages/PopularSearches';
 import SearchResults from './pages/SearchResults';
-import News from './pages/News';
+import Discover from './pages/Discover';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminGuard from './pages/admin/AdminGuard';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -232,7 +232,9 @@ function AppShell() {
           <Route path="/category/:id" element={<Category />} />
           <Route path="/popular" element={<PopularSearches />} />
           <Route path="/search" element={<SearchResults />} />
-          <Route path="/news" element={<News />} />
+          <Route path="/discover" element={<Discover />} />
+          {/* Updates (news) was replaced by Discover; old links land there. */}
+          <Route path="/news" element={<Navigate to="/discover" replace />} />
           <Route path="/submit-product" element={<SubmitProduct />} />
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminGuard><AdminDashboard /></AdminGuard>} />

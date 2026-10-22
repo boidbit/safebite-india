@@ -16,7 +16,7 @@ import howWeScore from '../site/pages/how-we-score.js';
 import about from '../site/pages/about.js';
 import disclaimer from '../site/pages/disclaimer.js';
 import notFound from '../site/pages/not-found.js';
-import rankings, { buildRankings } from '../site/pages/rankings.js';
+import rankings, { buildRankings, buildSwaps } from '../site/pages/rankings.js';
 import { verdictFor } from '../src/services/scoringEngine.js';
 import { assignSlugs, productPage, productPath, productsDirectory, alternativesFor } from '../site/products.js';
 
@@ -223,6 +223,14 @@ if (productsArg) {
   if (stats) stats.productCount = productsArg === 'all' ? catalog.length : chosen.length;
   // League tables (/rankings/, and the home page's top three), from the whole catalog.
   if (stats) stats.rankings = buildRankings(catalog, (p) => bySlug.get(p.id) || `${APP_URL}#/p/${encodeURIComponent(p.id)}`);
+  // The same tables for the app's Discover tab (src/services/discoverRepo.js),
+  // read from the site rather than queried live: no Supabase egress per open.
+  const rankingsData = stats?.rankings || buildRankings(catalog, (p) => bySlug.get(p.id) || `${APP_URL}#/p/${encodeURIComponent(p.id)}`);
+  fs.writeFileSync(path.join(OUT, 'rankings.json'), JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    categories: rankingsData.map(({ id, label, total, items }) => ({ id, label, total, items: items.map(({ href, ...item }) => item) })),
+    swaps: buildSwaps(catalog),
+  }));
 
   console.log(`website: ${chosen.length} product pages + /products/ (${stale.length} fetched from Supabase, ${chosen.length - stale.length} from cache)`);
   for (const p of chosen.slice(0, 12)) console.log(`  ${p.verdict.padEnd(9)} ${productPath(p)}`);

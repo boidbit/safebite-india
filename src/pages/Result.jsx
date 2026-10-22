@@ -11,7 +11,6 @@ import { renderShareCardImage } from '../utils/shareCard';
 import headerIcon from '../assets/header-icon.png';
 import { analyzeText } from '../services/analyzeText';
 import { lookupBarcode } from '../services/openFoodFacts';
-import { getRelatedNews } from '../services/newsRepo';
 import { submitProductFlag, submitNameSuggestion, FLAG_REASONS } from '../services/productFlags';
 import { categoryIcon } from '../utils/categoryIcon';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -25,7 +24,6 @@ import ScoreCircle from '../components/ScoreCircle';
 import IngredientCard from '../components/IngredientCard';
 import ProductImage from '../components/ProductImage';
 import ProductStripCard from '../components/ProductStripCard';
-import NewsCard from '../components/NewsCard';
 import { toServing } from '../services/nutrientBasis';
 import ResultBurst, { shouldBurst, arriveMs, celebrationProfile } from '../components/ResultBurst';
 import { peekHandoff } from '../utils/reportHandoff';
@@ -247,7 +245,6 @@ export default function Result() {
   const [nameSuggested, setNameSuggested] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [alternatives, setAlternatives] = useState([]);
-  const [relatedNews, setRelatedNews] = useState([]);
   const [showHabitModal, setShowHabitModal] = useState(false);
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [showAllFactors, setShowAllFactors] = useState(false);
@@ -369,26 +366,6 @@ export default function Result() {
     });
     return () => { cancelled = true; };
   }, [result?.lookupKey, result?.productName, result?.overallScore]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Keyed off the product's brand and its flagged ingredients specifically
-  // (not the full list) -- an article title is far more likely to be
-  // about a specific concerning substance than an everyday bulk one.
-  const flaggedIngredientKey = (result?.ingredients || [])
-    .filter((i) => i.status === 'harmful' || i.status === 'concerning')
-    .map((i) => i.name)
-    .join(',');
-
-  useEffect(() => {
-    if (!result) {
-      setRelatedNews([]);
-      return;
-    }
-    let cancelled = false;
-    getRelatedNews({ brand: result.brand, flaggedIngredientNames: flaggedIngredientKey ? flaggedIngredientKey.split(',') : [] }).then((items) => {
-      if (!cancelled) setRelatedNews(items);
-    });
-    return () => { cancelled = true; };
-  }, [result?.brand, flaggedIngredientKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openAlternative = async (item) => {
     const cached = await getCachedReport(item.lookupKey);
@@ -1382,21 +1359,6 @@ export default function Result() {
               </span>
             </button>
           )}
-        </>
-      )}
-
-      {/* Related reading -- news/research whose title mentions this
-          product's brand or one of its flagged ingredients specifically,
-          so it only shows up when there's something genuinely on-topic
-          to read, not for every product. */}
-      {view === 'overview' && relatedNews.length > 0 && (
-        <>
-          <SectionHeader>{t('sectionRelatedReading')}</SectionHeader>
-          <div className="mx-4">
-            {relatedNews.map((item) => (
-              <NewsCard key={item.id} item={item} />
-            ))}
-          </div>
         </>
       )}
 
