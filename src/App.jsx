@@ -171,6 +171,23 @@ const scrollPositions = new Map();
 // already being painted) and restores it on a POP (back/forward)
 // navigation; any other navigation (clicking into something new) always
 // starts at the top, same as every app already expects.
+// Google Analytics page views. index.html turns GA's automatic page view
+// off (a single-page app never reloads), so each route change is reported
+// here. Admin pages and the native Android app are not counted.
+function PageViewTracker() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (Capacitor.isNativePlatform() || pathname.startsWith('/admin')) return;
+    if (typeof window.gtag !== 'function') return;
+    window.gtag('event', 'page_view', {
+      page_path: `/app/#${pathname}`,
+      page_location: window.location.href,
+      page_title: document.title,
+    });
+  }, [pathname]);
+  return null;
+}
+
 function ScrollRestoration() {
   const location = useLocation();
   const navigationType = useNavigationType();
@@ -293,6 +310,7 @@ export default function App() {
           <AndroidBackButton />
           <NotificationBridge />
           <ScrollRestoration />
+          <PageViewTracker />
           <AppShell />
           {showSplash && <SplashScreen onDone={() => setShowSplash(false)} />}
           {!showSplash && showOnboarding && <Onboarding onDone={() => setShowOnboarding(false)} />}

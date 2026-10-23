@@ -19,6 +19,15 @@ export function playButton({ place = 'site' } = {}) {
   return `<a class="play-btn" href="${PLAY_URL}" target="_blank" rel="noopener" data-place="${place}" aria-label="Get FoodGuard India on Google Play">${PLAY_ICON}<span><small>GET IT ON</small>Google Play</span></a>`;
 }
 
+// Google Analytics (GA4). Same measurement ID as the app (index.html).
+const GA_TAG = `<script async src="https://www.googletagmanager.com/gtag/js?id=G-C77145W3R7"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-C77145W3R7');
+</script>`;
+
 export function layout({ path, title, description, body, scripts = [], ogImage = `${SITE_URL}/assets/app-score.webp` }) {
   const url = `${SITE_URL}${path}`;
   const fullTitle = path === '/' ? title : `${title} · FoodGuard India`;
@@ -28,6 +37,7 @@ export function layout({ path, title, description, body, scripts = [], ogImage =
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 ${FORWARD_OLD_APP_LINKS}
+${GA_TAG}
 <title>${esc(fullTitle)}</title>
 <meta name="description" content="${esc(description)}" />
 <link rel="canonical" href="${url}" />

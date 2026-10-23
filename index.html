@@ -16,6 +16,16 @@
     <meta property="og:description" content="Scan any packaged food and see what's really in it — an ingredient score, explained, for you and your family." />
     <meta property="og:image" content="https://foodguards.space/app/favicon.png" />
     <meta property="og:url" content="https://foodguards.space/app/" />
+    <!-- Google Analytics (GA4). send_page_view is off because this is a
+         single-page app: src/App.jsx sends a page_view on every route
+         change instead (and skips admin pages and the native Android app). -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-C77145W3R7"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-C77145W3R7', { send_page_view: false });
+    </script>
     <!-- Applies the saved theme before React (or even the CSS) has a
          chance to paint anything -- without this, a dark-mode user would
          see a flash of the light page for a moment on every load. Kept
