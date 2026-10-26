@@ -20,22 +20,41 @@
 //  - it is matched to what we already have, by barcode and then by name and
 //    pack size, and the figures compared.
 //
-// Preview only for now: nothing is saved to the database. Every product's
-// result goes to ../amul-scrape-progress.json as it's done (a stop part-way
-// loses nothing, and photo reads are never repeated); the summary goes to
-// ../amul-preview.json.
+// Reading saves nothing to the database. Every product's result goes to
+// ../amul-scrape-progress.json as it's done (a stop part-way loses nothing,
+// and photo reads are never repeated); the summary goes to ../amul-preview.json.
 //
-//   node --env-file=.env scripts/scrape-amul.js
+// Saving, in two steps:
+//  --apply  every product with a barcode (and an ingredients list) goes into
+//           blinkit_products as source 'amul_shop', for generate-reports.js to
+//           score like any scraped product. A name Blinkit already has
+//           exactly is not added again; its barcode is linked to that product.
+//  --link   once the reports exist: each barcode is linked (approved) to its
+//           Amul product and any other link for that barcode is retired, so a
+//           scan opens the Amul product. A barcode whose photo shows a
+//           different number than Amul's data stays pending, both numbers.
+//           An older product saved under the barcode itself is hidden by the
+//           SQL file this writes (review status needs a signed-in admin).
+//
+//   node --env-file=.env scripts/scrape-amul.js              (read the shop)
 //   node --env-file=.env scripts/scrape-amul.js --limit 5
+//   node --env-file=.env scripts/scrape-amul.js --summary    (preview again, shop not opened)
+//   node --env-file=.env scripts/scrape-amul.js --apply
+//   node --env-file=.env scripts/generate-reports.js         (until the Amul rows are done)
+//   node --env-file=.env scripts/scrape-amul.js --link
 import fs from 'fs';
 import sharp from 'sharp';
 import { chromium } from 'playwright';
 import { supabase } from '../src/services/supabaseClient.js';
 import { fetchImageBuffer, sleep } from '../src/services/blinkit.js';
 import { isValidGtin, readBarcodesFromPhoto, confirmBarcode } from '../src/services/barcodeReader.js';
-import { nutritionFromPhotos } from '../src/services/nutritionPhotoRead.js';
+import { nutritionFromPhotos, asBlinkitAttributes } from '../src/services/nutritionPhotoRead.js';
 import { tableProblems } from '../src/services/dataHealth.js';
 import { parsePack } from '../src/services/productFamilies.js';
+import { blinkitLookupKey } from '../src/services/blinkitProductsRepo.js';
+import { optimizeAndUploadBlinkitImage } from '../src/services/blinkitImageOptimizer.js';
+import { isBundleListing } from '../src/services/bundleListing.js';
+import { chunk } from '../src/utils/chunk.js';
 
 const args = process.argv.slice(2);
 const LIMIT = parseInt(args[args.indexOf('--limit') + 1], 10) || Infinity;
@@ -43,11 +62,17 @@ const SHOP = 'https://shop.amul.com';
 const PINCODE = '110001';
 const PROGRESS = '../amul-scrape-progress.json';
 const PREVIEW = '../amul-preview.json';
+const SAVED = '../amul-saved.json';
+const SQL_OUT = '../amul-hide-old-barcode-products.sql';
+const SOURCE = 'amul_shop';
+const BRAND = 'Amul';
 const progress = (() => { try { return JSON.parse(fs.readFileSync(PROGRESS, 'utf8')); } catch { return {}; } })();
 const save = () => fs.writeFileSync(PROGRESS, JSON.stringify(progress, null, 1));
 
 // Gift boxes and hampers hold several different products.
 const NOT_ONE_PRODUCT = /\b(hamper|combo|assorted|celebration|festive|gift box|variety)\b/i;
+// A sample / trial bundle isn't the product people buy.
+const TRIAL = /\btrial pack\b/i;
 // Gallery photos that are never the nutrition table.
 const NOT_TABLE = /hero|fop|bar-?code|storage|manufacturer|marketer|claims|extra-view/i;
 
@@ -201,6 +226,8 @@ function differences(amul, ours) {
 }
 
 async function main() {
+  if (args.includes('--apply')) return apply();
+  if (args.includes('--link')) return link();
   if (args.includes('--summary')) return summarize(); // from what's already read, without opening the shop
   console.log('Amul shop: reading the product list ...');
   const shop = await openShop();
@@ -227,16 +254,25 @@ async function main() {
   await summarize();
 }
 
-async function summarize() {
-  // One product per unit: listings of the same unit share its barcode (or its name and pack).
+/**
+ * One product per unit: listings of the same unit share its barcode (or its
+ * name and pack). The listing kept is the one with a nutrition table, then
+ * the one not sold as a gift pack (its name is the product's plain name).
+ */
+function unitsFrom() {
+  const rank = (r) => (r.per100 ? 2 : 0) + (/gift/i.test(r.listing) ? 0 : 1);
   const units = new Map();
   for (const r of Object.values(progress)) {
     const key = r.barcode || `${norm(r.name)}|${parsePack(r.packSize)?.key || ''}`;
     const prev = units.get(key);
-    if (!prev || (!prev.per100 && r.per100)) units.set(key, r);
+    if (!prev || rank(r) > rank(prev)) units.set(key, r);
   }
+  return [...units.values()];
+}
+
+async function summarize() {
   const ours = await ourProducts();
-  const products = [...units.values()].map((r) => {
+  const products = unitsFrom().map((r) => {
     const m = match(r, ours);
     return { ...r, ourMatch: m ? { by: m.by, name: m.row.product_name, pack: m.row.pack, lookup_key: m.row.lookup_key } : null, differs: m ? differences(r.per100, m.row.n) : [] };
   });
@@ -252,6 +288,157 @@ async function summarize() {
   console.log(`of those already in the app, figures differ from Amul's: ${count((p) => p.differs.length)}`);
   for (const p of products.filter((x) => x.differs.length).slice(0, 15)) console.log(`   ${p.name.slice(0, 45).padEnd(45)} ${p.differs.join(', ')}`);
   console.log(`\nfull list: ${PREVIEW}`);
+}
+
+const slug = (s) => norm(s).replace(/ /g, '-').slice(0, 120);
+const photoCodeOf = (check) => (String(check).match(/photo shows (\d+)/) || [])[1] || null;
+
+async function allRows(build) {
+  const out = [];
+  for (let f = 0; ; f += 1000) {
+    const { data, error } = await build().range(f, f + 999);
+    if (error) throw new Error(error.message);
+    out.push(...data);
+    if (data.length < 1000) return out;
+  }
+}
+
+async function apply() {
+  const take = unitsFrom().filter((u) => u.barcode && !TRIAL.test(u.listing));
+  const noIngredients = take.filter((u) => u.ingredients.length < 12);
+  const ready = take.filter((u) => u.ingredients.length >= 12);
+
+  // Same name in more than one pack size: the size goes into the name, or one
+  // would overwrite the other (a product is kept by brand + name).
+  const sameName = new Map();
+  for (const u of ready) sameName.set(norm(u.name), (sameName.get(norm(u.name)) || 0) + 1);
+  for (const u of ready) u.saveName = sameName.get(norm(u.name)) > 1 ? `${u.name} ${parsePack(u.packSize)?.label || u.packSize}` : u.name;
+
+  // Blinkit files Amul under several brand names ("Amul Kool", "Amul Tru", ...).
+  const existing = await allRows(() => supabase.from('blinkit_products').select('source, brand, product_name, pack_size').or('brand.ilike.%amul%,brand.ilike.%janmay%'));
+  const saved = [];
+  let added = 0;
+  for (const u of ready) {
+    // Blinkit has the same name in another pack size (Mango Lassi 140 ml, Amul's is 1 L): a product of its own.
+    const packKey = parsePack(u.packSize)?.key;
+    const otherSize = existing.some((e) => e.source !== SOURCE && norm(e.product_name) === norm(u.saveName) && packKey && parsePack(e.pack_size)?.key && parsePack(e.pack_size).key !== packKey);
+    if (otherSize) u.saveName = `${u.saveName} ${parsePack(u.packSize).label}`;
+    const base = { alias: u.alias, name: u.saveName, barcode: u.barcode, photoCode: photoCodeOf(u.barcodeCheck), barcodeCheck: u.barcodeCheck };
+    if (existing.some((e) => e.source === SOURCE && e.product_name === u.saveName)) { // saved by an earlier --apply
+      saved.push({ ...base, lookupKey: blinkitLookupKey(SOURCE, BRAND, u.saveName) });
+      continue;
+    }
+    const clash = existing.find((e) => norm(e.product_name) === norm(u.saveName) && e.source !== SOURCE);
+    if (clash) {
+      saved.push({ ...base, lookupKey: blinkitLookupKey(clash.source, clash.brand, clash.product_name), alreadyHad: clash.source });
+      console.log(`   had   ${u.saveName} (from ${clash.source}) -- barcode goes to that one`);
+      continue;
+    }
+    if (isBundleListing(u.saveName)) console.warn(`   note: "${u.saveName}" reads as a bundle; generate-reports.js will skip it`);
+    const photo = u.images.find((x) => /02-fop/i.test(x)) || u.images.find((x) => /hero/i.test(x)) || u.images[0];
+    const optimized = photo ? await optimizeAndUploadBlinkitImage(photo, `amul-shop-${slug(u.saveName)}`) : null;
+    const row = {
+      source: SOURCE,
+      brand: BRAND,
+      product_name: u.saveName,
+      ingredients_text: u.ingredients,
+      category: u.category,
+      image_url: photo || null,
+      optimized_image_url: optimized?.url || null,
+      optimized_image_bytes: optimized?.bytes || null,
+      nutrition: u.per100 ? { ...asBlinkitAttributes(u.per100), 'Nutrition source': `Amul shop: ${u.nutritionFrom} (read twice)` } : {},
+      pack_size: u.packSize,
+      serving_size: null,
+      fssai_license: null,
+      scraped_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('blinkit_products').upsert(row, { onConflict: 'brand,product_name' });
+    if (error) { console.error(`   SAVE FAILED ${u.saveName}: ${error.message}`); continue; }
+    saved.push({ ...base, lookupKey: blinkitLookupKey(SOURCE, BRAND, u.saveName) });
+    added++;
+    console.log(`   added ${u.saveName.slice(0, 55).padEnd(55)} ${u.packSize || ''}${u.per100 ? '' : '  (no nutrition table)'}${optimized ? '' : '  (photo not copied)'}`);
+  }
+  fs.writeFileSync(SAVED, JSON.stringify(saved, null, 1));
+  console.log(`\nwith a barcode: ${take.length} | added: ${added} | already had (barcode goes to that product): ${saved.length - added} | left out, no ingredients list: ${noIngredients.length}`);
+  for (const u of noIngredients) console.log(`   no ingredients: ${u.name} ${u.packSize || ''}`);
+  console.log(`\nnext: node --env-file=.env scripts/generate-reports.js (until the Amul rows are done), then --link`);
+}
+
+async function link() {
+  const saved = JSON.parse(fs.readFileSync(SAVED, 'utf8'));
+  const have = new Set();
+  for (const keys of chunk(saved.map((s) => s.lookupKey), 100)) {
+    const { data, error } = await supabase.from('product_reports').select('lookup_key').in('lookup_key', keys);
+    if (error) throw new Error(error.message);
+    for (const r of data) have.add(r.lookup_key);
+  }
+  const now = new Date().toISOString();
+  const toHide = [];
+  const counts = { approved: 0, pending: 0, retired: 0, notReady: 0 };
+  for (const s of saved) {
+    if (!have.has(s.lookupKey)) { counts.notReady++; continue; }
+    const doubtful = Boolean(s.photoCode);
+    const codes = doubtful ? [s.barcode, s.photoCode] : [s.barcode];
+    const rows = codes.map((code) => ({
+      barcode: code, lookup_key: s.lookupKey, product_name: s.name, brand: BRAND, device_id: 'amul-shop', source: SOURCE,
+      status: doubtful ? 'pending' : 'approved', reviewed_at: doubtful ? null : now,
+    }));
+    const { error } = await supabase.from('barcode_links').upsert(rows, { onConflict: 'barcode,lookup_key,device_id' });
+    if (error) { console.error(`   ${s.name}: ${error.message}`); continue; }
+    if (doubtful) { counts.pending += codes.length; console.log(`   pending  ${s.name}: Amul's data says ${s.barcode}, the barcode photo shows ${s.photoCode}`); continue; }
+    counts.approved++;
+
+    // The barcode is the Amul product's now: any other link for it is retired ...
+    const { data: retired } = await supabase.from('barcode_links').update({ status: 'rejected', reviewed_at: now })
+      .eq('barcode', s.barcode).neq('lookup_key', s.lookupKey).in('status', ['pending', 'approved']).select('product_name');
+    for (const r of retired || []) console.log(`   retired  ${s.barcode} -> ${r.product_name} (now ${s.name})`);
+    counts.retired += retired?.length || 0;
+    // ... an Open Food Facts row still waiting for a report won't become one ...
+    await supabase.from('products').update({ report_generated_at: now }).eq('lookup_key', `barcode:${s.barcode}`).is('report_generated_at', null);
+    // ... and an older product saved under the barcode itself is hidden (SQL below).
+    const { data: old } = await supabase.from('product_reports').select('id, product_name, review_status')
+      .eq('lookup_key', `barcode:${s.barcode}`).neq('review_status', 'rejected');
+    for (const o of old || []) toHide.push({ ...o, barcode: s.barcode, newName: s.name });
+  }
+
+  if (toHide.length) {
+    const reason = 'Replaced by the Amul shop product with the same barcode (brand data).';
+    const ids = toHide.map((o) => `  '${o.id}'`).join(',\n');
+    fs.writeFileSync(SQL_OUT, `-- FoodGuard India -- hide ${toHide.length} older product(s) saved under a barcode that now opens
+-- the Amul shop product (Amul's own data). Run once in the Supabase SQL Editor, all of it.
+--
+-- Review status can only be changed by a signed-in admin (the
+-- product_reports_guard_review_status trigger). The two set_config lines make
+-- this one transaction count as that, nothing else. A hidden product can be
+-- approved again from Admin > Products > Rejected.
+${toHide.map((o) => `--   ${o.barcode}  ${o.review_status}: ${o.product_name}  ->  ${o.newName}`).join('\n')}
+
+begin;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claims', '{"role":"authenticated"}', true);
+
+with hidden as (
+  update public.product_reports
+     set review_status = 'rejected', reviewed_at = now()
+   where id in (
+${ids}
+  )
+  returning id, product_name
+)
+insert into public.admin_activity_log (actor_email, action, target_type, target_id, product_name, details)
+select null, 'reject_product', 'product', id::text, product_name, '{"reason": "${reason}"}'::jsonb
+  from hidden;
+
+-- Should list all ${toHide.length} as rejected:
+select product_name, review_status from public.product_reports where id in (
+${ids}
+) order by product_name;
+
+commit;
+`);
+  }
+  console.log(`\nbarcodes approved: ${counts.approved} | pending (photo shows another number): ${counts.pending} | other links retired: ${counts.retired} | report not made yet: ${counts.notReady}`);
+  console.log(toHide.length ? `older products under these barcodes: ${toHide.length} -- run ${SQL_OUT} in the Supabase SQL Editor to hide them` : 'no older product saved under these barcodes');
 }
 
 main().catch((e) => { console.error(e.message); process.exitCode = 1; });
