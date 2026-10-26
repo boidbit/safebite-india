@@ -32,7 +32,7 @@ export default function howWeScore() {
 <p>The ingredients add up to a score from 0 to 100. Two rules stop a long list of harmless ingredients from hiding a problem:</p>
 <ul>
   <li>Any <strong>harmful</strong> ingredient caps the score in the Very Poor band (24 or below).</li>
-  <li>Any <strong>concerning</strong> ingredient caps it at Moderate (64 or below).</li>
+  <li>Any <strong>concerning</strong> ingredient caps it at Moderate (64 or below). The exception is zero-calorie sweeteners such as sucralose: they are still flagged and still cost points, but on their own they only keep a product out of Excellent (84 or below) instead of holding it at Moderate.</li>
 </ul>
 
 <h2>4. Nutrition, when we have the real panel</h2>

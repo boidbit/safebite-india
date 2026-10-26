@@ -29,6 +29,8 @@ const HARMFUL_SCORE_CAP = 24;   // forces the "Very Poor" tier
 const HARMFUL_SCORE_FLOOR = 5;  // worst case within that forced tier
 const CONCERNING_SCORE_CAP = 64; // forces at most "Moderate"
 const CONCERNING_SCORE_FLOOR = 48; // worst case within that forced tier
+const SWEETENER_SCORE_CAP = 84;   // top of "Good": a flagged sweetener keeps a product out of "Excellent"
+const SWEETENER_SCORE_FLOOR = 78; // worst case within that squeeze
 
 // A plain `Math.min(score, cap)` flattens every product that crosses the
 // cap onto the exact same number, no matter how different their real
@@ -85,6 +87,21 @@ function totalPenaltyOf(ingredients) {
   return ingredients.reduce((sum, ing) => sum + (ing.penalty || 0) * quantityWeight(ing), 0);
 }
 
+// Zero-calorie / artificial sweeteners stay flagged "concerning" (the
+// research on them is still debated) but are exempt from the Moderate cap:
+// a whey protein whose only flag is a sliver of sucralose was being held at
+// 64 no matter how clean the rest was. Their own penalty still counts.
+// Matched by name / INS code on purpose, not by category: plain sugar is
+// also category "sweetener" and must keep the cap.
+const ARTIFICIAL_SWEETENER_NAME = /sucralose|aspartame|acesulfame|saccharin|neotame|advantame|cyclamate|steviol|stevia/i;
+const ARTIFICIAL_SWEETENER_INS = new Set(['950', '951', '952', '954', '955', '961', '969', '960']);
+
+export function isArtificialSweetener(ingredient) {
+  if (ARTIFICIAL_SWEETENER_NAME.test(ingredient.name || '')) return true;
+  const ins = String(ingredient.insCode || '').replace(/\D/g, '');
+  return ins !== '' && ARTIFICIAL_SWEETENER_INS.has(ins);
+}
+
 function computeScore(ingredients) {
   if (ingredients.length === 0) return 100;
 
@@ -92,8 +109,13 @@ function computeScore(ingredients) {
 
   if (ingredients.some((i) => i.status === 'harmful')) {
     score = squeezeToCap(score, HARMFUL_SCORE_CAP, HARMFUL_SCORE_FLOOR);
-  } else if (ingredients.some((i) => i.status === 'concerning')) {
+  } else if (ingredients.some((i) => i.status === 'concerning' && !isArtificialSweetener(i))) {
     score = squeezeToCap(score, CONCERNING_SCORE_CAP, CONCERNING_SCORE_FLOOR);
+  } else if (ingredients.some((i) => i.status === 'concerning')) {
+    // Only flagged sweeteners are left: not held to Moderate, but a sweetened
+    // product still shouldn't read as "Excellent" (a zero-sugar soda with no
+    // other penalty would otherwise land in the high 80s).
+    score = squeezeToCap(score, SWEETENER_SCORE_CAP, SWEETENER_SCORE_FLOOR);
   }
 
   return score;
