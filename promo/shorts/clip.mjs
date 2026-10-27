@@ -136,13 +136,13 @@ const FACT_LINE = {
     mark: 'Total fat',
   }),
   limit: (f) => (f.key === 'sodiumMg' ? {
-    say: `सोडियम ${num(f.g)} मिलीग्राम — WHO की रोज़ की सीमा का ${f.pct} प्रतिशत।`,
-    show: `Sodium ${num(f.g)} mg — WHO ki roz ki seema ka ${f.pct}%.`,
+    say: `सोडियम ${num(f.g)} मिलीग्राम — रोज़ की सीमा का ${f.pct} प्रतिशत।`,
+    show: `Sodium ${num(f.g)} mg — roz ki seema ka ${f.pct}%.`,
     card: { tag: `SODIUM · ${whereTag}`, v: `${num(f.g)} mg`, d: `WHO limit 2000 mg/din ka ${f.pct}%`, bar: f.pct },
     mark: 'Sodium',
   } : {
-    say: `सैचुरेटेड फैट ${num(f.g)} ग्राम — WHO की रोज़ की सीमा का करीब ${f.pct} प्रतिशत।`,
-    show: `Saturated fat ${num(f.g)} g — WHO ki roz ki seema ka ~${f.pct}%.`,
+    say: `सैचुरेटेड फैट ${num(f.g)} ग्राम — रोज़ की सीमा का करीब ${f.pct} प्रतिशत।`,
+    show: `Saturated fat ${num(f.g)} g — roz ki seema ka ~${f.pct}%.`,
     card: { tag: `SATURATED FAT · ${whereTag}`, v: `${num(f.g)} g`, d: `WHO limit 22 g/din ka ~${f.pct}%`, bar: f.pct, foot: '2000 kcal reference diet' },
     mark: 'Saturated fat',
   }),
@@ -163,9 +163,9 @@ const LINES = {
   ing: flagNames.length
     ? { say: `ध्यान देने लायक: ${list(flagNames, 'और')}।`, show: `Dhyaan dene laayak: ${list(flagNames, 'aur')}.` }
     : { say: `सारे ${ings.length} ingredients ठीक।`, show: `Saare ${ings.length} ingredients theek.` },
-  score: { say: `FoodGuard स्कोर: 100 में से ${score}। ${verdict}।`, show: '' },
+  score: { say: `स्कोर: 100 में से ${score} — ${verdict}।`, show: '' },
   app: { say: 'हर ingredient का मतलब, app में।', show: '' },
-  cta: { say: 'पहले चेक करो, फिर खरीदो। FoodGuard India, Play Store पर free।', show: '' },
+  cta: { say: 'पहले चेक करो, फिर खरीदो।', show: '' },
 };
 
 // ---- 3. the work folder: the clip's frames, the voice, the app screen ----
@@ -201,7 +201,7 @@ if (!NO_VOICE) {
   try {
     fs.mkdirSync(voiceDir, { recursive: true });
     const spec = path.join(voiceDir, 'lines.json');
-    fs.writeFileSync(spec, JSON.stringify({ voice: job.voice || 'hi-IN-SwaraNeural', rate: job.rate || '+12%', lines: lineIds.map((id) => LINES[id].say) }, null, 1));
+    fs.writeFileSync(spec, JSON.stringify({ voice: job.voice || 'hi-IN-SwaraNeural', rate: job.rate || '+20%', lines: lineIds.map((id) => LINES[id].say) }, null, 1));
     execFileSync(process.env.PYTHON || 'python3', [path.join(HERE, 'voice.py'), spec, voiceDir], { stdio: 'inherit' });
     const trim = 'silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse';
     lineIds.forEach((id, i) => {
@@ -315,7 +315,7 @@ cam.push({ t: panEnd + 0.01, x: 540, y: 960, z: 1.1, blur: 0 }, { t: panEnd + 0.
 say('score', panEnd + 0.35);
 
 // 4f. The real app on a phone, then 4g. the end card with the QR code.
-const APP_SECONDS = 5;
+const APP_SECONDS = 4.5;
 const app = PREVIEW && args.includes('--no-app') ? null : await captureAppScreen(row.id, name, work);
 let ctaStart = verdictEnd;
 const scenes = { hook: [0, hookEnd], label: [hookEnd, labelEnd], facts: [labelEnd, panEnd], verdict: [panEnd, verdictEnd] };
@@ -326,7 +326,7 @@ if (app) {
   transitions.push({ t: verdictEnd, kind: 'push' });
   say('app', verdictEnd + 0.5);
 }
-const duration = Math.ceil(ctaStart + Math.max(4.5, 0.4 + secs.cta + 1.2));
+const duration = Math.ceil(ctaStart + Math.max(4.5, 0.4 + secs.cta + 0.8));
 scenes.cta = [ctaStart, duration];
 transitions.push({ t: ctaStart, kind: 'wipe' });
 say('cta', ctaStart + 0.4);
@@ -385,7 +385,9 @@ fs.writeFileSync(path.join(OUT, `${base}-caption.txt`), caption);
 fs.rmSync(path.join(HERE, '..', 'out', `${slug}.mp4`), { force: true });
 fs.rmSync(path.join(HERE, '..', 'out', `${slug}.wav`), { force: true });
 // Also next to the clip, so it can be fetched without opening GitHub.
-for (const [file, contentType] of [[mp4, 'video/mp4'], [path.join(OUT, `${base}-caption.txt`), 'text/plain; charset=utf-8']]) {
+// The timeline too: the real voice timings, to tune the next one by.
+fs.copyFileSync(path.join(work, 'timeline.json'), path.join(OUT, `${base}-timeline.json`));
+for (const [file, contentType] of [[mp4, 'video/mp4'], [path.join(OUT, `${base}-caption.txt`), 'text/plain; charset=utf-8'], [path.join(OUT, `${base}-timeline.json`), 'application/json']]) {
   const { error } = await supabase.storage.from(BUCKET).upload(`out/${path.basename(file)}`, fs.readFileSync(file), { contentType, upsert: true });
   console.log(error ? `::warning::${path.basename(file)} not saved to ${BUCKET}: ${error.message}` : `saved ${BUCKET}/out/${path.basename(file)}`);
 }
