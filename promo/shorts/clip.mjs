@@ -33,6 +33,8 @@ import { supabase } from '../../src/services/supabaseClient.js';
 import { isJunkIngredient } from '../../src/services/typoIngredient.js';
 import { verdictFor } from '../../src/services/scoringEngine.js';
 import { NUTRIENT_LIMITS } from '../../src/services/dailyHabitCheck.js';
+import { GRAMS_FAT_PER_TEASPOON_OIL } from '../../src/services/nutrientProjection.js';
+import { GRAMS_PER_TEASPOON } from '../../src/services/sugarProjection.js';
 import { captureAppScreen } from './app-screen.mjs';
 
 const require = createRequire(import.meta.url);
@@ -77,11 +79,10 @@ const HEADING = /^(noodles?|masala|tastemaker|masala tastemaker|seasoning|fillin
 const flagged = ings.filter((i) => (i.status === 'concerning' || i.status === 'harmful') && !HEADING.test(i.name.trim()));
 
 // ---- 2. the facts, from the pack's nutrition panel ----
-// Daily limits as in the app; a 5 ml teaspoon of cooking oil weighs about
-// 4.6 g, one of sugar about 4 g.
+// Daily limits and teaspoons as in the app, so the short and the report page agree.
 const LIMIT = Object.fromEntries(NUTRIENT_LIMITS.map((n) => [n.key, n.limit]));
-const OIL_G_PER_TSP = 4.6;
-const SUGAR_G_PER_TSP = 4;
+const OIL_G_PER_TSP = GRAMS_FAT_PER_TEASPOON_OIL;
+const SUGAR_G_PER_TSP = GRAMS_PER_TEASPOON;
 const per100 = r.nutrientsPer100 || {};
 const pack = String(r.packSize || '').replace(/\s+/g, ' ').trim();
 const packM = pack.match(/(\d+(?:\.\d+)?)\s*(ml|g)\b/i);
