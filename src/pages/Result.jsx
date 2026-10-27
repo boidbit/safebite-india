@@ -44,6 +44,7 @@ import { nutritionRemark } from '../utils/nutritionRemarks';
 import { buildTrafficLight } from '../services/trafficLight';
 import { swapSavings } from '../services/swapSavings';
 import StoryCards from '../components/StoryCards';
+import { keyReasons } from '../utils/reportReasons';
 
 // Maps a dailyHabitCheck.js nutrientKey to the matching i18n string keys
 // (see src/i18n/strings.js) for its display name and its three
@@ -179,53 +180,21 @@ function Group({ children, className = '' }) {
   );
 }
 
-// iOS-style segmented control -- splits the page into two short views
-// (Overview / Ingredients) instead of one long scroll, so opening a
-// report always lands on a screen that fits without scrolling past a
-// long ingredient list first.
-function SegmentedControl({ value, onChange, options }) {
-  return (
-    <div className="mx-4 mt-4 p-1 rounded-[12px] flex gap-1" style={{ background: 'var(--fill)' }}>
-      {options.map((opt) => {
-        const active = value === opt.value;
-        return (
-          <button
-            key={opt.value}
-            onClick={() => onChange(opt.value)}
-            className="tap-scale flex-1 py-2 rounded-[9px] text-[14px] font-semibold transition-colors"
-            style={{
-              background: active ? 'var(--bg-card)' : 'transparent',
-              color: active ? 'var(--label-1)' : 'var(--label-2)',
-              boxShadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
-            }}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+// One reason under the score ("High salt", "Palmolein", "Low sugar"), in the
+// colour of what it says, so the first screen reads at a glance.
+const REASON_LOOK = {
+  bad: { color: 'var(--v-very-poor)', bg: 'var(--v-very-poor-bg)', mark: '▲' },
+  warn: { color: 'var(--v-poor)', bg: 'var(--v-poor-bg)', mark: '!' },
+  good: { color: 'var(--v-good)', bg: 'var(--v-good-bg)', mark: '✓' },
+};
 
-// A compact card for "Watch out for" / "Good things" -- sized to sit
-// side by side so both read in one glance instead of two separate
-// full-width scrolls.
-function ListCard({ title, dotColor, items }) {
+function ReasonChip({ tone, children }) {
+  const look = REASON_LOOK[tone];
   return (
-    <div className="rounded-[14px] p-3.5" style={{ background: 'var(--bg-card)' }}>
-      <p className="flex items-center gap-1.5 text-[14px] font-semibold mb-2.5" style={{ color: 'var(--label-1)' }}>
-        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dotColor }} />
-        {title}
-      </p>
-      <ul className="space-y-1.5">
-        {items.map((item, i) => (
-          <li key={i} className="text-[13px] leading-snug pl-3 relative" style={{ color: 'var(--label-1)' }}>
-            <span className="absolute left-0 top-[7px] w-1 h-1 rounded-full" style={{ background: 'var(--label-3)' }} />
-            {item}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <span className="inline-flex items-center gap-1.5 max-w-full px-2.5 py-1 rounded-full text-[12.5px] font-semibold" style={{ background: look.bg, color: look.color }}>
+      <span className="text-[10px]" aria-hidden="true">{look.mark}</span>
+      <span className="truncate">{children}</span>
+    </span>
   );
 }
 
@@ -242,7 +211,11 @@ export default function Result() {
   // Delay (ms) before the verdict word slides in -- set once per report so it survives the burst ending.
   const [verdictReveal, setVerdictReveal] = useState(0);
   const [filter, setFilter] = useState('all');
-  const [view, setView] = useState('overview');
+  // One scroll, no tabs: the full ingredient list, the nutrition table and the
+  // story each open on a tap.
+  const [showAllIngredients, setShowAllIngredients] = useState(false);
+  const [tableOpen, setTableOpen] = useState(false);
+  const [storyOpen, setStoryOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameSuggested, setNameSuggested] = useState(false);
   const [nameInput, setNameInput] = useState('');
@@ -588,14 +561,6 @@ export default function Result() {
     { key: 'Fine', label: t('tierFine'), color: 'var(--v-good)', bg: 'var(--v-good-bg)', icon: '✓' },
   ].map((tier) => ({ ...tier, count: ingredients.filter((i) => severityOf(i) === tier.key).length }));
 
-  // Same "not Fine" definition the Ingredients tab's tier chips and the
-  // "Why did this score X?" breakdown (mainFactors, below) already use --
-  // this used to only count Harmful/Concerning, so a product with e.g. 2
-  // concerning + 2 highly-processed ingredients said "2 of 15 raise a
-  // flag" up top while the breakdown modal one tap away listed 4. Highly
-  // processed ingredients do pull the score down (see mainFactors), so
-  // they belong in this count too.
-  const flaggedCount = ingredients.filter((i) => severityOf(i) !== 'Fine').length;
   const filteredIngredients = filter === 'all' ? ingredients : ingredients.filter((i) => severityOf(i) === filter);
 
   // The Ingredients tab's "All" list, worst tier first -- every card
@@ -721,28 +686,18 @@ export default function Result() {
     </div>
   );
 
-  // "11 of 26 raise a flag": the 11 is a link to them, in the colour of the
-  // worst one -- red for harmful, orange for concerning, amber for processed.
-  const worstFlagTier = tiers.find((tier) => tier.key !== 'Fine' && tier.count > 0);
-  const openFlagged = () => {
-    setFilter('all'); // "All" lists worst first, so the flagged ones lead
-    setView('ingredients');
+  // The reasons under the score, from the traffic lights and the flagged
+  // ingredients (reportReasons.js). None for infant formula, which has no score.
+  const reasons = result.isInfantFormula ? [] : keyReasons(trafficLight, mainFactors, { ingredientCount: ingredients.length });
+  const reasonText = (r) => (r.key === 'ingredient' ? r.name : t(`reason_${r.key}`));
+  // Opens the full ingredient list and brings it into view.
+  const openAllIngredients = () => {
+    setFilter('all');
+    setShowAllIngredients(true);
     requestAnimationFrame(() => requestAnimationFrame(() => {
       document.getElementById('ingredient-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }));
   };
-  const flaggedSentence = (() => {
-    const [before, after] = t('someFlagged', { flagged: '\u0001', total: ingredients.length }).split('\u0001');
-    return (
-      <>
-        {before}
-        <button onClick={openFlagged} className="tap-scale font-bold underline underline-offset-2" style={{ color: worstFlagTier?.color || 'var(--label-1)' }}>
-          {flaggedCount}
-        </button>
-        {after}
-      </>
-    );
-  })();
 
   return (
     <div className="page-in max-w-[560px] mx-auto pb-24" style={{ background: 'var(--bg-grouped)' }}>
@@ -918,13 +873,14 @@ export default function Result() {
             >
               {verdictLabel}
             </p>
-            <p className="text-[15px] mt-0.5" style={{ color: 'var(--label-2)' }}>
-              {ingredients.length === 0
-                ? t('noIngredientsAnalyzed')
-                : flaggedCount === 0
-                  ? t('nothingFlagged', { count: ingredients.length })
-                  : flaggedSentence}
-            </p>
+            {ingredients.length === 0 ? (
+              <p className="text-[15px] mt-0.5" style={{ color: 'var(--label-2)' }}>{t('noIngredientsAnalyzed')}</p>
+            ) : (
+              <p className="flex items-center gap-1.5 flex-wrap mt-1">
+                <span className="text-[13.5px] font-semibold" style={{ color: 'var(--label-2)' }}>🍽️ {t('shouldIEatIt')}</span>
+                <span className="text-[15px] font-bold" style={{ color: scoreColors.color }}>{eatAnswer}</span>
+              </p>
+            )}
             {/* Signed-in admins only, and web only -- not in the Android app. */}
             {result.ingredientsText && isAdmin && !isNativeApp() && (
               <button
@@ -942,47 +898,34 @@ export default function Result() {
           </div>
         </div>
 
-        {/* "Should I eat it?" -- the plain-English recommendation,
-            reframed as a direct answer instead of a floating sentence.
-            Same score-tier colour as the circle above, never a second,
-            independent colour scale. */}
-        {displayRecommendation && (
-          <div className="flex gap-2.5 items-start mt-4 pt-4" style={{ borderTop: '1px solid var(--separator)' }}>
-            <span className="text-[18px] leading-none mt-0.5 flex-shrink-0">🍽️</span>
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5">
-                <span className="text-[13.5px] font-semibold" style={{ color: 'var(--label-2)' }}>
-                  {t('shouldIEatIt')}
-                </span>
-                <span className="text-[15px] font-bold" style={{ color: scoreColors.color }}>
-                  {eatAnswer}
-                </span>
-              </p>
-              <p className="text-[13.5px] leading-relaxed mt-0.5" style={{ color: 'var(--label-1)' }}>
-                {displayRecommendation}
-              </p>
-            </div>
+        {/* Why this score, in a few words: what's high, what's flagged and one
+            good thing -- before any of the detail further down. */}
+        {reasons.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-4">
+            {reasons.map((r) => (
+              <ReasonChip key={`${r.key}-${r.name || ''}`} tone={r.tone}>{reasonText(r)}</ReasonChip>
+            ))}
           </div>
         )}
 
-        {/* Why/how links share this row with the share icon (justify-
-            between) rather than the share button owning a full extra
-            row of its own below -- it was the same width as the whole
-            card just to hold one icon-sized action. */}
+        {/* The plain-English recommendation, right under the reasons it rests on. */}
+        {displayRecommendation && (
+          <p className="text-[13.5px] leading-relaxed mt-3" style={{ color: 'var(--label-1)' }}>
+            {displayRecommendation}
+          </p>
+        )}
+
+        {/* "Why 51?" shares a row with the share button; how the score is
+            worked out is linked at the foot of the page. */}
         {ingredients.length > 0 && (
-          <div className={`flex items-center justify-between gap-3 mt-3 ${displayRecommendation ? 'pl-[27px]' : ''}`}>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 min-w-0">
-              <button
-                onClick={() => setShowScoreModal(true)}
-                className="tap-scale text-[13.5px] font-semibold"
-                style={{ color: 'var(--tint)' }}
-              >
-                {t('whyScoreLink', { score })}
-              </button>
-              <Link to="/about#how-score-works" className="text-[13px]" style={{ color: 'var(--label-3)' }}>
-                {t('howCalculated')}
-              </Link>
-            </div>
+          <div className="flex items-center justify-between gap-3 mt-3 pt-3" style={{ borderTop: '1px solid var(--separator)' }}>
+            <button
+              onClick={() => setShowScoreModal(true)}
+              className="tap-scale text-[13.5px] font-semibold"
+              style={{ color: 'var(--tint)' }}
+            >
+              {t('whyScoreLink', { score })}
+            </button>
 
             {/* Opens the share sheet: WhatsApp, Instagram, X or the phone's own. */}
             <button
@@ -1163,29 +1106,13 @@ export default function Result() {
         </div>
       )}
 
-      <SegmentedControl
-        value={view}
-        onChange={setView}
-        options={[
-          { value: 'overview', label: t('tabOverview') },
-          { value: 'ingredients', label: t('tabIngredients', { count: ingredients.length }) },
-          ...(result.story ? [{ value: 'story', label: t('tabStory') }] : []),
-        ]}
-      />
-
-      {/* Summary */}
-      {view === 'overview' && displaySummary && (
+      {/* In short: the two-line summary of what the product is. */}
+      {displaySummary && (
         <>
-          <SectionHeader>{t('sectionSummary')}</SectionHeader>
+          <SectionHeader>{t('sectionInShort')}</SectionHeader>
           <Group>
-            <div className="flex gap-3 items-start px-4 py-3.5">
-              <span
-                className="w-9 h-9 rounded-[10px] flex-shrink-0 flex items-center justify-center text-[16px]"
-                style={{ background: 'var(--tint-bg)' }}
-              >
-                📄
-              </span>
-              <div className="min-w-0 pt-1">
+            <div className="px-4 py-3.5">
+              <div className="min-w-0">
                 <p
                   className={`text-[15px] leading-relaxed ${!summaryExpanded && displaySummary.length > 100 ? 'line-clamp-2' : ''}`}
                   style={{ color: 'var(--label-1)' }}
@@ -1213,7 +1140,7 @@ export default function Result() {
           right below it, which turns the SAME numbers into an "if you
           ate this every day" projection -- this section is just what the
           label actually says. */}
-      {view === 'overview' && (displayNutrients) && (
+      {displayNutrients && (
         <>
           <SectionHeader>{t('sectionNutrition')}</SectionHeader>
           <Group>
@@ -1242,11 +1169,19 @@ export default function Result() {
                 />
               )}
               <div className={`flex items-center justify-between gap-3 mb-3${trafficLight ? ' pt-3' : ''}`} style={trafficLight ? { borderTop: '1px solid var(--separator)' } : undefined}>
-                <p className={trafficLight ? 'text-[12px] font-semibold' : 'text-[12px]'} style={{ color: trafficLight ? 'var(--label-2)' : 'var(--label-3)' }}>
-                  {result.realNutrientsServingGrams
-                    ? t('nutritionPerServing', { grams: result.realNutrientsServingGrams, unit: result.realNutrientsServingUnit || 'g' })
-                    : t('nutritionPer100g')}
-                </p>
+                {/* With traffic lights above, the full table is a tap away;
+                    without them it is all there is, so it shows. */}
+                {!trafficLight || tableOpen ? (
+                  <p className={trafficLight ? 'text-[12px] font-semibold' : 'text-[12px]'} style={{ color: trafficLight ? 'var(--label-2)' : 'var(--label-3)' }}>
+                    {result.realNutrientsServingGrams
+                      ? t('nutritionPerServing', { grams: result.realNutrientsServingGrams, unit: result.realNutrientsServingUnit || 'g' })
+                      : t('nutritionPer100g')}
+                  </p>
+                ) : (
+                  <button onClick={() => setTableOpen(true)} className="tap-scale text-[13px] font-semibold" style={{ color: 'var(--tint)' }}>
+                    {t('nutritionFullTable')} ›
+                  </button>
+                )}
                 {/* Only offered when there's real calorie data to log against
                     -- see canLogIntake in intakeLog.js. No estimation path. */}
                 {/* Not while the figures are under review: they'd go into the person's intake log. */}
@@ -1260,22 +1195,52 @@ export default function Result() {
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                {NUTRITION_TABLE_ROWS.filter((row) => typeof displayNutrients[row.key] === 'number').map((row) => (
-                  <div key={row.key}>
-                    <p className="text-[11px] capitalize" style={{ color: 'var(--label-3)' }}>{t(row.labelKey)}</p>
-                    <p className="text-[16px] font-bold" style={{ color: 'var(--label-1)' }}>
-                      {Math.round(displayNutrients[row.key] * 10) / 10}{row.unit}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              {(!trafficLight || tableOpen) && (
+                <div className="grid grid-cols-3 gap-3">
+                  {NUTRITION_TABLE_ROWS.filter((row) => typeof displayNutrients[row.key] === 'number').map((row) => (
+                    <div key={row.key}>
+                      <p className="text-[11px] capitalize" style={{ color: 'var(--label-3)' }}>{t(row.labelKey)}</p>
+                      <p className="text-[16px] font-bold" style={{ color: 'var(--label-1)' }}>
+                        {Math.round(displayNutrients[row.key] * 10) / 10}{row.unit}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {trafficLight && tableOpen && (
+                <button onClick={() => setTableOpen(false)} className="tap-scale text-[13px] font-semibold mt-3" style={{ color: 'var(--tint)' }}>
+                  {t('nutritionHideTable')}
+                </button>
+              )}
             </div>
+            {/* "What this adds up to": the spoons in one serving, the year at the
+                chosen frequency and the quick health check, under the label's
+                own numbers. Pure quantity from the label, never a claim about
+                anyone's body. */}
+            {!nutritionPaused && (nutrientProjection || habitDisplay) && (
+              <div style={{ borderTop: '1px solid var(--separator)' }}>
+                <p className="px-4 pt-3.5 text-[13px] font-semibold" style={{ color: 'var(--label-2)' }}>🥄 {t('addsUpTitle')}</p>
+                {nutrientProjection ? (
+                  <NutrientAddsUp
+                    projection={nutrientProjection}
+                    t={t}
+                    onShowAlternatives={!result.isInfantFormula && rankedAlternatives.length > 0 ? scrollToAlternatives : null}
+                    showDetails={addsOpen}
+                    onToggleDetails={() => setAddsOpen((open) => !open)}
+                    habitRow={habitRow}
+                    onOpenBodyStory={setBodyStory}
+                    onOpenFilm={setFilm}
+                  />
+                ) : (
+                  <div className="px-4 py-3.5">{habitRow}</div>
+                )}
+              </div>
+            )}
           </Group>
         </>
       )}
 
-      {view === 'overview' && !nutritionPaused && claimChecks.length > 0 && (
+      {!nutritionPaused && claimChecks.length > 0 && (
         <>
           <SectionHeader>🔎 {t('claimCheckTitle')}</SectionHeader>
           <Group>
@@ -1284,47 +1249,161 @@ export default function Result() {
         </>
       )}
 
-      {/* Safer alternatives (low score) or Similar products (everything
-          else) -- moved below the point where the user has already seen
-          why this product scored what it did (was right under the score
-          before), and only when the catalog actually has something in
-          the same category to show. No AI call: same category-keyword
-          match Category.jsx browses by -- a real, already-verified
-          product either way, never something a model guessed at. Keeps
-          the Result page from dead-ending after a good score instead of
-          only ever nudging away from a bad one. Skipped for infant
-          formula -- suggesting a "safer"/"similar" swap implies a
-          winner/loser comparison between regulated infant-nutrition
-          products, exactly the kind of general-food judgment this
-          category is deliberately kept out of. */}
-      {/* "What this adds up to": the spoons in one serving, the year at the
-          chosen frequency and the quick health check (the daily habit
-          check, its own link to the full breakdown) always in view; the
-          week/month/year tiles, yearly packets and notes on a tap. Pure
-          quantity from the label, never a claim about anyone's body. */}
-      {view === 'overview' && !nutritionPaused && (nutrientProjection || habitDisplay) && (
+      {/* Ingredients, in one card: how they split by tier, the ones that pulled
+          the score down (each opens for the why), the good things -- and the
+          full list with the Label X-Ray a tap away. */}
+      {ingredients.length > 0 && (
         <>
-          <SectionHeader>🥄 {t('addsUpTitle')}</SectionHeader>
+          <SectionHeader>{t('tabIngredients', { count: ingredients.length })}</SectionHeader>
           <Group>
-            {nutrientProjection ? (
-              <NutrientAddsUp
-                projection={nutrientProjection}
-                t={t}
-                onShowAlternatives={!result.isInfantFormula && rankedAlternatives.length > 0 ? scrollToAlternatives : null}
-                showDetails={addsOpen}
-                onToggleDetails={() => setAddsOpen((open) => !open)}
-                habitRow={habitRow}
-                onOpenBodyStory={setBodyStory}
-                onOpenFilm={setFilm}
-              />
-            ) : (
-              <div className="px-4 py-3.5">{habitRow}</div>
+            <div className="flex flex-wrap gap-1.5 px-4 pt-3.5 pb-3">
+              {tiers.filter((tier) => tier.count > 0).map((tier) => (
+                <span key={tier.key} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12.5px] font-semibold" style={{ background: tier.bg, color: tier.color }}>
+                  <span aria-hidden="true">{tier.icon}</span> {tier.count} {tier.label}
+                </span>
+              ))}
+            </div>
+            {/* Not for infant formula: "what pulled the score down" framing
+                doesn't apply once no score is shown. */}
+            {!result.isInfantFormula && mainFactors.length > 0 && (
+              <div style={{ borderTop: '1px solid var(--separator)' }}>
+                <p className="px-4 pt-3 pb-1 text-[13px] font-semibold" style={{ color: 'var(--label-2)' }}>{t('watchOutFor')}</p>
+                {mainFactors.slice(0, MAIN_FACTORS_LIMIT).map(({ ingredient, tier }) => (
+                  <IngredientCard key={`flagged-${ingredients.indexOf(ingredient)}`} ingredient={ingredient} severityLabel={tier.label} />
+                ))}
+                {mainFactors.length > MAIN_FACTORS_LIMIT && (
+                  <p className="px-4 pb-3 text-[12.5px]" style={{ color: 'var(--label-3)' }}>
+                    {t('moreFlaggedInList', { count: mainFactors.length - MAIN_FACTORS_LIMIT })}
+                  </p>
+                )}
+              </div>
             )}
+            {!result.isInfantFormula && displayPositives?.length > 0 && (
+              <div className="px-4 py-3" style={{ borderTop: '1px solid var(--separator)' }}>
+                <p className="text-[13px] font-semibold mb-1.5" style={{ color: 'var(--label-2)' }}>{t('goodThings')}</p>
+                <ul className="space-y-1">
+                  {displayPositives.map((item, i) => (
+                    <li key={i} className="flex gap-2 text-[13.5px] leading-snug" style={{ color: 'var(--label-1)' }}>
+                      <span aria-hidden="true" style={{ color: 'var(--v-good)' }}>✓</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <button
+              onClick={() => (showAllIngredients ? setShowAllIngredients(false) : openAllIngredients())}
+              className="tap-scale w-full px-4 py-3 text-left text-[14px] font-semibold"
+              style={{ color: 'var(--tint)', borderTop: '1px solid var(--separator)' }}
+            >
+              {showAllIngredients ? t('hideAllIngredients') : `${ingredients.length === 1 ? t('seeOneIngredient') : t('seeAllIngredients', { count: ingredients.length })} ›`}
+            </button>
           </Group>
+
+          {showAllIngredients && (
+            <>
+              {/* Label X-Ray -- the raw label as printed, each analysed
+                  ingredient lit up in its severity colour; tap to jump to
+                  its card. Replaces the old plain "As read from label" text. */}
+              {result.ingredientsText && ingredients.length > 0 && (
+                <>
+                  <SectionHeader>🔬 {t('xrayTitle')}</SectionHeader>
+                  <Group>
+                    <LabelXray
+                      text={result.ingredientsText}
+                      ingredients={ingredients}
+                      tierOf={(ing) => tiers.find((tier) => tier.key === severityOf(ing))}
+                      t={t}
+                      onPick={jumpToIngredient}
+                    />
+                  </Group>
+                  <p className="px-5 pt-2 text-[12px] leading-relaxed" style={{ color: 'var(--label-3)' }}>
+                    {t('compareLabelNote')}
+                  </p>
+                </>
+              )}
+
+              {/* Filter chips -- "All" plus every severity tier that actually
+                  has members, each carrying its own count. Replaces the old
+                  per-tier header sections: severity is now shown on every
+                  row's own pill (see IngredientCard), so these chips only
+                  need to filter, not also explain the grouping below. */}
+              <div id="ingredient-list" className="flex gap-2 overflow-x-auto px-4 pt-4 pb-1" style={{ scrollbarWidth: 'none', scrollMarginTop: 76 }}>
+                <button
+                  onClick={() => setFilter('all')}
+                  className="tap-scale flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-semibold"
+                  style={{
+                    background: filter === 'all' ? 'var(--label-1)' : 'var(--fill)',
+                    color: filter === 'all' ? 'var(--bg-card)' : 'var(--label-1)',
+                  }}
+                >
+                  {t('filterAll')} {ingredients.length}
+                </button>
+                {tiers.filter((tier) => tier.count > 0).map((tier) => {
+                  const active = filter === tier.key;
+                  return (
+                    <button
+                      key={tier.key}
+                      onClick={() => setFilter(tier.key)}
+                      className="tap-scale flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-semibold"
+                      style={{
+                        background: active ? tier.color : tier.bg,
+                        color: active ? '#fff' : tier.color,
+                      }}
+                    >
+                      <span>{tier.icon}</span> {tier.label} {tier.count}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* One-time context for why the list is ordered the way it is
+                  -- FSSAI (like most label laws) requires descending order
+                  by quantity, so the first few rows are usually also the
+                  biggest share of the product, not a ranking of concern. */}
+              <div className="mx-4 mt-3 rounded-2xl px-3.5 py-2.5 flex items-start gap-2.5" style={{ background: 'var(--fill)' }}>
+                <span className="text-[15px] flex-shrink-0" aria-hidden="true">🌿</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--label-2)' }}>
+                    {showLabelOrderInfo ? t('labelOrderInfoLong') : t('labelOrderInfoShort')}
+                  </p>
+                  <button onClick={() => setShowLabelOrderInfo((v) => !v)} className="tap-scale text-[11.5px] font-semibold mt-1" style={{ color: 'var(--tint)' }}>
+                    {showLabelOrderInfo ? t('showLess') : `${t('learnMore')} ›`}
+                  </button>
+                </div>
+              </div>
+
+              {filteredIngredients.length === 0 ? (
+                <Group className="mt-3">
+                  <p className="px-4 py-4 text-[15px] text-center" style={{ color: 'var(--label-2)' }}>
+                    {t('noneInCategory')}
+                  </p>
+                </Group>
+              ) : (
+                <Group className="mt-3">
+                  {(filter === 'all' ? sortedIngredients : filteredIngredients).map((ingredient, i) => (
+                    <IngredientCard
+                      key={i}
+                      id={`ingredient-card-${ingredients.indexOf(ingredient)}`}
+                      ingredient={ingredient}
+                      severityLabel={tiers.find((tier) => tier.key === severityOf(ingredient))?.label}
+                      style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
+                    />
+                  ))}
+                </Group>
+              )}
+            </>
+          )}
         </>
       )}
 
-      {view === 'overview' && !result.isInfantFormula && rankedAlternatives.length > 0 && (
+      {/* Safer alternatives (low score) or Similar products (everything else),
+          after the reasons for this product's score -- only when the catalog has
+          something in the same category. Same category-keyword match
+          Category.jsx browses by: a real, already-verified product, never
+          something a model guessed at. Skipped for infant formula: a "safer"
+          swap would rank regulated infant-nutrition products against each other. */}
+      {!result.isInfantFormula && rankedAlternatives.length > 0 && (
         <>
           <div id="alternatives-section" style={{ scrollMarginTop: 72 }} />
           <SectionHeader>
@@ -1369,170 +1448,28 @@ export default function Result() {
         </>
       )}
 
-      {/* Breakdown and "at a glance" close the Overview -- the score card,
-          summary and nutrition come first. */}
-      {/* Breakdown — tapping a tile jumps to the Ingredients tab filtered to that category */}
-      {view === 'overview' && ingredients.length > 0 && (
+
+      {/* Story -- history/legacy, why it's used, controversy, myth vs fact.
+          Only when the AI had something genuine and specific to say (see
+          geminiService.js's "story" rules). A teaser line here; the swipeable
+          cards (StoryCards.jsx) open on a tap. */}
+      {displayStory && (
         <>
-          <SectionHeader>{t('sectionBreakdown')}</SectionHeader>
-          <div className="mx-4 grid grid-cols-4 gap-2">
-            {tiers.map((tier) => {
-              const active = filter === tier.key;
-              return (
-                <button
-                  key={tier.key}
-                  onClick={() => {
-                    setFilter(tier.key);
-                    setView('ingredients');
-                  }}
-                  className="tap-scale rounded-[14px] py-3 px-1 text-center transition-colors"
-                  style={{
-                    background: active ? tier.color : 'var(--bg-card)',
-                    color: active ? '#fff' : 'var(--label-1)',
-                  }}
-                >
-                  <span
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-bold mx-auto mb-1.5"
-                    style={{ background: active ? 'rgba(255,255,255,0.25)' : tier.bg, color: active ? '#fff' : tier.color }}
-                  >
-                    {tier.icon}
-                  </span>
-                  <span className="block text-[20px] font-bold leading-none tracking-tight" style={{ color: active ? '#fff' : tier.color }}>
-                    {tier.count}
-                  </span>
-                  <span className="block text-[11px] mt-1" style={{ color: active ? '#fff' : 'var(--label-2)' }}>
-                    {tier.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {/* Flags + Positives — side by side when both exist, so "at a
-          glance" actually reads as one glance rather than two scrolls.
-          Skipped for infant formula -- this is "what pulled the general
-          food score up/down" framing, which doesn't apply once that
-          score isn't being shown at all. */}
-      {view === 'overview' && !result.isInfantFormula && (result.flags?.length > 0 || result.positives?.length > 0) && (
-        <>
-          <SectionHeader>{t('sectionAtAGlance')}</SectionHeader>
-          <div className={`grid gap-2.5 mx-4 ${result.flags?.length > 0 && result.positives?.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            {result.flags?.length > 0 && (
-              <ListCard title={t('watchOutFor')} dotColor="var(--v-poor)" items={displayFlags} />
-            )}
-            {result.positives?.length > 0 && (
-              <ListCard title={t('goodThings')} dotColor="var(--v-good)" items={displayPositives} />
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Ingredients */}
-      {view === 'ingredients' && (
-        <>
-          {/* Label X-Ray -- the raw label as printed, each analysed
-              ingredient lit up in its severity colour; tap to jump to
-              its card. Replaces the old plain "As read from label" text. */}
-          {result.ingredientsText && ingredients.length > 0 && (
-            <>
-              <SectionHeader>🔬 {t('xrayTitle')}</SectionHeader>
-              <Group>
-                <LabelXray
-                  text={result.ingredientsText}
-                  ingredients={ingredients}
-                  tierOf={(ing) => tiers.find((tier) => tier.key === severityOf(ing))}
-                  t={t}
-                  onPick={jumpToIngredient}
-                />
-              </Group>
-              <p className="px-5 pt-2 text-[12px] leading-relaxed" style={{ color: 'var(--label-3)' }}>
-                {t('compareLabelNote')}
-              </p>
-            </>
-          )}
-
-          {/* Filter chips -- "All" plus every severity tier that actually
-              has members, each carrying its own count. Replaces the old
-              per-tier header sections: severity is now shown on every
-              row's own pill (see IngredientCard), so these chips only
-              need to filter, not also explain the grouping below. */}
-          <div id="ingredient-list" className="flex gap-2 overflow-x-auto px-4 pt-4 pb-1" style={{ scrollbarWidth: 'none', scrollMarginTop: 76 }}>
-            <button
-              onClick={() => setFilter('all')}
-              className="tap-scale flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-semibold"
-              style={{
-                background: filter === 'all' ? 'var(--label-1)' : 'var(--fill)',
-                color: filter === 'all' ? 'var(--bg-card)' : 'var(--label-1)',
-              }}
-            >
-              {t('filterAll')} {ingredients.length}
-            </button>
-            {tiers.filter((tier) => tier.count > 0).map((tier) => {
-              const active = filter === tier.key;
-              return (
-                <button
-                  key={tier.key}
-                  onClick={() => setFilter(tier.key)}
-                  className="tap-scale flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-semibold"
-                  style={{
-                    background: active ? tier.color : tier.bg,
-                    color: active ? '#fff' : tier.color,
-                  }}
-                >
-                  <span>{tier.icon}</span> {tier.label} {tier.count}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* One-time context for why the list is ordered the way it is
-              -- FSSAI (like most label laws) requires descending order
-              by quantity, so the first few rows are usually also the
-              biggest share of the product, not a ranking of concern. */}
-          <div className="mx-4 mt-3 rounded-2xl px-3.5 py-2.5 flex items-start gap-2.5" style={{ background: 'var(--fill)' }}>
-            <span className="text-[15px] flex-shrink-0" aria-hidden="true">🌿</span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--label-2)' }}>
-                {showLabelOrderInfo ? t('labelOrderInfoLong') : t('labelOrderInfoShort')}
-              </p>
-              <button onClick={() => setShowLabelOrderInfo((v) => !v)} className="tap-scale text-[11.5px] font-semibold mt-1" style={{ color: 'var(--tint)' }}>
-                {showLabelOrderInfo ? t('showLess') : `${t('learnMore')} ›`}
-              </button>
-            </div>
-          </div>
-
-          {filteredIngredients.length === 0 ? (
-            <Group className="mt-3">
-              <p className="px-4 py-4 text-[15px] text-center" style={{ color: 'var(--label-2)' }}>
-                {t('noneInCategory')}
-              </p>
-            </Group>
+          <SectionHeader>📖 {t('tabStory')}</SectionHeader>
+          {storyOpen ? (
+            <StoryCards story={displayStory} t={t} />
           ) : (
-            <Group className="mt-3">
-              {(filter === 'all' ? sortedIngredients : filteredIngredients).map((ingredient, i) => (
-                <IngredientCard
-                  key={i}
-                  id={`ingredient-card-${ingredients.indexOf(ingredient)}`}
-                  ingredient={ingredient}
-                  severityLabel={tiers.find((tier) => tier.key === severityOf(ingredient))?.label}
-                  style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
-                />
-              ))}
+            <Group>
+              <button onClick={() => setStoryOpen(true)} className="tap-scale w-full text-left px-4 py-3.5">
+                <span className="block text-[15px] leading-relaxed line-clamp-2" style={{ color: 'var(--label-1)' }}>
+                  {displayStory.headline || displayStory.history || displayStory.whyItsUsed || displayStory.controversy || displayStory.mythVsFact?.[0]?.myth}
+                </span>
+                <span className="block text-[13px] font-semibold mt-1" style={{ color: 'var(--tint)' }}>{t('storyRead')} ›</span>
+              </button>
             </Group>
           )}
-
         </>
       )}
-
-      {/* Story -- history/legacy, why it's used, controversy, myth vs
-          fact. Only ever rendered when the AI had genuine, specific
-          things to say (see geminiService.js's "story" rules) -- never
-          fabricated filler for an unfamiliar generic product, which is
-          also why the tab itself only appears when this exists. */}
-      {/* Swipeable cards (StoryCards.jsx) -- same story text, one idea per card. */}
-      {view === 'story' && displayStory && <StoryCards story={displayStory} t={t} />}
 
       {/* Make it personal -- after the report, for someone with no family
           profiles yet (with profiles, the chips sit under the score). */}
@@ -1560,6 +1497,9 @@ export default function Result() {
             {t('estimatedQtyNote')}
           </p>
         )}
+        <Link to="/about#how-score-works" className="inline-block text-[13px] font-semibold mb-3" style={{ color: 'var(--tint)' }}>
+          {t('howCalculated')}
+        </Link>
         <p className="text-[12px] leading-relaxed" style={{ color: 'var(--label-3)' }}>
           {t('crossChecked')}
         </p>
