@@ -1,0 +1,40 @@
+{
+  "_": "Haldiram's TakaTak Chatpata Masala, 90 g family pack -- the clip sent on 27 Oct 2026. Seconds, and boxes in the clip's 1080x1920 pixels.",
+  "product": "ea38cb20-9a60-45d8-a4e2-f9e5a04f6fa5",
+  "front": [
+    0,
+    2.5
+  ],
+  "flip": [
+    2.5,
+    5.13
+  ],
+  "label": {
+    "at": 5.13,
+    "rows": {
+      "totalFatG": [
+        232,
+        792,
+        116,
+        40
+      ],
+      "saturatedFatG": [
+        232,
+        828,
+        116,
+        40
+      ],
+      "sodiumMg": [
+        222,
+        896,
+        126,
+        40
+      ]
+    }
+  },
+  "pan": [
+    5.13,
+    8.75
+  ],
+  "clip": "clips/takatak-2026-10-27-a.mp4"
+}
