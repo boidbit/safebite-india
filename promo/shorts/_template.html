@@ -32,6 +32,11 @@
   #pack img { max-width: 500px; max-height: 900px; width: auto; height: auto; object-fit: contain; }
   #hookT1 { position: absolute; left: 70px; right: 70px; top: 1320px; text-align: center; font-size: 100px; line-height: 1; }
   #hookT2 { position: absolute; left: 70px; right: 70px; top: 1450px; text-align: center; font-size: 86px; font-style: italic; font-weight: 700; color: #e8a33d; }
+  /* An open question from the first second: the score comes later. */
+  #tease { position: absolute; right: 70px; top: 168px; display: flex; align-items: center; gap: 14px; padding: 14px 26px 14px 16px; border-radius: 999px; background: #1b1a17; border: 4px solid #e8a33d; font-size: 30px; font-weight: 800; color: #fbf7ee; }
+  #tease i { width: 58px; height: 58px; border-radius: 50%; background: conic-gradient(#e8a33d 0 62%, rgba(251,247,238,.2) 0); display: grid; place-items: center; font-style: normal; font-family: Fraunces, serif; font-size: 34px; color: #e8a33d; position: relative; }
+  #tease i::before { content: ''; position: absolute; inset: 7px; border-radius: 50%; background: #1b1a17; }
+  #tease i b { position: relative; }
 
   /* 2. label */
   #card { position: absolute; left: 70px; right: 70px; top: 230px; background: #fffdf8; color: #1b1a17; border: 6px solid #1b1a17; border-radius: 40px; box-shadow: 18px 18px 0 #082d1c; overflow: hidden; }
@@ -83,12 +88,28 @@
   #chips .c { background: #fde3c4; color: #8a3b0a; }
   #chips .s { background: #dcefe3; color: #0f5132; }
 
-  /* 5. cta */
+  /* 5. in the app: the real report page on a phone, scrolled like a screen recording */
+  #appHead { position: absolute; left: 60px; right: 60px; top: 158px; text-align: center; font-size: 64px; line-height: 1.08; }
+  #appHead em { color: #e8a33d; }
+  #phone { position: absolute; left: 50%; top: 330px; width: 660px; margin-left: -330px; padding: 20px; border-radius: 92px; background: #121212; box-shadow: 0 0 0 6px #2a2a2a, 26px 30px 0 #082d1c; }
+  #screen { position: relative; width: 620px; border-radius: 72px; overflow: hidden; background: #f2f2f7; }
+  #screen img { position: absolute; left: 0; width: 620px; }
+  #appNav { bottom: 0; }
+  #notch { position: absolute; top: 22px; left: 50%; width: 170px; height: 46px; margin-left: -85px; border-radius: 999px; background: #121212; z-index: 3; }
+  #hl { position: absolute; border: 7px solid #e8a33d; border-radius: 34px; box-shadow: 0 0 0 9999px rgba(0,0,0,.22); z-index: 2; }
+
+  /* 6. cta: the Play Store, with a QR code to scan straight off the screen */
   #wipe { position: absolute; left: 0; right: 0; height: 2400px; background: linear-gradient(#e8a33d 0 90px, #0f5132 90px); }
-  #ctaHead { position: absolute; left: 80px; right: 80px; top: 520px; font-size: 132px; line-height: 1.02; }
+  #ctaHead { position: absolute; left: 70px; right: 70px; top: 230px; text-align: center; font-size: 104px; line-height: 1.04; }
   #ctaHead em { color: #e8a33d; }
-  #ctaUrl { position: absolute; left: 80px; right: 80px; top: 1010px; background: #fbf7ee; color: #0f5132; border-radius: 999px; padding: 40px; text-align: center; font-size: 76px; font-weight: 800; }
-  #ctaSub { position: absolute; left: 80px; right: 80px; top: 1200px; text-align: center; font-size: 40px; color: #d6eadd; line-height: 1.4; }
+  #qrCard { position: absolute; left: 50%; top: 600px; width: 560px; margin-left: -280px; padding: 40px 40px 30px; border-radius: 48px; background: #fffdf8; border: 6px solid #1b1a17; box-shadow: 18px 18px 0 #082d1c; text-align: center; color: #1b1a17; }
+  #qrCard img { width: 468px; height: 468px; display: block; margin: 0 auto; image-rendering: pixelated; }
+  #qrCard p { margin: 18px 0 0; font-size: 26px; color: #4a463f; }
+  #play { position: absolute; left: 50%; top: 1330px; width: 640px; margin-left: -320px; display: flex; align-items: center; gap: 30px; padding: 26px 44px; border-radius: 34px; background: #000; border: 3px solid #a6a6a6; color: #fff; }
+  #play .tri { width: 0; height: 0; border-top: 42px solid transparent; border-bottom: 42px solid transparent; border-left: 70px solid #34c759; position: relative; }
+  #play .txt small { display: block; font-size: 26px; letter-spacing: .08em; }
+  #play .txt b { display: block; font-size: 66px; font-weight: 700; line-height: 1.05; }
+  #ctaName { position: absolute; left: 70px; right: 70px; top: 1530px; text-align: center; font-size: 42px; font-weight: 700; color: #d6eadd; }
 </style>
 </head>
 <body>
@@ -100,6 +121,7 @@
     <div id="pack"><div class="halo"></div><div class="shelf"><img src="pack.jpg" alt="" /></div></div>
     <div id="hookT1" class="serif"></div>
     <div id="hookT2" class="serif"></div>
+    <div id="tease"><i><b>?</b></i><span>Score kitna? Dekhte raho</span></div>
   </div>
 
   <div class="scene" id="label">
@@ -122,11 +144,17 @@
     <div id="chips"></div>
   </div>
 
+  <div class="scene" id="app">
+    <div id="appHead" class="serif"></div>
+    <div id="phone"><div id="screen"><div id="notch"></div><img id="appPage" src="app-page.jpg" alt="" /><img id="appNav" src="app-nav.png" alt="" /><div id="hl"></div></div></div>
+  </div>
+
   <div class="scene" id="cta">
     <div id="wipe"></div>
     <div id="ctaHead" class="serif"></div>
-    <div id="ctaUrl">foodguards.space</div>
-    <div id="ctaSub">Every ingredient explained.<br />Scan your own pack — free.</div>
+    <div id="qrCard"><img src="/promo/shorts/assets/playstore-qr.png" alt="" /><p class="mono">Scan karo · Free download</p></div>
+    <div id="play"><span class="tri"></span><span class="txt"><small>GET IT ON</small><b>Google Play</b></span></div>
+    <div id="ctaName">FoodGuard India · foodguards.space</div>
   </div>
 
   <div id="fine">From the pack’s own ingredient list &amp; nutrition panel. FoodGuard ingredient score (FSSAI, EFSA, WHO sources) — general information, not medical advice.</div>
@@ -136,6 +164,7 @@
 (async () => {
   const TL = await (await fetch('timeline.json')).json();
   const S = TL.scenes;
+  let APP = null; // the app scene's layout, set once its images have loaded
   const $ = (id) => document.getElementById(id);
   const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
   const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
@@ -192,17 +221,23 @@
     // Background drifts slowly the whole time.
     $('bg').style.transform = `translate(${Math.sin(t / 4) * 40}px, ${Math.cos(t / 5) * 30}px) scale(${1.05 + Math.sin(t / 6) * 0.03})`;
 
-    // 1. Hook: the real bottle rises in, then the camera dives into it (zoom).
+    // 1. Hook: something on screen from the very first frame -- the pack is
+    // already rising and the first line lands with a punch -- then the open
+    // question, then the camera dives into the pack (zoom).
     const [h0, h1] = S.hook;
     const zoom = easeIO((t - h1 + 0.35) / 0.7);
     $('hook').style.opacity = 1 - clamp((t - h1) / 0.35);
-    const rise = back((t - 0.1) / 0.9);
-    $('pack').style.transform = `translateY(${(1 - rise) * 500}px) rotate(${(1 - rise) * -8 + Math.sin(t * 1.6) * 1.2}deg) scale(${1 + zoom * 2.2})`;
+    const rise = back((t + 0.3) / 0.65);
+    $('pack').style.transform = `translateY(${(1 - rise) * 400}px) rotate(${(1 - rise) * -8 + Math.sin(t * 1.6) * 1.2}deg) scale(${1 + zoom * 2.2})`;
     $('pack').style.filter = `blur(${zoom * 14}px)`;
-    $('hookT1').style.opacity = ease((t - 0.8) / 0.5) * (1 - zoom);
-    $('hookT1').style.transform = `translateY(${(1 - ease((t - 0.8) / 0.5)) * 60}px)`;
-    $('hookT2').style.opacity = ease((t - 1.6) / 0.5) * (1 - zoom);
-    $('hookT2').style.transform = `translateY(${(1 - ease((t - 1.6) / 0.5)) * 60}px)`;
+    const punch = ease((t + 0.12) / 0.32);
+    $('hookT1').style.opacity = clamp((t + 0.35) / 0.35) * (1 - zoom);
+    $('hookT1').style.transform = `scale(${1.22 - 0.22 * punch})`;
+    $('hookT2').style.opacity = ease((t - 0.65) / 0.4) * (1 - zoom);
+    $('hookT2').style.transform = `translateY(${(1 - ease((t - 0.65) / 0.4)) * 60}px)`;
+    const tz = back((t - 1.05) / 0.45);
+    $('tease').style.opacity = clamp((t - 1.05) / 0.2) * (1 - zoom);
+    $('tease').style.transform = `scale(${0.6 + 0.4 * tz}) rotate(${Math.sin(t * 9) * (t < 2 ? 2.5 : 0.8)}deg)`;
 
     // 2. Label: comes out of the zoom, each ingredient lights up in turn.
     const [l0, l1] = S.label;
@@ -250,7 +285,10 @@
     // 4. Verdict: a saffron burst opens it, the score fills.
     const [v0, v1] = S.verdict;
     const b = easeIO((t - v0 + 0.15) / 0.55);
-    $('verdict').style.opacity = t < v0 - 0.15 ? 0 : 1;
+    // With the app scene next, the verdict slides away as the phone comes in.
+    const vOut = S.app ? easeIO((t - v1 + 0.15) / 0.45) : 0;
+    $('verdict').style.opacity = t < v0 - 0.15 ? 0 : 1 - vOut;
+    $('verdict').style.transform = `translateY(${vOut * -260}px) scale(${1 - vOut * 0.12})`;
     $('verdict').style.visibility = t > v1 + 0.6 ? 'hidden' : 'visible';
     $('burst').style.transform = `translate(-50%, -50%) scale(${b * 260})`;
     $('burst').style.opacity = 1 - clamp((t - v0 - 0.2) / 0.5);
@@ -265,20 +303,71 @@
     $('vLine').style.opacity = ease((t - v0 - 1.25) / 0.4);
     [...$('chips').children].forEach((el, i) => { const q = back((t - v0 - 1.6 - i * 0.2) / 0.4); el.style.opacity = clamp((t - v0 - 1.6 - i * 0.2) / 0.2); el.style.transform = `scale(${0.6 + 0.4 * q})`; });
 
-    // 5. CTA: a saffron-edged panel wipes up over everything.
+    // 5. In the app: the phone rises in with the real report page, which
+    // scrolls like a screen recording -- the score and its reasons, then
+    // Nutrition, then Ingredients -- while the heading says what each part is.
+    if (S.app && APP) {
+      const [a0, a1] = S.app;
+      const u = t - a0;
+      $('app').style.opacity = t < a0 - 0.2 ? 0 : 1;
+      $('app').style.visibility = t > a1 + 0.8 ? 'hidden' : 'visible';
+      const enter = back(u / 0.6);
+      $('phone').style.transform = `translateY(${(1 - enter) * 1100}px) rotate(${(1 - enter) * -6}deg) scale(${1 + 0.03 * Math.sin(clamp(u / 6) * Math.PI)})`;
+      const stops = APP.stops;
+      let y = 0;
+      for (const st of stops) y += (st.y - y) * easeIO((u - st.at) / 0.9);
+      $('appPage').style.top = `${-y * APP.k}px`;
+      const hlEnd = stops.length ? stops[0].at : a1 - a0;
+      const hlOn = APP.reasons ? clamp((u - 0.75) / 0.2) * (1 - clamp((u - hlEnd + 0.2) / 0.25)) : 0;
+      $('hl').style.opacity = hlOn;
+      if (APP.reasons) {
+        const [x, ry, w, h] = APP.reasons;
+        const pulse = 1 + 0.04 * Math.sin(u * 8);
+        Object.assign($('hl').style, { left: `${(x - 10) * APP.k}px`, top: `${(ry - y - 10) * APP.k}px`, width: `${(w + 20) * APP.k}px`, height: `${(h + 20) * APP.k}px`, transform: `scale(${pulse})` });
+      }
+      const part = stops.filter((st) => u >= st.at + 0.3).length;
+      const head = APP.heads[Math.min(part, APP.heads.length - 1)];
+      if ($('appHead').dataset.k !== String(part)) { $('appHead').innerHTML = head; $('appHead').dataset.k = String(part); }
+      const since = u - (part ? stops[part - 1].at + 0.3 : 0.2);
+      $('appHead').style.opacity = ease(since / 0.3);
+      $('appHead').style.transform = `translateY(${(1 - ease(since / 0.3)) * 30}px)`;
+    }
+
+    // 6. CTA: a saffron-edged panel wipes up over everything; the QR code
+    // stays on screen to the end so it can be scanned straight off a phone.
     const [c0] = S.cta;
     const w = easeIO((t - c0 + 0.3) / 0.7);
     $('cta').style.opacity = t < c0 - 0.3 ? 0 : 1;
     $('wipe').style.top = `${1920 - w * 2010}px`;
     $('ctaHead').style.opacity = ease((t - c0 - 0.2) / 0.5);
     $('ctaHead').style.transform = `translateY(${(1 - ease((t - c0 - 0.2) / 0.5)) * 70}px)`;
-    $('ctaUrl').style.opacity = ease((t - c0 - 0.7) / 0.4);
-    $('ctaUrl').style.transform = `scale(${0.8 + 0.2 * back((t - c0 - 0.7) / 0.5)})`;
-    $('ctaSub').style.opacity = ease((t - c0 - 1.1) / 0.5);
+    $('qrCard').style.opacity = ease((t - c0 - 0.5) / 0.35);
+    $('qrCard').style.transform = `scale(${0.7 + 0.3 * back((t - c0 - 0.5) / 0.5)}) rotate(${(1 - ease((t - c0 - 0.5) / 0.5)) * -6}deg)`;
+    $('play').style.opacity = ease((t - c0 - 0.9) / 0.35);
+    $('play').style.transform = `translateY(${(1 - back((t - c0 - 0.9) / 0.5)) * 80}px)`;
+    $('ctaName').style.opacity = ease((t - c0 - 1.2) / 0.4);
   };
 
   await document.fonts.ready;
   await Promise.all([...document.images].map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })));
+  // The app scene: the page still, scaled to the phone's screen, and where to
+  // scroll to (shorts/app-screen.mjs measured them on the real page).
+  if (S.app && TL.app && $('appPage').naturalWidth) {
+    const A = TL.app;
+    const k = 620 / A.width;
+    const viewH = A.viewH;
+    const maxY = Math.max(0, A.height - viewH);
+    const to = (m) => Math.min(maxY, Math.max(0, m - 64));
+    const stops = [];
+    if (A.marks.nutrition != null) stops.push({ at: 2.0, y: to(A.marks.nutrition) });
+    if (A.marks.ingredients != null) stops.push({ at: stops.length ? 3.9 : 2.4, y: to(A.marks.ingredients) });
+    APP = { k, stops, reasons: A.marks.reasons, heads: TL.appHeads.slice(0, stops.length + 1) };
+    $('screen').style.height = `${Math.round(viewH * k)}px`;
+    $('appPage').style.height = 'auto';
+    if (!$('appNav').naturalWidth || !A.navH) $('appNav').style.display = 'none';
+  } else {
+    $('app').style.display = 'none';
+  }
   // A wide pack (a biscuit packet) gets a wide shelf card instead of a tall one.
   const packImg = document.querySelector('#pack img');
   if (packImg.naturalWidth > packImg.naturalHeight) {

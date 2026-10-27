@@ -108,7 +108,8 @@ export async function planSwap(supabase, rowA, pickBy) {
   const hook = [0, 3.2], A = [3.2, 9.4], B = [9.4, 15.6];
   const c0 = 15.6, rowTimes = rows.map((_, i) => round1(c0 + 1.0 + i * 0.8));
   const c1 = round1(rowTimes[rowTimes.length - 1] + 2.6);
-  const duration = Math.ceil(c1 + 4.6);
+  // The end card holds the Play Store QR code long enough to scan it off a phone.
+  const duration = Math.ceil(c1 + 5);
   const chipsFor = (p) => (p.flaggedNames.length ? p.flaggedNames.slice(0, 3).map((n) => [n, 'c']) : [['Nothing flagged', 's']]);
   const aChips = chipsFor(a);
   const bChips = chipsFor(b);
@@ -130,7 +131,7 @@ export async function planSwap(supabase, rowA, pickBy) {
     rows, rowTimes,
     pickLine: `Higher ingredient score: ${shorten(b.shortName, 34)}`,
     hook: ['Same shelf.', 'Two labels.'],
-    cta: pickBy(['Find your<br /><em>swap.</em>', 'Same shelf,<br /><em>better pick.</em>', 'Your shelf,<br /><em>decoded.</em>'], 'swap-cta'),
+    cta: pickBy(['Apna swap<br /><em>khud dhoondo.</em>', 'Wahi shelf,<br /><em>behtar pick.</em>', 'Khareedne se pehle<br /><em>scan karo.</em>'], 'swap-cta'),
   };
   return { a, b, TL };
 }

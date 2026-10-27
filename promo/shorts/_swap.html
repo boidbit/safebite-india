@@ -64,12 +64,18 @@
   .trow .v.win::after { content: ' ✓'; font-size: 40px; }
   #pick { position: absolute; left: 70px; right: 70px; text-align: center; font-size: 46px; font-weight: 700; }
 
-  /* cta */
+  /* cta: the Play Store, with a QR code to scan straight off the screen (as in _template.html) */
   #wipe { position: absolute; left: 0; right: 0; height: 2400px; background: linear-gradient(#e8a33d 0 90px, #0f5132 90px); }
-  #ctaHead { position: absolute; left: 80px; right: 80px; top: 520px; font-size: 132px; line-height: 1.02; }
+  #ctaHead { position: absolute; left: 70px; right: 70px; top: 230px; text-align: center; font-size: 104px; line-height: 1.04; }
   #ctaHead em { color: #e8a33d; }
-  #ctaUrl { position: absolute; left: 80px; right: 80px; top: 1010px; background: #fbf7ee; color: #0f5132; border-radius: 999px; padding: 40px; text-align: center; font-size: 76px; font-weight: 800; }
-  #ctaSub { position: absolute; left: 80px; right: 80px; top: 1200px; text-align: center; font-size: 40px; color: #d6eadd; line-height: 1.4; }
+  #qrCard { position: absolute; left: 50%; top: 600px; width: 560px; margin-left: -280px; padding: 40px 40px 30px; border-radius: 48px; background: #fffdf8; border: 6px solid #1b1a17; box-shadow: 18px 18px 0 #082d1c; text-align: center; color: #1b1a17; }
+  #qrCard img { width: 468px; height: 468px; display: block; margin: 0 auto; image-rendering: pixelated; }
+  #qrCard p { margin: 18px 0 0; font-size: 26px; color: #4a463f; }
+  #play { position: absolute; left: 50%; top: 1330px; width: 640px; margin-left: -320px; display: flex; align-items: center; gap: 30px; padding: 26px 44px; border-radius: 34px; background: #000; border: 3px solid #a6a6a6; color: #fff; }
+  #play .tri { width: 0; height: 0; border-top: 42px solid transparent; border-bottom: 42px solid transparent; border-left: 70px solid #34c759; }
+  #play .txt small { display: block; font-size: 26px; letter-spacing: .08em; }
+  #play .txt b { display: block; font-size: 66px; font-weight: 700; line-height: 1.05; }
+  #ctaName { position: absolute; left: 70px; right: 70px; top: 1530px; text-align: center; font-size: 42px; font-weight: 700; color: #d6eadd; }
 </style>
 </head>
 <body>
@@ -97,8 +103,9 @@
   <div class="scene" id="cta">
     <div id="wipe"></div>
     <div id="ctaHead" class="serif"></div>
-    <div id="ctaUrl">foodguards.space</div>
-    <div id="ctaSub">Every label explained.<br />Find a better pick on your shelf — free.</div>
+    <div id="qrCard"><img src="/promo/shorts/assets/playstore-qr.png" alt="" /><p class="mono">Scan karo · Free download</p></div>
+    <div id="play"><span class="tri"></span><span class="txt"><small>GET IT ON</small><b>Google Play</b></span></div>
+    <div id="ctaName">FoodGuard India · foodguards.space</div>
   </div>
 
   <div id="fine">From each pack’s own ingredient list &amp; nutrition panel. FoodGuard ingredient score (FSSAI, EFSA, WHO sources) — general information, not medical advice.</div>
@@ -203,9 +210,11 @@
     $('wipe').style.top = `${1920 - w * 2010}px`;
     $('ctaHead').style.opacity = ease((t - k0 - 0.2) / 0.5);
     $('ctaHead').style.transform = `translateY(${(1 - ease((t - k0 - 0.2) / 0.5)) * 70}px)`;
-    $('ctaUrl').style.opacity = ease((t - k0 - 0.7) / 0.4);
-    $('ctaUrl').style.transform = `scale(${0.8 + 0.2 * back((t - k0 - 0.7) / 0.5)})`;
-    $('ctaSub').style.opacity = ease((t - k0 - 1.1) / 0.5);
+    $('qrCard').style.opacity = ease((t - k0 - 0.5) / 0.35);
+    $('qrCard').style.transform = `scale(${0.7 + 0.3 * back((t - k0 - 0.5) / 0.5)}) rotate(${(1 - ease((t - k0 - 0.5) / 0.5)) * -6}deg)`;
+    $('play').style.opacity = ease((t - k0 - 0.9) / 0.35);
+    $('play').style.transform = `translateY(${(1 - back((t - k0 - 0.9) / 0.5)) * 80}px)`;
+    $('ctaName').style.opacity = ease((t - k0 - 1.2) / 0.4);
   };
 
   await document.fonts.ready;

@@ -23,6 +23,9 @@ import { supabase } from '../../src/services/supabaseClient.js';
 import { isJunkIngredient } from '../../src/services/typoIngredient.js';
 import { verdictFor } from '../../src/services/scoringEngine.js';
 import { planSwap } from './swap-plan.mjs';
+import { captureAppScreen } from './app-screen.mjs';
+
+const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.foodguard.india';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -96,7 +99,10 @@ ${TL.rows.map((r) => `• ${r.label}: ${r.a} vs ${r.b}`).join('\n')}
 
 Higher ingredient score: ${b.name} (${b.score}/100 · ${b.verdict}) vs ${a.score}/100 · ${a.verdict}.
 
-Compare any two products 👉 foodguards.space (link in bio)
+📲 Apna pack khud scan karo — FoodGuard India, free on Google Play:
+${PLAY_URL}
+
+Compare any two products 👉 foodguards.space
 
 Based on the ingredient lists and nutrition panels printed on each pack. FoodGuard ingredient score (FSSAI, EFSA, WHO sources) — general information, not medical advice.
 
@@ -131,13 +137,13 @@ const verdict = verdictFor(score);
 const isFlagged = (i) => i.status === 'concerning' || i.status === 'harmful';
 const flaggedAll = ings.filter(isFlagged);
 
-// ---- 3. the label and what to decode (every flagged one, up to 6, then the first fine ones, 9 at most) ----
+// ---- 3. the label and what to decode (every flagged one, up to 5, then the first fine ones, 7 at most -- a short keeps moving) ----
 // Section headings the label prints over a group ("NOODLES", "MASALA
 // TASTEMAKER") stay on the label but aren't decoded as if they were ingredients.
 const HEADING = /^(noodles?|masala|tastemaker|masala tastemaker|seasoning|filling|coating|dough|base|cream|wafers?|biscuits?)$/i;
 const decodable = (i) => !HEADING.test(i.name.trim());
-const pick = new Set(flaggedAll.filter(decodable).slice(0, 6).map((i) => ings.indexOf(i)));
-for (let k = 0; k < ings.length && pick.size < 9; k++) if (decodable(ings[k])) pick.add(k);
+const pick = new Set(flaggedAll.filter(decodable).slice(0, 5).map((i) => ings.indexOf(i)));
+for (let k = 0; k < ings.length && pick.size < 7; k++) if (decodable(ings[k])) pick.add(k);
 const order = [...pick].sort((a, b) => a - b);
 const tokens = order.map((k) => {
   const i = ings[k];
@@ -208,11 +214,14 @@ if (facts.length < 3) facts.push({ tone: 'neutral', k: 'On the label', v: String
 const sugarFact = facts.find((fc) => fc.spoons);
 
 // ---- 5. timeline ----
-const firstToken = 4.3, tokenStep = 1.12;
+const HOOK_END = 2.8;
+const firstToken = HOOK_END + 0.7, tokenStep = 0.85;
 const labelEnd = round1(firstToken + tokens.length * tokenStep + 0.6);
 const factsEnd = round1(labelEnd + 1.4 + facts.length * 0.9 + (sugarFact ? 0.4 * sugarFact.spoons.length : 0));
 const verdictEnd = round1(factsEnd + 4);
-const duration = Math.ceil(verdictEnd + 4.6);
+// The end card holds the Play Store QR code long enough to scan it off a phone.
+const CTA_SECONDS = 5;
+const duration = Math.ceil(verdictEnd + CTA_SECONDS);
 const spoonStart = labelEnd + 0.15 + (facts.indexOf(sugarFact) * 0.45) + 1.0;
 const shortName = brand && name.toLowerCase().startsWith(brand.toLowerCase()) ? name.slice(brand.length).trim() : name;
 const hookName = shortName.length <= 26 ? shortName : shortName.split(/\s+/).slice(0, 4).join(' ');
@@ -221,16 +230,18 @@ if (facts[0]?.tone === 'good') chips.push([`${facts[0].v} ${facts[0].k === 'Prot
 const drink = unit === 'ml';
 
 // The hook leads with this product's most telling fact, so no two videos open
-// the same way. First match wins; every line is a plain fact from the pack.
+// the same way -- in Hinglish, the way the people scrolling past talk. First
+// match wins; every line is a plain fact from the pack, never a judgement.
 const packWord = drink ? (/\bcan\b/i.test(name) ? 'can' : 'bottle') : /\bcup\b/i.test(name) ? 'cup' : 'pack';
 const sugarTsp = sugarFact ? Number(sugarFact.d.match(/about ([\d½]+)/)?.[1]?.replace('½', '.5')) : 0;
 const flavourWord = named ? name.split(/\s+/).find((w) => stem(w.toLowerCase().replace(/[^a-z]/g, '')) === stem(named.name.toLowerCase().split(/\s+/).find((x) => nameWords.has(stem(x.replace(/[^a-z]/g, '')))) || '')) : null;
+const spoonsText = sugarFact ? sugarFact.d.replace('about ', '').replace(/teaspoons?/, 'chammach') : '';
 const hook =
-  sugarFact && sugarTsp >= 2 && sugarFact.k.includes('per pack') ? [`${sugarFact.d.replace('about ', '').replace(/^./, (c) => c.toUpperCase())} of added sugar.`, `In one ${pack} ${packWord}.`]
-  : named && named.percentage < 10 && flavourWord ? [`“${flavourWord.replace(/[^A-Za-z]/g, '')}” ${hookNameTail(shortName, flavourWord)}.`, `${round1(named.percentage)}% ${named.name.toLowerCase()}.`]
-  : additives >= 6 ? [`${additives} additives.`, `In one ${packWord}.`]
-  : score >= 85 ? ['A label that passes.', `All ${ings.length} ingredients check out.`]
-  : [`${hookName}.`, 'What’s really inside?'];
+  sugarFact && sugarTsp >= 2 && sugarFact.k.includes('per pack') ? [`${spoonsText} chini.`, `Sirf ek ${pack} ${packWord} mein.`]
+  : named && named.percentage < 10 && flavourWord ? [`“${flavourWord.replace(/[^A-Za-z]/g, '')}” ${hookNameTail(shortName, flavourWord)}?`, `${named.name} sirf ${round1(named.percentage)}%.`]
+  : additives >= 6 ? [`${additives} additives.`, `Ek hi ${packWord} mein.`]
+  : score >= 85 ? ['Ye label pass hai.', `Saare ${ings.length} ingredients theek.`]
+  : [`${hookName}.`, 'Andar kya hai?'];
 function hookNameTail(full, word) {
   // "Spicy Cheesy Cup Noodles" + "Cheesy" -> "cup noodles"
   const words = full.split(/\s+/);
@@ -242,14 +253,14 @@ function hookNameTail(full, word) {
 // its id, so the same product always gets the same ones).
 const pickBy = (list, salt) => list[[...`${row.id}${salt}`].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % list.length];
 const CTAS = drink
-  ? ['Know it<br />before you <em>sip.</em>', 'Check it<br />before you <em>pour.</em>', 'Your fridge,<br /><em>decoded.</em>', 'Scan yours<br /><em>free.</em>']
-  : ['Know it<br />before you <em>buy.</em>', 'Your shelf,<br /><em>decoded.</em>', 'Scan yours<br /><em>free.</em>', 'Read any label<br />in <em>seconds.</em>'];
+  ? ['Peene se pehle<br /><em>scan karo.</em>', 'Apni bottle<br /><em>khud check karo.</em>', 'Fridge ka sach,<br /><em>ek scan mein.</em>']
+  : ['Khareedne se pehle<br /><em>scan karo.</em>', 'Apna pack<br /><em>khud check karo.</em>', 'Har label,<br /><em>seconds mein.</em>'];
 const MUSIC = ['warm', 'bright', 'chill', 'pulse', 'lofi'];
 const TL = {
   _: `Made by shorts/make.mjs from product ${row.id} (${name}). Facts from the pack's ingredient list and nutrition panel as saved in FoodGuard.`,
   duration, music: pickBy(MUSIC, 'music'),
-  scenes: { hook: [0, 3.4], label: [3.4, labelEnd], facts: [labelEnd, factsEnd], verdict: [factsEnd, verdictEnd], cta: [verdictEnd, duration] },
-  transitions: [{ t: 3.4, kind: 'zoom' }, { t: labelEnd, kind: 'push' }, { t: factsEnd, kind: 'burst' }, { t: verdictEnd, kind: 'wipe' }],
+  scenes: { hook: [0, HOOK_END], label: [HOOK_END, labelEnd], facts: [labelEnd, factsEnd], verdict: [factsEnd, verdictEnd], cta: [verdictEnd, duration] },
+  transitions: [{ t: HOOK_END, kind: 'zoom' }, { t: labelEnd, kind: 'push' }, { t: factsEnd, kind: 'burst' }, { t: verdictEnd, kind: 'wipe' }],
   firstToken, tokenStep, tokens, print, labelFont,
   spoons: sugarFact ? sugarFact.spoons.map((_, i) => round1(spoonStart + i * 0.35)) : [],
   facts, chips, score, verdict,
@@ -264,6 +275,26 @@ const slug = `auto-${slugify(`${brand && !slugify(name).startsWith(slugify(brand
 const dir = path.join(HERE, slug);
 fs.mkdirSync(dir, { recursive: true });
 fs.copyFileSync(path.join(HERE, '_template.html'), path.join(dir, 'index.html'));
+
+// The real app, between the verdict and the end card: this product's report
+// page on a phone (app-screen.mjs). Without it (the site down) the short
+// simply goes from the verdict to the end card.
+const APP_SECONDS = 6.2;
+const app = PLAN ? null : await captureAppScreen(row.id, name, dir);
+if (app) {
+  const appEnd = round1(verdictEnd + APP_SECONDS);
+  TL.app = app;
+  TL.appHeads = [
+    'Score aur uski wajah,<br /><em>ek nazar mein.</em>',
+    ...(app.marks.nutrition != null ? ['Chini, namak, fat —<br /><em>aasan bhasha mein.</em>'] : []),
+    ...(app.marks.ingredients != null ? ['Har ingredient ka<br /><em>matlab, ek tap pe.</em>'] : []),
+  ];
+  TL.duration = Math.ceil(appEnd + CTA_SECONDS);
+  TL.scenes.app = [verdictEnd, appEnd];
+  TL.scenes.cta = [appEnd, TL.duration];
+  TL.transitions = [...TL.transitions.filter((tr) => tr.t !== verdictEnd), { t: verdictEnd, kind: 'push' }, { t: appEnd, kind: 'wipe' }];
+  console.log(`app screen captured (page ${app.height}px, nutrition at ${app.marks.nutrition}, ingredients at ${app.marks.ingredients})`);
+}
 fs.writeFileSync(path.join(dir, 'timeline.json'), JSON.stringify(TL, null, 2));
 if (PLAN) {
   console.log(JSON.stringify({ product: name, hook: TL.hook, cta: TL.cta.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(), music: TL.music, facts: TL.facts.map((fc) => `${fc.k}: ${fc.v} (${fc.d})`), score: `${score} ${verdict}` }, null, 1));
@@ -272,8 +303,8 @@ if (PLAN) {
 // White margins trimmed off so the pack fills its card (a listing photo can be half empty).
 const photo = Buffer.from(await (await fetch(r.imageUrl)).arrayBuffer());
 await sharp(photo).flatten({ background: '#ffffff' }).trim({ threshold: 18 }).extend({ top: 24, bottom: 24, left: 24, right: 24, background: '#ffffff' }).jpeg({ quality: 92 }).toFile(path.join(dir, 'pack.jpg'));
-console.log(`${name}: score ${score} ${verdict}, ${tokens.length} ingredients decoded, ${facts.length} facts, ${duration}s`);
-execFileSync(process.execPath, [path.join(HERE, 'build-short.cjs'), slug, String(duration)], { cwd: path.join(HERE, '..'), stdio: 'inherit' });
+console.log(`${name}: score ${score} ${verdict}, ${tokens.length} ingredients decoded, ${facts.length} facts, ${TL.duration}s`);
+execFileSync(process.execPath, [path.join(HERE, 'build-short.cjs'), slug, String(TL.duration)], { cwd: path.join(HERE, '..'), stdio: 'inherit' });
 
 const pageSlug = slugify(brand && !slugify(name).startsWith(slugify(brand)) ? `${brand} ${name}` : name);
 let link = 'foodguards.space';
@@ -286,7 +317,10 @@ ${flaggedAll.length ? `🟠 Worth a closer look: ${flaggedAll.filter(decodable).
 
 Ingredient score: ${score}/100 · ${verdict}
 
-Every ingredient explained 👉 ${link} (link in bio)
+📲 Apna pack khud scan karo — FoodGuard India, free on Google Play:
+${PLAY_URL}
+
+Every ingredient explained 👉 ${link}
 
 Based on the ingredient list and nutrition panel printed on the pack. FoodGuard ingredient score (FSSAI, EFSA, WHO sources) — general information, not medical advice.
 
