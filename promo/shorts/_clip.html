@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- The clip short template (shorts/clip.mjs copies it into
+     shorts/clip-<job>/ next to that short's timeline.json, the clip's frames
+     in src/ and the app screen). The real footage is underneath -- one clip
+     frame per video frame, moved by a camera (zoom, pan, blur) -- and the
+     facts, boxes, captions and cards are drawn over it. Every frame comes
+     from one time value: window.render(t), see promo/render.cjs. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,700;0,9..144,800;1,9..144,700&family=Inter:wght@500;600;700;800;900&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #000; }
+  * { box-sizing: border-box; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: Inter, sans-serif; color: #fbf7ee; background: #000; }
+  .serif { font-family: Fraunces, Georgia, serif; font-weight: 800; letter-spacing: -0.02em; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .scene { position: absolute; inset: 0; opacity: 0; will-change: transform, opacity; }
+
+  /* the footage */
+  #cam { position: absolute; inset: 0; overflow: hidden; }
+  #src { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; transform-origin: 0 0; }
+  #dim { position: absolute; inset: 0; background: #0b3f27; opacity: 0; }
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+  /* the top and bottom darkened a little, so text over footage stays readable */
+  #vignette { position: absolute; inset: 0; background: linear-gradient(rgba(0,0,0,.42), transparent 16%, transparent 72%, rgba(0,0,0,.5)); }
+
+  .brand { position: absolute; top: 56px; left: 56px; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 10px 24px 10px 10px; border-radius: 999px; background: rgba(15,81,50,.88); font-family: Fraunces, serif; font-weight: 800; font-size: 36px; }
+  .brand img { width: 52px; height: 52px; border-radius: 14px; background: #fff; }
+  .brand small { font-family: 'JetBrains Mono', monospace; font-size: 17px; color: #e8a33d; letter-spacing: .16em; }
+  #fine { position: absolute; left: 60px; right: 60px; bottom: 40px; z-index: 20; text-align: center; font-size: 21px; line-height: 1.35; color: rgba(255,255,255,.8); text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+
+  /* 1. hook: two stickers over the pack, from the first frame */
+  #hook { position: absolute; left: 0; right: 0; top: 1180px; text-align: center; }
+  #h1 { display: inline-block; max-width: 960px; padding: 22px 40px 28px; border-radius: 28px; background: #fffdf8; color: #1b1a17; border: 6px solid #1b1a17; box-shadow: 12px 12px 0 #1b1a17; font-size: 92px; line-height: 1.02; transform-origin: 50% 100%; }
+  #h2 { display: inline-block; margin-top: 34px; padding: 14px 34px; border-radius: 999px; background: #e8a33d; color: #1b1a17; font-size: 54px; font-weight: 800; }
+  #tease { position: absolute; right: 56px; top: 150px; display: flex; align-items: center; gap: 14px; padding: 12px 24px 12px 14px; border-radius: 999px; background: #1b1a17; border: 4px solid #e8a33d; font-size: 28px; font-weight: 800; color: #fbf7ee; }
+  #tease i { width: 52px; height: 52px; border-radius: 50%; background: conic-gradient(#e8a33d 0 62%, rgba(251,247,238,.2) 0); display: grid; place-items: center; font-style: normal; font-family: Fraunces, serif; font-size: 30px; color: #e8a33d; position: relative; }
+  #tease i::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: #1b1a17; }
+  #tease i b { position: relative; }
+
+  /* 2. the frozen label: a box round the number, a card saying what it means */
+  #mark { position: absolute; border: 8px solid #ffc24d; border-radius: 18px; box-shadow: 0 0 0 9999px rgba(0,0,0,.40), 0 0 36px rgba(255,194,77,.9); opacity: 0; }
+  #markTag { position: absolute; padding: 10px 20px; border-radius: 14px; background: #ffc24d; color: #1b1a17; font-size: 30px; white-space: nowrap; opacity: 0; }
+  #card { position: absolute; left: 56px; right: 56px; top: 150px; padding: 30px 40px 34px; border-radius: 36px; background: #fffdf8; color: #1b1a17; border: 6px solid #1b1a17; box-shadow: 14px 14px 0 rgba(0,0,0,.45); opacity: 0; }
+  #card .k { font-size: 24px; color: #807a6f; }
+  #card .v { font-size: 112px; line-height: 1; margin-top: 6px; color: #8a3b0a; }
+  #card .d { font-size: 40px; font-weight: 700; color: #4a463f; margin-top: 8px; }
+  #card .f { font-size: 22px; color: #807a6f; margin-top: 10px; }
+  .spoons { display: flex; flex-wrap: wrap; gap: 14px 12px; margin-top: 18px; }
+  .spoon { width: 106px; height: 52px; position: relative; opacity: 0; }
+  .spoon i { position: absolute; left: 0; top: 0; width: 70px; height: 52px; border-radius: 50%; border: 6px solid #8a5a00; overflow: hidden; background: #fff4d6; }
+  .spoon i::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: var(--fill, 0%); background: #e9b730; }
+  .spoon.sugar i { border-color: #8a3b0a; background: #b9773f; }
+  .spoon.sugar i::after { background: #fffdf8; }
+  .spoon b { position: absolute; left: 64px; top: 20px; width: 42px; height: 11px; border-radius: 6px; background: #8a5a00; }
+  .spoon.sugar b { background: #8a3b0a; }
+  .bar { position: relative; height: 44px; margin-top: 18px; border-radius: 999px; background: #efe7d6; overflow: hidden; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, #e8a33d, #e8710a); }
+  .bar b { position: absolute; right: 18px; top: 4px; font-size: 28px; color: #1b1a17; }
+
+  /* 3. down the ingredient list */
+  #ichips { position: absolute; left: 56px; right: 56px; top: 160px; opacity: 0; }
+  #ichips .head { display: inline-block; padding: 12px 22px; border-radius: 14px; background: #1b1a17; color: #e8a33d; font-size: 26px; }
+  #ichips .list { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; margin-top: 18px; }
+  #ichips .list span { padding: 14px 30px; border-radius: 999px; background: #fde3c4; color: #8a3b0a; font-size: 46px; font-weight: 800; border: 4px solid #1b1a17; box-shadow: 8px 8px 0 rgba(0,0,0,.4); opacity: 0; }
+
+  /* captions, a few words at a time, the one being said in saffron */
+  #cc { position: absolute; left: 40px; right: 40px; top: 1500px; z-index: 15; text-align: center; font-size: 74px; font-weight: 900; line-height: 1.12; color: #fff; -webkit-text-stroke: 14px rgba(0,0,0,.9); paint-order: stroke fill; letter-spacing: -0.01em; }
+  #cc span { display: inline-block; margin: 0 .14em; }
+  #cc span.now { color: #ffc24d; transform: scale(1.08); }
+
+  /* 4. verdict */
+  .ring { border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+  .ring span { border-radius: 50%; background: #0f5132; display: grid; place-items: center; font-family: Fraunces, serif; font-weight: 800; color: #e8a33d; }
+  #burst { position: absolute; left: 50%; top: 640px; width: 10px; height: 10px; border-radius: 50%; background: #e8a33d; }
+  #big { position: absolute; left: 50%; top: 330px; width: 540px; height: 540px; margin-left: -270px; }
+  #big span { width: 448px; height: 448px; font-size: 220px; }
+  #vTag { position: absolute; left: 0; right: 0; top: 250px; text-align: center; font-size: 28px; color: #e8a33d; }
+  #vWord { position: absolute; left: 0; right: 0; top: 930px; text-align: center; font-size: 124px; color: #e8a33d; }
+  #vLine { position: absolute; left: 60px; right: 60px; top: 1100px; text-align: center; font-size: 46px; font-weight: 700; line-height: 1.3; }
+
+  /* 5. in the app: the real report page on a phone, scrolled like a screen recording */
+  #appHead { position: absolute; left: 60px; right: 60px; top: 158px; text-align: center; font-size: 64px; line-height: 1.08; }
+  #appHead em { color: #e8a33d; }
+  #phone { position: absolute; left: 50%; top: 330px; width: 660px; margin-left: -330px; padding: 20px; border-radius: 92px; background: #121212; box-shadow: 0 0 0 6px #2a2a2a, 26px 30px 0 rgba(0,0,0,.45); }
+  #screen { position: relative; width: 620px; border-radius: 72px; overflow: hidden; background: #f2f2f7; }
+  #screen img { position: absolute; left: 0; width: 620px; }
+  #appNav { bottom: 0; }
+  #notch { position: absolute; top: 22px; left: 50%; width: 170px; height: 46px; margin-left: -85px; border-radius: 999px; background: #121212; z-index: 3; }
+  #hl { position: absolute; border: 7px solid #e8a33d; border-radius: 34px; box-shadow: 0 0 0 9999px rgba(0,0,0,.22); z-index: 2; }
+
+  /* 6. cta: the Play Store, with a QR code to scan straight off the screen */
+  #wipe { position: absolute; left: 0; right: 0; height: 2400px; background: linear-gradient(#e8a33d 0 90px, #0f5132 90px); }
+  #ctaHead { position: absolute; left: 70px; right: 70px; top: 230px; text-align: center; font-size: 104px; line-height: 1.04; }
+  #ctaHead em { color: #e8a33d; }
+  #qrCard { position: absolute; left: 50%; top: 600px; width: 560px; margin-left: -280px; padding: 40px 40px 30px; border-radius: 48px; background: #fffdf8; border: 6px solid #1b1a17; box-shadow: 18px 18px 0 #082d1c; text-align: center; color: #1b1a17; }
+  #qrCard img { width: 468px; height: 468px; display: block; margin: 0 auto; image-rendering: pixelated; }
+  #qrCard p { margin: 18px 0 0; font-size: 26px; color: #4a463f; }
+  #play { position: absolute; left: 50%; top: 1330px; width: 640px; margin-left: -320px; display: flex; align-items: center; gap: 30px; padding: 26px 44px; border-radius: 34px; background: #000; border: 3px solid #a6a6a6; color: #fff; }
+  #play .tri { width: 0; height: 0; border-top: 42px solid transparent; border-bottom: 42px solid transparent; border-left: 70px solid #34c759; position: relative; }
+  #play .txt small { display: block; font-size: 26px; letter-spacing: .08em; }
+  #play .txt b { display: block; font-size: 66px; font-weight: 700; line-height: 1.05; }
+  #ctaName { position: absolute; left: 70px; right: 70px; top: 1530px; text-align: center; font-size: 42px; font-weight: 700; color: #d6eadd; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="cam"><img id="src" alt="" /></div>
+  <div id="vignette"></div>
+  <div id="dim"></div>
+  <div id="flash"></div>
+  <div id="mark"></div>
+  <div id="markTag" class="mono"></div>
+  <div class="brand"><img src="/site/assets/logo.png" alt="" />FoodGuard<small>INDIA</small></div>
+
+  <div id="hookWrap" class="scene" style="opacity:1">
+    <div id="hook"><div id="h1" class="serif"></div><br /><div id="h2"></div></div>
+    <div id="tease"><i><b>?</b></i><span>Score kitna? Dekhte raho</span></div>
+  </div>
+
+  <div id="card"><div class="k mono"></div><div class="v serif"></div><div class="d"></div><div class="x"></div><div class="f"></div></div>
+  <div id="ichips"><div class="head mono">Dhyaan dene laayak</div><div class="list"></div></div>
+
+  <div class="scene" id="verdict">
+    <div id="burst"></div>
+    <div id="vTag" class="mono">FoodGuard ingredient score</div>
+    <div class="ring" id="big"><span id="bigNum">0</span></div>
+    <div id="vWord" class="serif"></div>
+    <div id="vLine"></div>
+  </div>
+
+  <div class="scene" id="app">
+    <div id="appHead" class="serif"></div>
+    <div id="phone"><div id="screen"><div id="notch"></div><img id="appPage" src="app-page.jpg" alt="" /><img id="appNav" src="app-nav.png" alt="" /><div id="hl"></div></div></div>
+  </div>
+
+  <div class="scene" id="cta">
+    <div id="wipe"></div>
+    <div id="ctaHead" class="serif"></div>
+    <div id="qrCard"><img src="/promo/shorts/assets/playstore-qr.png" alt="" /><p class="mono">Scan karo · Free download</p></div>
+    <div id="play"><span class="tri"></span><span class="txt"><small>GET IT ON</small><b>Google Play</b></span></div>
+    <div id="ctaName">FoodGuard India · foodguards.space</div>
+  </div>
+
+  <div id="cc"></div>
+  <div id="fine"></div>
+</div>
+
+<script>
+(async () => {
+  const TL = await (await fetch('timeline.json')).json();
+  const S = TL.scenes;
+  let APP = null; // the app scene's layout, set once its images have loaded
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+  const easeIO = (x) => { x = clamp(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+  const back = (x) => { x = clamp(x); const c = 1.70158; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+  const ringBg = (v, c) => `conic-gradient(${c} ${v}%, rgba(251,247,238,.16) 0)`;
+  const TIER_COLOR = { Excellent: '#2fbf5f', Good: '#8cc63f', Moderate: '#e0a100', Poor: '#f0821e', 'Very Poor': '#ef5a3c' }[TL.verdict] || '#e0a100';
+
+  $('h1').textContent = TL.hook[0];
+  $('h2').textContent = TL.hook[1];
+  if (TL.hook[0].length > 20) $('h1').style.fontSize = '78px';
+  $('ctaHead').innerHTML = TL.cta;
+  $('fine').textContent = TL.fine;
+  $('vLine').textContent = TL.flaggedLine;
+  $('vWord').textContent = TL.verdict;
+  TL.chips.forEach((c) => { const el = document.createElement('span'); el.textContent = c.text; $('ichips').querySelector('.list').appendChild(el); });
+  // Which spoon belongs to which card (the soundtrack clinks on TL.spoons).
+  let sp = 0;
+  TL.cards.forEach((c) => { c.spoonFrom = sp; sp += c.spoons || 0; });
+
+  // Output time -> clip time, and the camera between its keyframes.
+  const srcAt = (t) => {
+    const seg = TL.clip.find((s) => t < s.t1) || TL.clip[TL.clip.length - 1];
+    return seg.s0 + (seg.s1 - seg.s0) * clamp((t - seg.t0) / ((seg.t1 - seg.t0) || 1));
+  };
+  const frozen = (t) => { const seg = TL.clip.find((s) => t < s.t1) || TL.clip[TL.clip.length - 1]; return seg.s0 === seg.s1; };
+  const camAt = (t) => {
+    const K = TL.cam;
+    let a = K[0], b = K[0];
+    for (let i = 0; i < K.length; i++) { if (K[i].t <= t) a = K[i]; if (K[i].t > t) { b = K[i]; break; } b = K[i]; }
+    const u = b.t > a.t ? easeIO((t - a.t) / (b.t - a.t)) : 0;
+    const lerp = (k) => (a[k] ?? 0) + ((b[k] ?? 0) - (a[k] ?? 0)) * u;
+    return { x: lerp('x'), y: lerp('y'), z: lerp('z'), blur: lerp('blur') };
+  };
+  const SRC = $('src');
+  let shownFrame = -1;
+  const card = $('card');
+  let cardOn = null;
+
+  window.render = async (t) => {
+    // The footage: this moment's clip frame, where the camera looks.
+    const n = Math.max(0, Math.min(TL.frames - 1, Math.round(srcAt(t) * 30)));
+    if (n !== shownFrame) {
+      shownFrame = n;
+      SRC.src = `src/s_${String(n).padStart(4, '0')}.jpg`;
+      try { await SRC.decode(); } catch (e) { /* a missing frame keeps the last one */ }
+    }
+    const c = camAt(t);
+    // A frozen frame drifts a little, like a hand holding it, so it never reads as a still.
+    const drift = frozen(t) ? 1 : 0;
+    const z = c.z;
+    const x = clamp(c.x + drift * Math.sin(t * 1.7) * 3, 540 / z, 1080 - 540 / z);
+    const y = clamp(c.y + drift * Math.cos(t * 1.3) * 3, 960 / z, 1920 - 960 / z);
+    SRC.style.transform = `translate(${540 - x * z}px, ${960 - y * z}px) scale(${z})`;
+    SRC.style.filter = `${c.blur > 0.2 ? `blur(${c.blur}px) ` : ''}saturate(1.08) contrast(1.04)`;
+    const toScreen = (sx, sy) => [540 + (sx - x) * z, 960 + (sy - y) * z];
+    $('flash').style.opacity = 0.85 * (1 - clamp((t - TL.freezeAt) / 0.18)) * (t >= TL.freezeAt ? 1 : 0);
+    $('dim').style.opacity = 0.74 * ease((t - S.verdict[0]) / 0.5);
+    $('fine').style.opacity = clamp((t - S.label[0]) / 0.3) * (t >= S.cta[0] ? 0 : 1);
+
+    // 1. Hook: the first line is already there on frame 0, landing with a punch.
+    const [, h1] = S.hook;
+    const hookOut = clamp((t - h1 + 0.25) / 0.25);
+    $('hookWrap').style.opacity = 1 - hookOut;
+    $('h1').style.transform = `scale(${1.18 - 0.18 * ease(t / 0.28)}) rotate(-2deg)`;
+    $('h2').style.opacity = ease((t - 0.55) / 0.3);
+    $('h2').style.transform = `translateY(${(1 - back((t - 0.55) / 0.4)) * 50}px) rotate(1.5deg)`;
+    $('tease').style.opacity = clamp((t - 1.0) / 0.2);
+    $('tease').style.transform = `scale(${0.6 + 0.4 * back((t - 1.0) / 0.45)}) rotate(${Math.sin(t * 9) * (t < 2 ? 2.5 : 0.8)}deg)`;
+
+    // 2. The frozen label: the box round the number, its name beside it.
+    const m = TL.marks.find((mm) => t >= mm.t0 - 0.05 && t < mm.t1 + 0.05);
+    if (m) {
+      const [bx, by, bw, bh] = m.box;
+      const [X1, Y1] = toScreen(bx, by);
+      const [X2, Y2] = toScreen(bx + bw, by + bh);
+      const pad = 12;
+      const inn = back((t - m.t0) / 0.35);
+      const vis = clamp((t - m.t0) / 0.12) * (1 - clamp((t - m.t1 + 0.2) / 0.2));
+      Object.assign($('mark').style, { left: `${X1 - pad}px`, top: `${Y1 - pad}px`, width: `${X2 - X1 + pad * 2}px`, height: `${Y2 - Y1 + pad * 2}px`, opacity: vis, transform: `scale(${1.3 - 0.3 * inn})` });
+      $('markTag').textContent = m.label;
+      Object.assign($('markTag').style, { left: `${X2 + pad + 22}px`, top: `${(Y1 + Y2) / 2 - 30}px`, opacity: vis * clamp((t - m.t0 - 0.2) / 0.15), transform: `translateX(${(1 - ease((t - m.t0 - 0.2) / 0.3)) * -30}px)` });
+    } else {
+      $('mark').style.opacity = 0;
+      $('markTag').style.opacity = 0;
+    }
+    // ...and the card saying what it means for the pack.
+    const k = TL.cards.findIndex((cc) => t >= cc.t0 && t < cc.t1 + 0.05);
+    const cd = TL.cards[k];
+    if (cd) {
+      if (cardOn !== k) {
+        cardOn = k;
+        card.querySelector('.k').textContent = cd.tag;
+        card.querySelector('.v').textContent = cd.v;
+        card.querySelector('.d').textContent = cd.d;
+        card.querySelector('.f').textContent = cd.foot || '';
+        const x2 = card.querySelector('.x');
+        x2.innerHTML = '';
+        if (cd.spoons) { const box = document.createElement('div'); box.className = 'spoons'; for (let i = 0; i < cd.spoons; i++) box.insertAdjacentHTML('beforeend', `<div class="spoon ${cd.fill}"><i></i><b></b></div>`); x2.appendChild(box); }
+        if (cd.bar) x2.innerHTML = '<div class="bar"><i></i><b></b></div>';
+      }
+      const inn = back((t - cd.t0) / 0.4);
+      card.style.opacity = clamp((t - cd.t0) / 0.15) * (1 - clamp((t - cd.t1 + 0.15) / 0.2));
+      card.style.transform = `translateY(${(1 - inn) * -60}px) rotate(${(1 - inn) * -2}deg)`;
+      card.querySelectorAll('.spoon').forEach((el, i) => {
+        const at = TL.spoons[cd.spoonFrom + i];
+        const q = back((t - at) / 0.3);
+        el.style.opacity = clamp((t - at) / 0.1);
+        el.style.transform = `scale(${0.4 + 0.6 * q})`;
+        el.querySelector('i').style.setProperty('--fill', `${clamp((t - at) / 0.25) * 100}%`);
+      });
+      const bar = card.querySelector('.bar');
+      if (bar) {
+        const f = ease((t - cd.t0 - 0.5) / 0.9) * cd.bar;
+        bar.querySelector('i').style.width = `${Math.min(100, f)}%`;
+        bar.querySelector('b').textContent = `${Math.round(f)}%`;
+      }
+    } else {
+      card.style.opacity = 0;
+    }
+
+    // 3. Down the ingredient list: each name pops in as it is said.
+    const [p0, p1] = S.facts;
+    $('ichips').style.opacity = TL.chips.length ? clamp((t - p0 - 0.1) / 0.2) * (1 - clamp((t - p1 + 0.1) / 0.25)) : 0;
+    [...$('ichips').querySelector('.list').children].forEach((el, i) => {
+      const at = TL.chips[i].t;
+      el.style.opacity = clamp((t - at) / 0.1);
+      el.style.transform = `scale(${0.6 + 0.4 * back((t - at) / 0.35)}) rotate(${i % 2 ? 1.5 : -1.5}deg)`;
+    });
+
+    // Captions: the chunk being said, its current word in saffron.
+    let ci = -1;
+    TL.captions.forEach((cc, i) => { if (cc.words[0][1] <= t) ci = i; });
+    const cap = TL.captions[ci];
+    const next = TL.captions[ci + 1];
+    const capEnd = cap ? Math.min(next ? next.words[0][1] : 1e9, cap.words[cap.words.length - 1][1] + 0.8) : 0;
+    if (cap && t < capEnd && t < S.verdict[0] + 0.1) {
+      if ($('cc').dataset.i !== String(ci)) {
+        $('cc').dataset.i = String(ci);
+        $('cc').innerHTML = '';
+        cap.words.forEach(([w]) => { const s = document.createElement('span'); s.textContent = w; $('cc').appendChild(s); });
+      }
+      let wi = 0;
+      cap.words.forEach(([, at], i) => { if (at <= t) wi = i; });
+      [...$('cc').children].forEach((el, i) => el.classList.toggle('now', i === wi));
+      $('cc').style.opacity = 1;
+      $('cc').style.transform = `scale(${0.9 + 0.1 * ease((t - cap.words[0][1]) / 0.12)})`;
+    } else {
+      $('cc').style.opacity = 0;
+    }
+
+    // 4. Verdict: a saffron burst opens it, the score fills.
+    const [v0, v1] = S.verdict;
+    const b = easeIO((t - v0 + 0.15) / 0.55);
+    const vOut = S.app ? easeIO((t - v1 + 0.15) / 0.45) : 0;
+    $('verdict').style.opacity = t < v0 - 0.15 ? 0 : 1 - vOut;
+    $('verdict').style.transform = `translateY(${vOut * -260}px) scale(${1 - vOut * 0.12})`;
+    $('verdict').style.visibility = t > v1 + 0.6 ? 'hidden' : 'visible';
+    $('burst').style.transform = `translate(-50%, -50%) scale(${b * 260})`;
+    $('burst').style.opacity = 1 - clamp((t - v0 - 0.2) / 0.5);
+    const spv = ease((t - v0) / 1.3);
+    $('big').style.background = ringBg(TL.score * spv, TIER_COLOR); $('bigNum').style.color = TIER_COLOR;
+    $('big').style.transform = `scale(${0.6 + 0.4 * back((t - v0) / 0.7)})`;
+    $('bigNum').textContent = Math.round(TL.score * spv);
+    $('vTag').style.opacity = ease((t - v0 - 0.2) / 0.4);
+    $('vWord').style.color = TIER_COLOR;
+    $('vWord').style.opacity = ease((t - v0 - 0.9) / 0.4);
+    $('vWord').style.transform = `translateY(${(1 - ease((t - v0 - 0.9) / 0.4)) * 40}px)`;
+    $('vLine').style.opacity = ease((t - v0 - 1.25) / 0.4);
+
+    // 5. In the app: the phone rises in with the real report page, scrolling.
+    if (S.app && APP) {
+      const [a0, a1] = S.app;
+      const u = t - a0;
+      $('app').style.opacity = t < a0 - 0.2 ? 0 : 1;
+      $('app').style.visibility = t > a1 + 0.8 ? 'hidden' : 'visible';
+      const enter = back(u / 0.6);
+      $('phone').style.transform = `translateY(${(1 - enter) * 1100}px) rotate(${(1 - enter) * -6}deg) scale(${1 + 0.03 * Math.sin(clamp(u / 5) * Math.PI)})`;
+      let yy = 0;
+      for (const st of APP.stops) yy += (st.y - yy) * easeIO((u - st.at) / 0.9);
+      $('appPage').style.top = `${-yy * APP.k}px`;
+      const hlEnd = APP.stops.length ? APP.stops[0].at : a1 - a0;
+      $('hl').style.opacity = APP.reasons ? clamp((u - 0.75) / 0.2) * (1 - clamp((u - hlEnd + 0.2) / 0.25)) : 0;
+      if (APP.reasons) {
+        const [rx, ry, rw, rh] = APP.reasons;
+        Object.assign($('hl').style, { left: `${(rx - 10) * APP.k}px`, top: `${(ry - yy - 10) * APP.k}px`, width: `${(rw + 20) * APP.k}px`, height: `${(rh + 20) * APP.k}px`, transform: `scale(${1 + 0.04 * Math.sin(u * 8)})` });
+      }
+      const part = APP.stops.filter((st) => u >= st.at + 0.3).length;
+      if ($('appHead').dataset.k !== String(part)) { $('appHead').innerHTML = APP.heads[Math.min(part, APP.heads.length - 1)]; $('appHead').dataset.k = String(part); }
+      const since = u - (part ? APP.stops[part - 1].at + 0.3 : 0.2);
+      $('appHead').style.opacity = ease(since / 0.3);
+      $('appHead').style.transform = `translateY(${(1 - ease(since / 0.3)) * 30}px)`;
+    }
+
+    // 6. CTA: a saffron-edged panel wipes up; the QR code stays to the end.
+    const [c0] = S.cta;
+    const w = easeIO((t - c0 + 0.3) / 0.7);
+    $('cta').style.opacity = t < c0 - 0.3 ? 0 : 1;
+    $('wipe').style.top = `${1920 - w * 2010}px`;
+    $('ctaHead').style.opacity = ease((t - c0 - 0.2) / 0.5);
+    $('ctaHead').style.transform = `translateY(${(1 - ease((t - c0 - 0.2) / 0.5)) * 70}px)`;
+    $('qrCard').style.opacity = ease((t - c0 - 0.5) / 0.35);
+    $('qrCard').style.transform = `scale(${0.7 + 0.3 * back((t - c0 - 0.5) / 0.5)}) rotate(${(1 - ease((t - c0 - 0.5) / 0.5)) * -6}deg)`;
+    $('play').style.opacity = ease((t - c0 - 0.9) / 0.35);
+    $('play').style.transform = `translateY(${(1 - back((t - c0 - 0.9) / 0.5)) * 80}px)`;
+    $('ctaName').style.opacity = ease((t - c0 - 1.2) / 0.4);
+  };
+
+  await document.fonts.ready;
+  await Promise.all([...document.images].filter((img) => img.id !== 'src').map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })));
+  // The app scene: the page still scaled to the phone's screen, and where to
+  // scroll to (shorts/app-screen.mjs measured them on the real page).
+  if (S.app && TL.app && $('appPage').naturalWidth) {
+    const A = TL.app;
+    const k = 620 / A.width;
+    const maxY = Math.max(0, A.height - A.viewH);
+    const to = (mm) => Math.min(maxY, Math.max(0, mm - 64));
+    const stops = [];
+    if (A.marks.nutrition != null) stops.push({ at: 1.7, y: to(A.marks.nutrition) });
+    if (A.marks.ingredients != null) stops.push({ at: stops.length ? 3.2 : 2.0, y: to(A.marks.ingredients) });
+    APP = { k, stops, reasons: A.marks.reasons, heads: TL.appHeads.slice(0, stops.length + 1) };
+    $('screen').style.height = `${Math.round(A.viewH * k)}px`;
+    if (!$('appNav').naturalWidth || !A.navH) $('appNav').style.display = 'none';
+  } else {
+    $('app').style.display = 'none';
+  }
+  await window.render(0);
+  window.READY = true;
+})();
+</script>
+</body>
+</html>

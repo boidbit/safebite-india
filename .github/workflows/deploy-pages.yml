@@ -12,6 +12,12 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # The shorts (promo/, their workflows) aren't part of the site; a push
+    # of only those doesn't rebuild it (each build reads from Supabase).
+    paths-ignore:
+      - 'promo/**'
+      - '.github/workflows/make-video.yml'
+      - '.github/workflows/make-clip-video.yml'
   workflow_dispatch:
 
 permissions:

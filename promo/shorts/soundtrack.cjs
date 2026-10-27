@@ -166,11 +166,54 @@ for (let s = 0; s < N; s++) {
   peak = Math.max(peak, Math.abs(L[s]), Math.abs(R[s]));
 }
 const norm = 0.89 / (peak || 1);
+for (let s = 0; s < N; s++) { L[s] *= norm; R[s] *= norm; }
+
+// A clip short's voiceover (shorts/clip.mjs + voice.py: mono 16-bit wavs at
+// SR, each placed at its time): the music sits lower the whole time and
+// ducks further while a line is spoken.
+const lines = (TL.voice || []).filter((v) => v.file);
+if (lines.length) {
+  const readWav = (file) => {
+    const buf = fs.readFileSync(file);
+    for (let o = 12; o + 8 <= buf.length;) {
+      const id = buf.toString('ascii', o, o + 4), size = buf.readUInt32LE(o + 4);
+      if (id === 'data') {
+        const pcm = new Float32Array(size / 2);
+        for (let i = 0; i < pcm.length; i++) pcm[i] = buf.readInt16LE(o + 8 + i * 2) / 32768;
+        return pcm;
+      }
+      o += 8 + size + (size % 2);
+    }
+    return new Float32Array(0);
+  };
+  const V = new Float32Array(N);
+  const talk = new Uint8Array(N);
+  for (const v of lines) {
+    const pcm = readWav(path.join(__dirname, name, v.file));
+    const s0 = Math.floor(v.t * SR);
+    for (let i = 0; i < pcm.length && s0 + i < N; i++) V[s0 + i] += pcm[i];
+    for (let s = Math.max(0, s0 - Math.floor(0.12 * SR)); s < Math.min(N, s0 + pcm.length + Math.floor(0.25 * SR)); s++) talk[s] = 1;
+  }
+  let vPeak = 0;
+  for (let s = 0; s < N; s++) vPeak = Math.max(vPeak, Math.abs(V[s]));
+  const vGain = 0.9 / (vPeak || 1);
+  const base = TL.musicGain ?? 0.42;
+  let duck = 1;
+  const k = 1 - Math.exp(-1 / (0.08 * SR)); // ~80 ms glide in and out of a duck
+  let mPeak = 0;
+  for (let s = 0; s < N; s++) {
+    duck += ((talk[s] ? 0.45 : 1) - duck) * k;
+    L[s] = L[s] * base * duck + V[s] * vGain;
+    R[s] = R[s] * base * duck + V[s] * vGain;
+    mPeak = Math.max(mPeak, Math.abs(L[s]), Math.abs(R[s]));
+  }
+  if (mPeak > 0.97) for (let s = 0; s < N; s++) { L[s] *= 0.97 / mPeak; R[s] *= 0.97 / mPeak; }
+}
 
 const data = Buffer.alloc(N * 4);
 for (let s = 0; s < N; s++) {
-  data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, L[s] * norm)) * 32767), s * 4);
-  data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, R[s] * norm)) * 32767), s * 4 + 2);
+  data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, L[s])) * 32767), s * 4);
+  data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, R[s])) * 32767), s * 4 + 2);
 }
 const head = Buffer.alloc(44);
 head.write('RIFF', 0); head.writeUInt32LE(36 + data.length, 4); head.write('WAVE', 8);

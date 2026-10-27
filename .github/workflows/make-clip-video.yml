@@ -1,0 +1,91 @@
+# Make clip video -- a real phone clip of a pack in, a finished 9:16 short out:
+# the footage underneath, the label's numbers boxed, captions, a Hindi
+# voiceover, the app on a phone and the Play Store QR at the end.
+#
+# Runs when a job file lands in promo/clips/ (or Actions -> "Make clip video"
+# -> Run workflow, with the job file's name). The job file names the product,
+# the clip's path in the private promo-clips Storage bucket, and where in the
+# clip the front, the turn, the label and the ingredient list are -- see
+# promo/shorts/clip.mjs. About 5 minutes later the run's page has a "video"
+# download (the MP4 and its caption text); both are also saved to
+# promo-clips/out/.
+#
+# Everything heavy happens here, on GitHub's machine: the clip's frames
+# (ffmpeg), the voice (edge-tts, a free Microsoft voice) and the render.
+#
+# Needs the repo secret SUPABASE_SERVICE_ROLE_KEY (Settings -> Secrets and
+# variables -> Actions) to read the clip from that private bucket.
+name: Make clip video
+
+on:
+  push:
+    branches: [main]
+    paths: ['promo/clips/*.json']
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Job file in promo/clips/ (e.g. takatak-2026-10-27.json)'
+        required: true
+
+run-name: "Clip video: ${{ inputs.job || github.event.head_commit.message }}"
+
+permissions:
+  contents: read
+
+jobs:
+  video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Which job file
+        id: job
+        env:
+          INPUT_JOB: ${{ inputs.job }}
+        run: |
+          if [ -n "$INPUT_JOB" ]; then f="promo/clips/$(basename "$INPUT_JOB")"
+          else f=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD -- 'promo/clips/*.json' | tail -1); fi
+          if [ ! -f "$f" ]; then echo "::error::no job file ($f)"; exit 1; fi
+          echo "file=$f" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Chromium for rendering
+        run: npx playwright install --with-deps chromium
+
+      - name: Promo tools (fonts, ffmpeg)
+        working-directory: promo
+        run: |
+          npm ci
+          npm install --no-save ffmpeg-static@5.2.0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Voice (edge-tts)
+        run: pip install "edge-tts>=7,<8"
+
+      - name: Make the video
+        working-directory: promo
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PLAYWRIGHT_PATH: ${{ github.workspace }}/node_modules/playwright
+          JOB: ${{ steps.job.outputs.file }}
+        run: node shorts/clip.mjs "../$JOB" --out out/video
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: video
+          path: promo/out/video
+          retention-days: 30
