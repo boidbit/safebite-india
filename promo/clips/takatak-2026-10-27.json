@@ -1,6 +1,6 @@
 {
-  "_": "Haldiram's TakaTak Chatpata Masala, 90 g family pack -- the clip sent on 27 Oct 2026 (v2: shorter lines, faster voice). Seconds, and boxes in the clip's 1080x1920 pixels.",
-  "product": "ea38cb20-9a60-45d8-a4e2-f9e5a04f6fa5",
+  "_": "Haldiram's TakaTak Chatpata Masala, 90 g family pack -- the clip sent on 27 Oct 2026. The product comes from the barcode read off the clip. Seconds, and boxes in the clip's 1080x1920 pixels (serving: x, y, w, h, tilt).",
+  "clip": "clips/takatak-2026-10-27-a.mp4",
   "front": [
     0,
     2.5
@@ -29,12 +29,14 @@
         896,
         126,
         40
+      ],
+      "serving": [
+        38,
+        994,
+        118,
+        46,
+        -9
       ]
     }
-  },
-  "pan": [
-    5.13,
-    8.75
-  ],
-  "clip": "clips/takatak-2026-10-27-a.mp4"
+  }
 }

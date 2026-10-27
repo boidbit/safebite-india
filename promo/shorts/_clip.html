@@ -4,10 +4,11 @@
 <meta charset="utf-8" />
 <!-- The clip short template (shorts/clip.mjs copies it into
      shorts/clip-<job>/ next to that short's timeline.json, the clip's frames
-     in src/ and the app screen). The real footage is underneath -- one clip
-     frame per video frame, moved by a camera (zoom, pan, blur) -- and the
-     facts, boxes, captions and cards are drawn over it. Every frame comes
-     from one time value: window.render(t), see promo/render.cjs. -->
+     in src/ and the app recording in app/). The real footage is underneath --
+     one clip frame per video frame, moved by a camera (zoom, pan, blur, whip,
+     shake) -- and the stickers, boxes, cards, the barcode scan, the phone and
+     the captions are drawn over it. Every frame comes from one time value:
+     window.render(t), see promo/render.cjs. -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,700;0,9..144,800;1,9..144,700&family=Inter:wght@500;600;700;800;900&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet" />
@@ -17,82 +18,90 @@
   #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; font-family: Inter, sans-serif; color: #fbf7ee; background: #000; }
   .serif { font-family: Fraunces, Georgia, serif; font-weight: 800; letter-spacing: -0.02em; }
   .mono { font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-  .scene { position: absolute; inset: 0; opacity: 0; will-change: transform, opacity; }
+  .layer { position: absolute; inset: 0; pointer-events: none; }
 
   /* the footage */
   #cam { position: absolute; inset: 0; overflow: hidden; }
   #src { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; transform-origin: 0 0; }
-  #dim { position: absolute; inset: 0; background: #0b3f27; opacity: 0; }
-  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
-  /* the top and bottom darkened a little, so text over footage stays readable */
-  #vignette { position: absolute; inset: 0; background: linear-gradient(rgba(0,0,0,.42), transparent 16%, transparent 72%, rgba(0,0,0,.5)); }
+  #vignette { background: linear-gradient(rgba(0,0,0,.45), transparent 15%, transparent 70%, rgba(0,0,0,.55)); }
+  #dim { background: radial-gradient(circle at 50% 35%, rgba(18,96,60,.82), rgba(8,45,28,.94) 70%); opacity: 0; }
+  #flash { background: #fff; opacity: 0; }
 
-  .brand { position: absolute; top: 56px; left: 56px; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 10px 24px 10px 10px; border-radius: 999px; background: rgba(15,81,50,.88); font-family: Fraunces, serif; font-weight: 800; font-size: 36px; }
+  .brand { position: absolute; top: 56px; left: 56px; z-index: 30; display: flex; align-items: center; gap: 14px; padding: 10px 24px 10px 10px; border-radius: 999px; background: rgba(15,81,50,.9); font-family: Fraunces, serif; font-weight: 800; font-size: 36px; }
   .brand img { width: 52px; height: 52px; border-radius: 14px; background: #fff; }
   .brand small { font-family: 'JetBrains Mono', monospace; font-size: 17px; color: #e8a33d; letter-spacing: .16em; }
-  #fine { position: absolute; left: 60px; right: 60px; bottom: 40px; z-index: 20; text-align: center; font-size: 21px; line-height: 1.35; color: rgba(255,255,255,.8); text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+  #fine { position: absolute; left: 60px; right: 60px; bottom: 36px; z-index: 30; text-align: center; font-size: 20px; line-height: 1.35; color: rgba(255,255,255,.82); text-shadow: 0 2px 6px rgba(0,0,0,.9); }
 
-  /* 1. hook: two stickers over the pack, from the first frame */
-  #hook { position: absolute; left: 0; right: 0; top: 1180px; text-align: center; }
-  #h1 { display: inline-block; max-width: 960px; padding: 22px 40px 28px; border-radius: 28px; background: #fffdf8; color: #1b1a17; border: 6px solid #1b1a17; box-shadow: 12px 12px 0 #1b1a17; font-size: 92px; line-height: 1.02; transform-origin: 50% 100%; }
-  #h2 { display: inline-block; margin-top: 34px; padding: 14px 34px; border-radius: 999px; background: #e8a33d; color: #1b1a17; font-size: 54px; font-weight: 800; }
-  #tease { position: absolute; right: 56px; top: 150px; display: flex; align-items: center; gap: 14px; padding: 12px 24px 12px 14px; border-radius: 999px; background: #1b1a17; border: 4px solid #e8a33d; font-size: 28px; font-weight: 800; color: #fbf7ee; }
-  #tease i { width: 52px; height: 52px; border-radius: 50%; background: conic-gradient(#e8a33d 0 62%, rgba(251,247,238,.2) 0); display: grid; place-items: center; font-style: normal; font-family: Fraunces, serif; font-size: 30px; color: #e8a33d; position: relative; }
-  #tease i::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: #1b1a17; }
-  #tease i b { position: relative; }
+  /* hook stickers */
+  .sticker { position: absolute; left: 0; right: 0; text-align: center; z-index: 12; opacity: 0; }
+  .sticker span { display: inline-block; max-width: 960px; padding: 22px 44px 28px; border-radius: 30px; border: 7px solid #1b1a17; box-shadow: 14px 14px 0 #1b1a17; font-size: 88px; line-height: 1.02; }
+  #st1 { top: 190px; } #st1 span { background: #fffdf8; color: #1b1a17; }
+  #st2 { top: 1180px; } #st2 span { background: #ffc24d; color: #1b1a17; }
 
-  /* 2. the frozen label: a box round the number, a card saying what it means */
-  #mark { position: absolute; border: 8px solid #ffc24d; border-radius: 18px; box-shadow: 0 0 0 9999px rgba(0,0,0,.40), 0 0 36px rgba(255,194,77,.9); opacity: 0; }
-  #markTag { position: absolute; padding: 10px 20px; border-radius: 14px; background: #ffc24d; color: #1b1a17; font-size: 30px; white-space: nowrap; opacity: 0; }
-  #card { position: absolute; left: 56px; right: 56px; top: 150px; padding: 30px 40px 34px; border-radius: 36px; background: #fffdf8; color: #1b1a17; border: 6px solid #1b1a17; box-shadow: 14px 14px 0 rgba(0,0,0,.45); opacity: 0; }
-  #card .k { font-size: 24px; color: #807a6f; }
-  #card .v { font-size: 112px; line-height: 1; margin-top: 6px; color: #8a3b0a; }
-  #card .d { font-size: 40px; font-weight: 700; color: #4a463f; margin-top: 8px; }
-  #card .f { font-size: 22px; color: #807a6f; margin-top: 10px; }
-  .spoons { display: flex; flex-wrap: wrap; gap: 14px 12px; margin-top: 18px; }
-  .spoon { width: 106px; height: 52px; position: relative; opacity: 0; }
-  .spoon i { position: absolute; left: 0; top: 0; width: 70px; height: 52px; border-radius: 50%; border: 6px solid #8a5a00; overflow: hidden; background: #fff4d6; }
-  .spoon i::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: var(--fill, 0%); background: #e9b730; }
-  .spoon.sugar i { border-color: #8a3b0a; background: #b9773f; }
-  .spoon.sugar i::after { background: #fffdf8; }
-  .spoon b { position: absolute; left: 64px; top: 20px; width: 42px; height: 11px; border-radius: 6px; background: #8a5a00; }
-  .spoon.sugar b { background: #8a3b0a; }
-  .bar { position: relative; height: 44px; margin-top: 18px; border-radius: 999px; background: #efe7d6; overflow: hidden; }
-  .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, #e8a33d, #e8710a); }
-  .bar b { position: absolute; right: 18px; top: 4px; font-size: 28px; color: #1b1a17; }
+  /* a box round a number on the label, its name beside it */
+  #mark { position: absolute; border: 9px solid #ffc24d; border-radius: 18px; box-shadow: 0 0 0 9999px rgba(0,0,0,.42), 0 0 40px rgba(255,194,77,.95); opacity: 0; }
+  #markTag { position: absolute; padding: 10px 20px; border-radius: 14px; background: #ffc24d; color: #1b1a17; font-size: 30px; white-space: nowrap; opacity: 0; box-shadow: 6px 6px 0 rgba(0,0,0,.5); }
 
-  /* 3. down the ingredient list */
-  #ichips { position: absolute; left: 56px; right: 56px; top: 160px; opacity: 0; }
-  #ichips .head { display: inline-block; padding: 12px 22px; border-radius: 14px; background: #1b1a17; color: #e8a33d; font-size: 26px; }
-  #ichips .list { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; margin-top: 18px; }
-  #ichips .list span { padding: 14px 30px; border-radius: 999px; background: #fde3c4; color: #8a3b0a; font-size: 46px; font-weight: 800; border: 4px solid #1b1a17; box-shadow: 8px 8px 0 rgba(0,0,0,.4); opacity: 0; }
+  /* the fact cards */
+  .card { position: absolute; left: 50px; right: 50px; top: 150px; padding: 28px 38px 30px; border-radius: 38px; background: #fffdf8; color: #1b1a17; border: 7px solid #1b1a17; box-shadow: 16px 16px 0 rgba(0,0,0,.5); opacity: 0; z-index: 14; }
+  .card .k { font-size: 24px; color: #807a6f; }
+  .bowlRow { display: flex; align-items: center; gap: 34px; margin-top: 10px; }
+  .bowl { width: 300px; height: 205px; flex-shrink: 0; overflow: visible; }
+  .cnt b { display: block; font-size: 170px; line-height: .9; color: #8a3b0a; }
+  .cnt span { display: block; font-size: 44px; font-weight: 800; color: #1b1a17; margin-top: 8px; }
+  .cnt small { display: block; font-size: 30px; color: #6b665d; margin-top: 6px; font-weight: 600; }
+  .vs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 10px; margin-top: 12px; text-align: center; }
+  .vs .bowl { width: 250px; height: 170px; margin: 0 auto; }
+  .vs .lab { font-size: 28px; font-weight: 700; color: #6b665d; margin-top: 6px; }
+  .vs .n { font-size: 86px; line-height: 1; color: #8a3b0a; }
+  .vs .n small { font-size: 34px; color: #1b1a17; font-family: Inter, sans-serif; font-weight: 800; margin-left: 6px; }
+  .vs .mid { font-size: 52px; color: #807a6f; padding-bottom: 80px; }
+  .vs .side { opacity: 0; }
+  .bigV { font-size: 120px; line-height: 1; margin-top: 4px; color: #8a3b0a; }
+  .card .d { font-size: 40px; font-weight: 800; color: #1b1a17; margin-top: 6px; }
+  .card .f { font-size: 22px; color: #807a6f; margin-top: 10px; }
+  .bar { position: relative; height: 62px; margin-top: 20px; border-radius: 999px; background: #efe7d6; border: 5px solid #1b1a17; overflow: hidden; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #ffc24d, #e8710a 70%, #d9480f); }
+  .bar b { position: absolute; right: 22px; top: 6px; font-size: 38px; color: #1b1a17; font-family: Fraunces, serif; }
+  .bar u { position: absolute; left: 22px; top: 12px; font-size: 24px; color: #1b1a17; text-decoration: none; font-weight: 800; }
 
-  /* captions, a few words at a time, the one being said in saffron */
-  #cc { position: absolute; left: 40px; right: 40px; top: 1500px; z-index: 15; text-align: center; font-size: 74px; font-weight: 900; line-height: 1.12; color: #fff; -webkit-text-stroke: 14px rgba(0,0,0,.9); paint-order: stroke fill; letter-spacing: -0.01em; }
-  #cc span { display: inline-block; margin: 0 .14em; }
-  #cc span.now { color: #ffc24d; transform: scale(1.08); }
+  /* the ingredients worth a look */
+  #ichips { position: absolute; left: 50px; right: 50px; top: 160px; opacity: 0; z-index: 14; }
+  #ichips .head { display: inline-block; padding: 12px 22px; border-radius: 14px; background: #1b1a17; color: #ffc24d; font-size: 26px; }
+  #ichips .list { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; margin-top: 18px; }
+  #ichips .list span { padding: 16px 34px; border-radius: 999px; background: #fde3c4; color: #8a3b0a; font-size: 54px; font-weight: 900; border: 5px solid #1b1a17; box-shadow: 10px 10px 0 rgba(0,0,0,.45); opacity: 0; }
 
-  /* 4. verdict */
-  .ring { border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
-  .ring span { border-radius: 50%; background: #0f5132; display: grid; place-items: center; font-family: Fraunces, serif; font-weight: 800; color: #e8a33d; }
-  #burst { position: absolute; left: 50%; top: 640px; width: 10px; height: 10px; border-radius: 50%; background: #e8a33d; }
-  #big { position: absolute; left: 50%; top: 330px; width: 540px; height: 540px; margin-left: -270px; }
-  #big span { width: 448px; height: 448px; font-size: 220px; }
-  #vTag { position: absolute; left: 0; right: 0; top: 250px; text-align: center; font-size: 28px; color: #e8a33d; }
-  #vWord { position: absolute; left: 0; right: 0; top: 930px; text-align: center; font-size: 124px; color: #e8a33d; }
-  #vLine { position: absolute; left: 60px; right: 60px; top: 1100px; text-align: center; font-size: 46px; font-weight: 700; line-height: 1.3; }
+  /* the barcode scan */
+  #scanBox { position: absolute; border-radius: 16px; box-shadow: 0 0 0 9999px rgba(0,0,0,.5); opacity: 0; }
+  .corner { position: absolute; width: 86px; height: 86px; border: 0 solid #ffc24d; opacity: 0; filter: drop-shadow(0 0 12px rgba(255,194,77,.9)); }
+  #c0 { border-top-width: 12px; border-left-width: 12px; border-top-left-radius: 22px; }
+  #c1 { border-top-width: 12px; border-right-width: 12px; border-top-right-radius: 22px; }
+  #c2 { border-bottom-width: 12px; border-left-width: 12px; border-bottom-left-radius: 22px; }
+  #c3 { border-bottom-width: 12px; border-right-width: 12px; border-bottom-right-radius: 22px; }
+  #laser { position: absolute; height: 8px; border-radius: 4px; background: #ff3b30; box-shadow: 0 0 18px 6px rgba(255,59,48,.75); opacity: 0; }
+  #digits { position: absolute; left: 0; right: 0; text-align: center; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 60px; letter-spacing: .12em; color: #fff; text-shadow: 0 3px 10px rgba(0,0,0,.9); opacity: 0; }
+  #check { position: absolute; width: 120px; height: 120px; border-radius: 50%; background: #2fbf5f; border: 7px solid #fff; display: grid; place-items: center; font-size: 72px; font-weight: 900; color: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.5); opacity: 0; }
 
-  /* 5. in the app: the real report page on a phone, scrolled like a screen recording */
-  #appHead { position: absolute; left: 60px; right: 60px; top: 158px; text-align: center; font-size: 64px; line-height: 1.08; }
-  #appHead em { color: #e8a33d; }
-  #phone { position: absolute; left: 50%; top: 330px; width: 660px; margin-left: -330px; padding: 20px; border-radius: 92px; background: #121212; box-shadow: 0 0 0 6px #2a2a2a, 26px 30px 0 rgba(0,0,0,.45); }
-  #screen { position: relative; width: 620px; border-radius: 72px; overflow: hidden; background: #f2f2f7; }
-  #screen img { position: absolute; left: 0; width: 620px; }
-  #appNav { bottom: 0; }
-  #notch { position: absolute; top: 22px; left: 50%; width: 170px; height: 46px; margin-left: -85px; border-radius: 999px; background: #121212; z-index: 3; }
-  #hl { position: absolute; border: 7px solid #e8a33d; border-radius: 34px; box-shadow: 0 0 0 9999px rgba(0,0,0,.22); z-index: 2; }
+  /* the phone with the real app */
+  #phoneWrap { position: absolute; left: 50%; top: 250px; width: 600px; margin-left: -300px; opacity: 0; z-index: 16; }
+  #phone { padding: 20px; border-radius: 88px; background: #121212; box-shadow: 0 0 0 6px #2a2a2a, 0 40px 80px rgba(0,0,0,.55); }
+  #screen { position: relative; width: 560px; border-radius: 70px; overflow: hidden; background: #f2f2f7; }
+  #screen img { position: absolute; left: 0; top: 0; width: 560px; }
+  #notch { position: absolute; top: 20px; left: 50%; width: 160px; height: 44px; margin-left: -80px; border-radius: 999px; background: #121212; z-index: 3; }
+  #scoreSt { position: absolute; left: 640px; top: 300px; z-index: 18; padding: 22px 30px 26px; border-radius: 30px; background: #fffdf8; color: #1b1a17; border: 7px solid #1b1a17; box-shadow: 12px 12px 0 rgba(0,0,0,.45); text-align: center; opacity: 0; }
+  #scoreSt b { display: block; font-size: 110px; line-height: .95; }
+  #scoreSt b small { font-size: 40px; color: #807a6f; }
+  #scoreSt span { display: block; font-size: 40px; font-weight: 900; margin-top: 4px; }
+  #scoreSt i { display: block; font-style: normal; font-size: 26px; font-weight: 700; color: #6b665d; margin-top: 8px; }
 
-  /* 6. cta: the Play Store, with a QR code to scan straight off the screen */
+  /* captions, word by word, the key words in saffron */
+  #cc { position: absolute; left: 34px; right: 34px; top: 1540px; z-index: 25; text-align: center; font-size: 76px; font-weight: 900; line-height: 1.12; color: #fff; -webkit-text-stroke: 14px rgba(0,0,0,.92); paint-order: stroke fill; letter-spacing: -0.01em; }
+  #cc span { display: inline-block; margin: 0 .13em; visibility: hidden; }
+  #cc span.now { color: #ffc24d; }
+  #cc span.em { color: #ffc24d; font-size: 1.14em; }
+
+  /* the end card: the Play Store, with a QR code to scan straight off the screen */
+  #cta { opacity: 0; z-index: 28; }
   #wipe { position: absolute; left: 0; right: 0; height: 2400px; background: linear-gradient(#e8a33d 0 90px, #0f5132 90px); }
   #ctaHead { position: absolute; left: 70px; right: 70px; top: 230px; text-align: center; font-size: 104px; line-height: 1.04; }
   #ctaHead em { color: #e8a33d; }
@@ -107,37 +116,33 @@
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute"><filter id="whipF" x="-25%" y="0" width="150%" height="100%"><feGaussianBlur id="whipB" stdDeviation="0 0" /></filter></svg>
 <div id="stage">
   <div id="cam"><img id="src" alt="" /></div>
-  <div id="vignette"></div>
-  <div id="dim"></div>
-  <div id="flash"></div>
+  <div id="vignette" class="layer"></div>
+  <div id="dim" class="layer"></div>
   <div id="mark"></div>
   <div id="markTag" class="mono"></div>
   <div class="brand"><img src="/site/assets/logo.png" alt="" />FoodGuard<small>INDIA</small></div>
 
-  <div id="hookWrap" class="scene" style="opacity:1">
-    <div id="hook"><div id="h1" class="serif"></div><br /><div id="h2"></div></div>
-    <div id="tease"><i><b>?</b></i><span>Score kitna? Dekhte raho</span></div>
-  </div>
+  <div id="st1" class="sticker"><span class="serif"></span></div>
+  <div id="st2" class="sticker"><span class="serif"></span></div>
 
-  <div id="card"><div class="k mono"></div><div class="v serif"></div><div class="d"></div><div class="x"></div><div class="f"></div></div>
+  <div id="card" class="card"></div>
   <div id="ichips"><div class="head mono">Dhyaan dene laayak</div><div class="list"></div></div>
 
-  <div class="scene" id="verdict">
-    <div id="burst"></div>
-    <div id="vTag" class="mono">FoodGuard ingredient score</div>
-    <div class="ring" id="big"><span id="bigNum">0</span></div>
-    <div id="vWord" class="serif"></div>
-    <div id="vLine"></div>
-  </div>
+  <div id="scanBox"></div>
+  <div id="c0" class="corner"></div><div id="c1" class="corner"></div><div id="c2" class="corner"></div><div id="c3" class="corner"></div>
+  <div id="laser"></div>
+  <div id="digits"></div>
+  <div id="check">✓</div>
 
-  <div class="scene" id="app">
-    <div id="appHead" class="serif"></div>
-    <div id="phone"><div id="screen"><div id="notch"></div><img id="appPage" src="app-page.jpg" alt="" /><img id="appNav" src="app-nav.png" alt="" /><div id="hl"></div></div></div>
-  </div>
+  <div id="phoneWrap"><div id="phone"><div id="screen"><div id="notch"></div><img id="appImg" alt="" /></div></div></div>
+  <div id="scoreSt"><b class="serif"></b><span></span><i></i></div>
 
-  <div class="scene" id="cta">
+  <div id="flash" class="layer"></div>
+
+  <div id="cta" class="layer">
     <div id="wipe"></div>
     <div id="ctaHead" class="serif"></div>
     <div id="qrCard"><img src="/promo/shorts/assets/playstore-qr.png" alt="" /><p class="mono">Scan karo · Free download</p></div>
@@ -153,206 +158,254 @@
 (async () => {
   const TL = await (await fetch('timeline.json')).json();
   const S = TL.scenes;
-  let APP = null; // the app scene's layout, set once its images have loaded
   const $ = (id) => document.getElementById(id);
   const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
   const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
   const easeIO = (x) => { x = clamp(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
-  const back = (x) => { x = clamp(x); const c = 1.70158; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
-  const ringBg = (v, c) => `conic-gradient(${c} ${v}%, rgba(251,247,238,.16) 0)`;
-  const TIER_COLOR = { Excellent: '#2fbf5f', Good: '#8cc63f', Moderate: '#e0a100', Poor: '#f0821e', 'Very Poor': '#ef5a3c' }[TL.verdict] || '#e0a100';
+  const back = (x) => { x = clamp(x); const c = 1.9; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+  const within = (t, a, b, fadeIn = 0.12, fadeOut = 0.15) => clamp((t - a) / fadeIn) * (1 - clamp((t - b + fadeOut) / fadeOut));
+  const TIER = { Excellent: '#2fbf5f', Good: '#8cc63f', Moderate: '#e0a100', Poor: '#f0821e', 'Very Poor': '#ef5a3c' }[TL.verdict] || '#e0a100';
 
-  $('h1').textContent = TL.hook[0];
-  $('h2').textContent = TL.hook[1];
-  if (TL.hook[0].length > 20) $('h1').style.fontSize = '78px';
+  $('st1').querySelector('span').textContent = TL.hook.stickers[0] || '';
+  $('st2').querySelector('span').textContent = TL.hook.stickers[1] || '';
   $('ctaHead').innerHTML = TL.cta;
   $('fine').textContent = TL.fine;
-  $('vLine').textContent = TL.flaggedLine;
-  $('vWord').textContent = TL.verdict;
+  $('digits').textContent = TL.scan ? TL.scan.code : '';
   TL.chips.forEach((c) => { const el = document.createElement('span'); el.textContent = c.text; $('ichips').querySelector('.list').appendChild(el); });
-  // Which spoon belongs to which card (the soundtrack clinks on TL.spoons).
-  let sp = 0;
-  TL.cards.forEach((c) => { c.spoonFrom = sp; sp += c.spoons || 0; });
+  $('scoreSt').querySelector('b').innerHTML = `${TL.score}<small>/100</small>`;
+  $('scoreSt').querySelector('span').textContent = TL.verdict;
+  $('scoreSt').querySelector('span').style.color = TIER;
+  $('scoreSt').querySelector('i').textContent = `Khaayein? ${TL.advice}`;
 
-  // Output time -> clip time, and the camera between its keyframes.
-  const srcAt = (t) => {
-    const seg = TL.clip.find((s) => t < s.t1) || TL.clip[TL.clip.length - 1];
-    return seg.s0 + (seg.s1 - seg.s0) * clamp((t - seg.t0) / ((seg.t1 - seg.t0) || 1));
+  // A bowl that fills: oil (gold) or sugar (white), with a drop falling in on each teaspoon.
+  const bowlSvg = (fill) => `<svg class="bowl" viewBox="0 0 300 205"><defs><clipPath id="bc${fill}"><path d="M14 58 Q150 270 286 58 Z" /></clipPath>
+    <linearGradient id="g${fill}" x1="0" y1="0" x2="0" y2="1">${fill === 'oil' ? '<stop offset="0" stop-color="#ffd54a"/><stop offset="1" stop-color="#e09a00"/>' : '<stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e9e3d6"/>'}</linearGradient></defs>
+    <g clip-path="url(#bc${fill})"><rect x="0" y="0" width="300" height="205" fill="#f3efe6" /><rect class="lvl" x="0" y="205" width="300" height="205" fill="url(#g${fill})" />
+    <ellipse class="surf" cx="150" cy="205" rx="140" ry="9" fill="${fill === 'oil' ? '#fff3b0' : '#ffffff'}" opacity=".8" /></g>
+    <path d="M8 58 Q150 282 292 58" fill="none" stroke="#1b1a17" stroke-width="9" stroke-linecap="round" /><line x1="2" y1="58" x2="298" y2="58" stroke="#1b1a17" stroke-width="9" stroke-linecap="round" />
+    <circle class="drop" cx="150" cy="-30" r="15" fill="${fill === 'oil' ? '#f2b705' : '#fffdf8'}" stroke="#1b1a17" stroke-width="4" />
+    <ellipse class="ripple" cx="150" cy="200" rx="10" ry="4" fill="none" stroke="#1b1a17" stroke-width="3" opacity="0" /></svg>`;
+  const levelOf = (frac) => 205 - frac * 150; // empty -> full bowl
+  const setBowl = (svg, frac, dropAt, t) => {
+    const y = levelOf(frac);
+    svg.querySelector('.lvl').setAttribute('y', y);
+    svg.querySelector('.surf').setAttribute('cy', y);
+    const d = svg.querySelector('.drop');
+    const r = svg.querySelector('.ripple');
+    if (dropAt != null && t >= dropAt - 0.22 && t < dropAt) { d.setAttribute('cy', -30 + (y + 30) * ease((t - dropAt + 0.22) / 0.22)); d.style.opacity = 1; } else d.style.opacity = 0;
+    if (dropAt != null && t >= dropAt && t < dropAt + 0.35) { const q = (t - dropAt) / 0.35; r.setAttribute('cy', y); r.setAttribute('rx', 10 + q * 90); r.setAttribute('ry', 4 + q * 10); r.setAttribute('opacity', 1 - q); } else r.setAttribute('opacity', 0);
   };
-  const frozen = (t) => { const seg = TL.clip.find((s) => t < s.t1) || TL.clip[TL.clip.length - 1]; return seg.s0 === seg.s1; };
+
+  // Output time -> clip time (a speed ramp where asked), and the camera between its keyframes.
+  const segAt = (t) => TL.clip.find((s) => t >= s.t0 && t < s.t1) || TL.clip[TL.clip.length - 1];
+  const srcAt = (t) => { const s = segAt(t); const u = clamp((t - s.t0) / ((s.t1 - s.t0) || 1)); return s.s0 + (s.s1 - s.s0) * (s.ease ? easeIO(u) : u); };
   const camAt = (t) => {
     const K = TL.cam;
-    let a = K[0], b = K[0];
-    for (let i = 0; i < K.length; i++) { if (K[i].t <= t) a = K[i]; if (K[i].t > t) { b = K[i]; break; } b = K[i]; }
-    const u = b.t > a.t ? easeIO((t - a.t) / (b.t - a.t)) : 0;
+    let a = K[0], b = K[K.length - 1];
+    for (let i = 0; i < K.length; i++) { if (K[i].t <= t) a = K[i]; else { b = K[i]; break; } }
+    if (a === b || b.t <= a.t) return { x: a.x, y: a.y, z: a.z, blur: a.blur || 0, whip: a.whip || 0 };
+    const u = easeIO((t - a.t) / (b.t - a.t));
     const lerp = (k) => (a[k] ?? 0) + ((b[k] ?? 0) - (a[k] ?? 0)) * u;
-    return { x: lerp('x'), y: lerp('y'), z: lerp('z'), blur: lerp('blur') };
+    return { x: lerp('x'), y: lerp('y'), z: lerp('z'), blur: lerp('blur'), whip: (a.whip || 0) * (1 - clamp((t - a.t) / Math.min(0.3, b.t - a.t))) };
   };
   const SRC = $('src');
-  let shownFrame = -1;
-  const card = $('card');
-  let cardOn = null;
+  const APP = $('appImg');
+  let shownSrc = -1, shownApp = -1, cardOn = -1;
+  const swap = async (img, url) => { img.src = url; try { await img.decode(); } catch (e) { /* keep the last frame */ } };
 
   window.render = async (t) => {
-    // The footage: this moment's clip frame, where the camera looks.
+    // ---- the footage ----
     const n = Math.max(0, Math.min(TL.frames - 1, Math.round(srcAt(t) * 30)));
-    if (n !== shownFrame) {
-      shownFrame = n;
-      SRC.src = `src/s_${String(n).padStart(4, '0')}.jpg`;
-      try { await SRC.decode(); } catch (e) { /* a missing frame keeps the last one */ }
-    }
+    const jobs = [];
+    if (n !== shownSrc) { shownSrc = n; jobs.push(swap(SRC, `src/s_${String(n).padStart(4, '0')}.jpg`)); }
+    const P = TL.phone;
+    const u = t - P.t0;
+    if (TL.app && u >= 0 && t < S.cta[0] + 0.5) {
+      const k = Math.max(0, Math.min(TL.app.frames - 1, Math.floor(u * TL.app.fps)));
+      if (k !== shownApp) { shownApp = k; jobs.push(swap(APP, `app/a_${String(k).padStart(4, '0')}.jpg`)); }
+    } else if (!TL.app && TL.still && shownApp !== -2) { shownApp = -2; jobs.push(swap(APP, 'app-page.jpg')); }
+    await Promise.all(jobs);
+
     const c = camAt(t);
-    // A frozen frame drifts a little, like a hand holding it, so it never reads as a still.
-    const drift = frozen(t) ? 1 : 0;
+    const seg = segAt(t);
+    const frozen = seg.s0 === seg.s1;
+    // A frozen frame drifts a little, like a hand holding it; impacts shake it.
+    let dx = frozen ? Math.sin(t * 1.7) * 3 : 0, dy = frozen ? Math.cos(t * 1.3) * 3 : 0;
+    for (const s of TL.shakes) if (t >= s && t < s + 0.45) { const a = 26 * Math.exp(-(t - s) / 0.1); dx += Math.sin((t - s) * 95) * a / c.z; dy += Math.cos((t - s) * 83) * a / c.z; }
     const z = c.z;
-    const x = clamp(c.x + drift * Math.sin(t * 1.7) * 3, 540 / z, 1080 - 540 / z);
-    const y = clamp(c.y + drift * Math.cos(t * 1.3) * 3, 960 / z, 1920 - 960 / z);
+    const x = clamp(c.x + dx, 540 / z, 1080 - 540 / z);
+    const y = clamp(c.y + dy, 960 / z, 1920 - 960 / z);
     SRC.style.transform = `translate(${540 - x * z}px, ${960 - y * z}px) scale(${z})`;
-    SRC.style.filter = `${c.blur > 0.2 ? `blur(${c.blur}px) ` : ''}saturate(1.08) contrast(1.04)`;
+    if (c.whip > 0.6) { $('whipB').setAttribute('stdDeviation', `${c.whip} 0`); SRC.style.filter = 'url(#whipF) saturate(1.08) contrast(1.05)'; }
+    else SRC.style.filter = `${c.blur > 0.3 ? `blur(${c.blur}px) ` : ''}saturate(1.08) contrast(1.05)`;
     const toScreen = (sx, sy) => [540 + (sx - x) * z, 960 + (sy - y) * z];
-    $('flash').style.opacity = 0.85 * (1 - clamp((t - TL.freezeAt) / 0.18)) * (t >= TL.freezeAt ? 1 : 0);
-    $('dim').style.opacity = 0.74 * ease((t - S.verdict[0]) / 0.5);
+
+    $('flash').style.opacity = Math.max(
+      0.8 * (t >= TL.freezeAt ? 1 - clamp((t - TL.freezeAt) / 0.16) : 0),
+      P.t0 ? 0.95 * clamp(1 - Math.abs(t - P.t0) / 0.14) : 0);
+    $('dim').style.opacity = 0.96 * ease((t - P.t0 + 0.05) / 0.3);
     $('fine').style.opacity = clamp((t - S.label[0]) / 0.3) * (t >= S.cta[0] ? 0 : 1);
 
-    // 1. Hook: the first line is already there on frame 0, landing with a punch.
-    const [, h1] = S.hook;
-    const hookOut = clamp((t - h1 + 0.25) / 0.25);
-    $('hookWrap').style.opacity = 1 - hookOut;
-    $('h1').style.transform = `scale(${1.18 - 0.18 * ease(t / 0.28)}) rotate(-2deg)`;
-    $('h2').style.opacity = ease((t - 0.55) / 0.3);
-    $('h2').style.transform = `translateY(${(1 - back((t - 0.55) / 0.4)) * 50}px) rotate(1.5deg)`;
-    $('tease').style.opacity = clamp((t - 1.0) / 0.2);
-    $('tease').style.transform = `scale(${0.6 + 0.4 * back((t - 1.0) / 0.45)}) rotate(${Math.sin(t * 9) * (t < 2 ? 2.5 : 0.8)}deg)`;
+    // ---- hook stickers: the first one is there on frame 0 ----
+    const [a1, a2] = TL.hook.at;
+    const st = (el, t0, t1) => {
+      const inn = back((t - t0 + 0.05) / 0.32);
+      el.style.opacity = within(t, t0 - 0.05, t1, 0.06, 0.12);
+      el.style.transform = `scale(${0.55 + 0.45 * inn}) rotate(${(el.id === 'st1' ? -2.5 : 2) + Math.sin(t * 6) * 0.6}deg) translateY(${(1 - inn) * 40}px)`;
+    };
+    st($('st1'), a1, a2 - 0.22);
+    st($('st2'), a2, S.hook[1]);
 
-    // 2. The frozen label: the box round the number, its name beside it.
+    // ---- the box round a number on the frozen label ----
     const m = TL.marks.find((mm) => t >= mm.t0 - 0.05 && t < mm.t1 + 0.05);
     if (m) {
-      const [bx, by, bw, bh] = m.box;
-      const [X1, Y1] = toScreen(bx, by);
-      const [X2, Y2] = toScreen(bx + bw, by + bh);
-      const pad = 12;
-      const inn = back((t - m.t0) / 0.35);
-      const vis = clamp((t - m.t0) / 0.12) * (1 - clamp((t - m.t1 + 0.2) / 0.2));
-      Object.assign($('mark').style, { left: `${X1 - pad}px`, top: `${Y1 - pad}px`, width: `${X2 - X1 + pad * 2}px`, height: `${Y2 - Y1 + pad * 2}px`, opacity: vis, transform: `scale(${1.3 - 0.3 * inn})` });
+      const [bx, by, bw, bh, deg = 0] = m.box;
+      const [cx, cy] = toScreen(bx + bw / 2, by + bh / 2);
+      const w = bw * z + 28, h = bh * z + 24;
+      const inn = back((t - m.t0) / 0.32);
+      const vis = within(t, m.t0, m.t1, 0.1, 0.18);
+      Object.assign($('mark').style, { left: `${cx - w / 2}px`, top: `${cy - h / 2}px`, width: `${w}px`, height: `${h}px`, opacity: vis, transform: `rotate(${deg}deg) scale(${1.35 - 0.35 * inn})` });
       $('markTag').textContent = m.label;
-      Object.assign($('markTag').style, { left: `${X2 + pad + 22}px`, top: `${(Y1 + Y2) / 2 - 30}px`, opacity: vis * clamp((t - m.t0 - 0.2) / 0.15), transform: `translateX(${(1 - ease((t - m.t0 - 0.2) / 0.3)) * -30}px)` });
-    } else {
-      $('mark').style.opacity = 0;
-      $('markTag').style.opacity = 0;
-    }
-    // ...and the card saying what it means for the pack.
-    const k = TL.cards.findIndex((cc) => t >= cc.t0 && t < cc.t1 + 0.05);
-    const cd = TL.cards[k];
-    if (cd) {
-      if (cardOn !== k) {
-        cardOn = k;
-        card.querySelector('.k').textContent = cd.tag;
-        card.querySelector('.v').textContent = cd.v;
-        card.querySelector('.d').textContent = cd.d;
-        card.querySelector('.f').textContent = cd.foot || '';
-        const x2 = card.querySelector('.x');
-        x2.innerHTML = '';
-        if (cd.spoons) { const box = document.createElement('div'); box.className = 'spoons'; for (let i = 0; i < cd.spoons; i++) box.insertAdjacentHTML('beforeend', `<div class="spoon ${cd.fill}"><i></i><b></b></div>`); x2.appendChild(box); }
-        if (cd.bar) x2.innerHTML = '<div class="bar"><i></i><b></b></div>';
-      }
-      const inn = back((t - cd.t0) / 0.4);
-      card.style.opacity = clamp((t - cd.t0) / 0.15) * (1 - clamp((t - cd.t1 + 0.15) / 0.2));
-      card.style.transform = `translateY(${(1 - inn) * -60}px) rotate(${(1 - inn) * -2}deg)`;
-      card.querySelectorAll('.spoon').forEach((el, i) => {
-        const at = TL.spoons[cd.spoonFrom + i];
-        const q = back((t - at) / 0.3);
-        el.style.opacity = clamp((t - at) / 0.1);
-        el.style.transform = `scale(${0.4 + 0.6 * q})`;
-        el.querySelector('i').style.setProperty('--fill', `${clamp((t - at) / 0.25) * 100}%`);
-      });
-      const bar = card.querySelector('.bar');
-      if (bar) {
-        const f = ease((t - cd.t0 - 0.5) / 0.9) * cd.bar;
-        bar.querySelector('i').style.width = `${Math.min(100, f)}%`;
-        bar.querySelector('b').textContent = `${Math.round(f)}%`;
-      }
-    } else {
-      card.style.opacity = 0;
-    }
+      const tagX = Math.min(1080 - 330, cx + w / 2 + 24);
+      Object.assign($('markTag').style, { left: `${tagX}px`, top: `${cy - 30}px`, opacity: vis * clamp((t - m.t0 - 0.18) / 0.12), transform: `translateX(${(1 - ease((t - m.t0 - 0.18) / 0.3)) * -40}px) rotate(${deg / 2}deg)` });
+    } else { $('mark').style.opacity = 0; $('markTag').style.opacity = 0; }
 
-    // 3. Down the ingredient list: each name pops in as it is said.
-    const [p0, p1] = S.facts;
-    $('ichips').style.opacity = TL.chips.length ? clamp((t - p0 - 0.1) / 0.2) * (1 - clamp((t - p1 + 0.1) / 0.25)) : 0;
+    // ---- the fact cards ----
+    const ki = TL.cards.findIndex((cc) => t >= cc.t0 - 0.02 && t < cc.t1 + 0.05);
+    const cd = TL.cards[ki];
+    const card = $('card');
+    if (cd) {
+      if (cardOn !== ki) {
+        cardOn = ki;
+        if (cd.kind === 'bowl') card.innerHTML = `<div class="k mono"></div><div class="bowlRow">${bowlSvg(cd.fill)}<div class="cnt"><b class="serif">0</b><span></span><small></small></div></div>`;
+        else if (cd.kind === 'vs') card.innerHTML = `<div class="k mono">Serving vs poora pack</div><div class="vs"><div class="side">${bowlSvg(cd.fill)}<div class="n serif"></div><div class="lab"></div></div><div class="mid serif">vs</div><div class="side">${bowlSvg(cd.fill)}<div class="n serif"></div><div class="lab"></div></div></div>`;
+        else card.innerHTML = '<div class="k mono"></div><div class="bigV serif"></div><div class="d"></div><div class="bar"><i></i><u>Din ki limit →</u><b>0%</b></div><div class="f"></div>';
+        if (cd.kind === 'bowl') { card.querySelector('.k').textContent = cd.tag; card.querySelector('.cnt span').textContent = cd.unitWord; card.querySelector('.cnt small').textContent = cd.sub; }
+        if (cd.kind === 'vs') {
+          const sides = card.querySelectorAll('.side');
+          [cd.a, cd.b].forEach((s, i) => { sides[i].querySelector('.n').innerHTML = `${String(s.n).replace('.5', '½')}<small>${cd.unitWord}</small>`; sides[i].querySelector('.lab').textContent = s.k; });
+        }
+        if (cd.kind === 'bar') { card.querySelector('.k').textContent = cd.tag; card.querySelector('.bigV').textContent = cd.v; card.querySelector('.d').textContent = cd.d; card.querySelector('.f').textContent = cd.foot || ''; }
+      }
+      const inn = back((t - cd.t0) / 0.38);
+      card.style.opacity = within(t, cd.t0, cd.t1, 0.12, 0.18);
+      card.style.transform = `translateY(${(1 - inn) * -80}px) rotate(${(1 - inn) * -3}deg) scale(${0.92 + 0.08 * inn})`;
+      if (cd.kind === 'bowl') {
+        const done = cd.ticks.filter((x) => t >= x).length;
+        const next = cd.ticks.find((x) => t < x + 0.35);
+        const total = cd.ticks.length;
+        const shown = done === total ? cd.n : done;
+        const num = card.querySelector('.cnt b');
+        num.textContent = String(shown).replace('.5', '½');
+        const lastHit = cd.ticks[done - 1];
+        num.style.transform = `scale(${lastHit != null ? 1 + 0.28 * Math.exp(-(t - lastHit) / 0.08) : 1})`;
+        // Each teaspoon raises the level as its drop lands.
+        const frac = cd.ticks.reduce((s, x) => s + ease((t - x) / 0.25), 0) / total * 0.95;
+        setBowl(card.querySelector('svg'), frac, next, t);
+      }
+      if (cd.kind === 'vs') {
+        const sides = card.querySelectorAll('.side');
+        [0, 1].forEach((i) => {
+          const at = cd.t0 + 0.15 + i * 0.7;
+          sides[i].style.opacity = clamp((t - at) / 0.15);
+          sides[i].style.transform = `scale(${0.7 + 0.3 * back((t - at) / 0.35)})`;
+          const frac = (i ? 1 : cd.a.n / cd.b.n) * 0.95 * ease((t - at - 0.1) / 0.6);
+          setBowl(sides[i].querySelector('svg'), frac, null, t);
+        });
+      }
+      if (cd.kind === 'bar') {
+        const f = ease((t - cd.t0 - 0.3) / 0.9) * cd.pct;
+        const over = 1 + 0.03 * Math.exp(-Math.max(0, t - cd.t0 - 1.2) / 0.12) * (t > cd.t0 + 1.2 ? 1 : 0);
+        card.querySelector('.bar i').style.width = `${Math.min(100, f)}%`;
+        card.querySelector('.bar b').textContent = `${Math.round(f)}%`;
+        card.querySelector('.bar').style.transform = `scale(${over})`;
+      }
+    } else card.style.opacity = 0;
+
+    // ---- the ingredients worth a look, each as it is said ----
+    const [f0, f1] = S.facts;
+    $('ichips').style.opacity = TL.chips.length ? within(t, f0 + 0.05, f1, 0.15, 0.2) : 0;
     [...$('ichips').querySelector('.list').children].forEach((el, i) => {
       const at = TL.chips[i].t;
-      el.style.opacity = clamp((t - at) / 0.1);
-      el.style.transform = `scale(${0.6 + 0.4 * back((t - at) / 0.35)}) rotate(${i % 2 ? 1.5 : -1.5}deg)`;
+      el.style.opacity = clamp((t - at) / 0.08);
+      el.style.transform = `scale(${0.5 + 0.5 * back((t - at) / 0.32)}) rotate(${i % 2 ? 2 : -2}deg)`;
     });
 
-    // Captions: the chunk being said, its current word in saffron.
+    // ---- the barcode scan ----
+    const sc = TL.scan;
+    if (sc && t >= sc.t0 - 0.05 && t < sc.t1 + 0.1) {
+      const [bx, by, bw, bh] = sc.box;
+      const [X1, Y1] = toScreen(bx, by), [X2, Y2] = toScreen(bx + bw, by + bh);
+      const p = 26;
+      const vis = within(t, sc.t0, sc.t1, 0.1, 0.12);
+      const locked = t >= sc.lock;
+      const g = back((t - sc.t0) / 0.38);
+      const corners = [[X1 - p, Y1 - p, 0, 0], [X2 + p - 86, Y1 - p, 1080 - 86, 0], [X1 - p, Y2 + p - 86, 0, 1920 - 86], [X2 + p - 86, Y2 + p - 86, 1080 - 86, 1920 - 86]];
+      corners.forEach(([tx, ty, fx, fy], i) => {
+        const el = $(`c${i}`);
+        el.style.left = `${fx + (tx - fx) * g}px`; el.style.top = `${fy + (ty - fy) * g}px`;
+        el.style.opacity = vis;
+        el.style.borderColor = locked ? '#2fbf5f' : '#ffc24d';
+        el.style.transform = `scale(${locked ? 1 + 0.12 * Math.exp(-(t - sc.lock) / 0.1) : 1})`;
+      });
+      Object.assign($('scanBox').style, { left: `${X1 - p}px`, top: `${Y1 - p}px`, width: `${X2 - X1 + p * 2}px`, height: `${Y2 - Y1 + p * 2}px`, opacity: vis * 0.9, background: locked ? `rgba(47,191,95,${0.35 * Math.exp(-(t - sc.lock) / 0.25)})` : 'transparent' });
+      const sweep = (Math.sin((t - sc.t0) * 7) + 1) / 2;
+      Object.assign($('laser').style, { left: `${X1 - 6}px`, width: `${X2 - X1 + 12}px`, top: `${Y1 + (Y2 - Y1) * sweep - 4}px`, opacity: locked ? 0 : vis * clamp((t - sc.t0 - 0.3) / 0.1) });
+      const typed = Math.floor(clamp((t - sc.t0 - 0.3) / Math.max(0.2, sc.lock - sc.t0 - 0.3)) * sc.code.length);
+      $('digits').textContent = sc.code.slice(0, typed) + (typed < sc.code.length ? '▌' : '');
+      Object.assign($('digits').style, { top: `${Y2 + p + 26}px`, opacity: vis * clamp((t - sc.t0 - 0.3) / 0.1) });
+      const ck = back((t - sc.lock) / 0.3);
+      Object.assign($('check').style, { left: `${X2 + p - 70}px`, top: `${Y1 - p - 70}px`, opacity: locked ? vis : 0, transform: `scale(${0.3 + 0.7 * ck})` });
+    } else {
+      ['scanBox', 'c0', 'c1', 'c2', 'c3', 'laser', 'digits', 'check'].forEach((id) => { $(id).style.opacity = 0; });
+    }
+
+    // ---- the phone with the real app: it bursts out of the barcode ----
+    if (u > -0.1 && t < S.cta[0] + 0.6) {
+      const inn = back(u / 0.55);
+      $('phoneWrap').style.opacity = clamp(u / 0.08);
+      $('phoneWrap').style.transform = `scale(${0.12 + 0.88 * inn}) rotate(${(1 - inn) * -10}deg) translateY(${Math.sin(u * 1.2) * 6}px)`;
+      const A = TL.app || TL.still;
+      if (A) {
+        const k = 560 / A.width;
+        $('screen').style.height = `${Math.round((A.viewH || A.height) * k)}px`;
+        // The still (no recording): eased down the page instead.
+        APP.style.top = TL.app ? '0px' : `${-Math.min(A.height - A.viewH, 900 * easeIO((u - 2) / 2)) * k}px`;
+      }
+      const sa = TL.phone.scoreAt;
+      const si = back((t - sa) / 0.4);
+      $('scoreSt').style.opacity = clamp((t - sa) / 0.08) * (1 - clamp((t - S.cta[0] + 0.2) / 0.2));
+      $('scoreSt').style.transform = `scale(${0.4 + 0.6 * si}) rotate(${6 + (1 - si) * 14}deg)`;
+    } else { $('phoneWrap').style.opacity = 0; $('scoreSt').style.opacity = 0; }
+
+    // ---- captions: the chunk being said, word by word ----
     let ci = -1;
     TL.captions.forEach((cc, i) => { if (cc.words[0][1] <= t) ci = i; });
     const cap = TL.captions[ci];
     const next = TL.captions[ci + 1];
-    const capEnd = cap ? Math.min(next ? next.words[0][1] : 1e9, cap.words[cap.words.length - 1][1] + 0.8) : 0;
-    if (cap && t < capEnd && t < S.verdict[0] + 0.1) {
+    if (cap && t < Math.min(next ? next.words[0][1] : 1e9, cap.end) && t < S.cta[0] + 0.2) {
       if ($('cc').dataset.i !== String(ci)) {
         $('cc').dataset.i = String(ci);
         $('cc').innerHTML = '';
-        cap.words.forEach(([w]) => { const s = document.createElement('span'); s.textContent = w; $('cc').appendChild(s); });
+        cap.words.forEach(([w, , em]) => { const s = document.createElement('span'); s.textContent = w; if (em) s.className = 'em'; $('cc').appendChild(s); });
       }
       let wi = 0;
-      cap.words.forEach(([, at], i) => { if (at <= t) wi = i; });
-      [...$('cc').children].forEach((el, i) => el.classList.toggle('now', i === wi));
+      [...$('cc').children].forEach((el, i) => {
+        const at = cap.words[i][1];
+        if (at <= t) wi = i;
+        el.style.visibility = at <= t + 0.02 ? 'visible' : 'hidden';
+        const q = back((t - at) / 0.22);
+        el.style.transform = `scale(${0.6 + 0.4 * q}) translateY(${(1 - q) * 24}px)`;
+      });
+      [...$('cc').children].forEach((el, i) => el.classList.toggle('now', i === wi && !cap.words[i][2]));
       $('cc').style.opacity = 1;
-      $('cc').style.transform = `scale(${0.9 + 0.1 * ease((t - cap.words[0][1]) / 0.12)})`;
-    } else {
-      $('cc').style.opacity = 0;
-    }
+    } else $('cc').style.opacity = 0;
 
-    // 4. Verdict: a saffron burst opens it, the score fills.
-    const [v0, v1] = S.verdict;
-    const b = easeIO((t - v0 + 0.15) / 0.55);
-    const vOut = S.app ? easeIO((t - v1 + 0.15) / 0.45) : 0;
-    $('verdict').style.opacity = t < v0 - 0.15 ? 0 : 1 - vOut;
-    $('verdict').style.transform = `translateY(${vOut * -260}px) scale(${1 - vOut * 0.12})`;
-    $('verdict').style.visibility = t > v1 + 0.6 ? 'hidden' : 'visible';
-    $('burst').style.transform = `translate(-50%, -50%) scale(${b * 260})`;
-    $('burst').style.opacity = 1 - clamp((t - v0 - 0.2) / 0.5);
-    const spv = ease((t - v0) / 1.3);
-    $('big').style.background = ringBg(TL.score * spv, TIER_COLOR); $('bigNum').style.color = TIER_COLOR;
-    $('big').style.transform = `scale(${0.6 + 0.4 * back((t - v0) / 0.7)})`;
-    $('bigNum').textContent = Math.round(TL.score * spv);
-    $('vTag').style.opacity = ease((t - v0 - 0.2) / 0.4);
-    $('vWord').style.color = TIER_COLOR;
-    $('vWord').style.opacity = ease((t - v0 - 0.9) / 0.4);
-    $('vWord').style.transform = `translateY(${(1 - ease((t - v0 - 0.9) / 0.4)) * 40}px)`;
-    $('vLine').style.opacity = ease((t - v0 - 1.25) / 0.4);
-
-    // 5. In the app: the phone rises in with the real report page, scrolling.
-    if (S.app && APP) {
-      const [a0, a1] = S.app;
-      const u = t - a0;
-      $('app').style.opacity = t < a0 - 0.2 ? 0 : 1;
-      $('app').style.visibility = t > a1 + 0.8 ? 'hidden' : 'visible';
-      const enter = back(u / 0.6);
-      $('phone').style.transform = `translateY(${(1 - enter) * 1100}px) rotate(${(1 - enter) * -6}deg) scale(${1 + 0.03 * Math.sin(clamp(u / 5) * Math.PI)})`;
-      let yy = 0;
-      for (const st of APP.stops) yy += (st.y - yy) * easeIO((u - st.at) / 0.9);
-      $('appPage').style.top = `${-yy * APP.k}px`;
-      const hlEnd = APP.stops.length ? APP.stops[0].at : a1 - a0;
-      $('hl').style.opacity = APP.reasons ? clamp((u - 0.75) / 0.2) * (1 - clamp((u - hlEnd + 0.2) / 0.25)) : 0;
-      if (APP.reasons) {
-        const [rx, ry, rw, rh] = APP.reasons;
-        Object.assign($('hl').style, { left: `${(rx - 10) * APP.k}px`, top: `${(ry - yy - 10) * APP.k}px`, width: `${(rw + 20) * APP.k}px`, height: `${(rh + 20) * APP.k}px`, transform: `scale(${1 + 0.04 * Math.sin(u * 8)})` });
-      }
-      const part = APP.stops.filter((st) => u >= st.at + 0.3).length;
-      if ($('appHead').dataset.k !== String(part)) { $('appHead').innerHTML = APP.heads[Math.min(part, APP.heads.length - 1)]; $('appHead').dataset.k = String(part); }
-      const since = u - (part ? APP.stops[part - 1].at + 0.3 : 0.2);
-      $('appHead').style.opacity = ease(since / 0.3);
-      $('appHead').style.transform = `translateY(${(1 - ease(since / 0.3)) * 30}px)`;
-    }
-
-    // 6. CTA: a saffron-edged panel wipes up; the QR code stays to the end.
+    // ---- the end card: a saffron-edged panel wipes up; the QR stays to the end ----
     const [c0] = S.cta;
-    const w = easeIO((t - c0 + 0.3) / 0.7);
+    const wv = easeIO((t - c0 + 0.3) / 0.7);
     $('cta').style.opacity = t < c0 - 0.3 ? 0 : 1;
-    $('wipe').style.top = `${1920 - w * 2010}px`;
+    $('wipe').style.top = `${1920 - wv * 2010}px`;
     $('ctaHead').style.opacity = ease((t - c0 - 0.2) / 0.5);
     $('ctaHead').style.transform = `translateY(${(1 - ease((t - c0 - 0.2) / 0.5)) * 70}px)`;
     $('qrCard').style.opacity = ease((t - c0 - 0.5) / 0.35);
@@ -363,23 +416,8 @@
   };
 
   await document.fonts.ready;
-  await Promise.all([...document.images].filter((img) => img.id !== 'src').map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })));
-  // The app scene: the page still scaled to the phone's screen, and where to
-  // scroll to (shorts/app-screen.mjs measured them on the real page).
-  if (S.app && TL.app && $('appPage').naturalWidth) {
-    const A = TL.app;
-    const k = 620 / A.width;
-    const maxY = Math.max(0, A.height - A.viewH);
-    const to = (mm) => Math.min(maxY, Math.max(0, mm - 64));
-    const stops = [];
-    if (A.marks.nutrition != null) stops.push({ at: 1.7, y: to(A.marks.nutrition) });
-    if (A.marks.ingredients != null) stops.push({ at: stops.length ? 3.2 : 2.0, y: to(A.marks.ingredients) });
-    APP = { k, stops, reasons: A.marks.reasons, heads: TL.appHeads.slice(0, stops.length + 1) };
-    $('screen').style.height = `${Math.round(A.viewH * k)}px`;
-    if (!$('appNav').naturalWidth || !A.navH) $('appNav').style.display = 'none';
-  } else {
-    $('app').style.display = 'none';
-  }
+  await Promise.all([...document.images].filter((img) => img.id !== 'src' && img.id !== 'appImg').map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })));
+  if (!TL.app && !TL.still) $('phoneWrap').style.display = 'none';
   await window.render(0);
   window.READY = true;
 })();

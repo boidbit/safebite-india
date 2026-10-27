@@ -1,6 +1,8 @@
 # Make clip video -- a real phone clip of a pack in, a finished 9:16 short out:
 # the footage underneath, the label's numbers boxed, captions, a Hindi
-# voiceover, the app on a phone and the Play Store QR at the end.
+# voiceover, the barcode scanned, the real app on a phone and the Play Store
+# QR at the end. The product is the one the barcode in the clip opens; the
+# words are written by Gemini and checked against the product's facts.
 #
 # Runs when a job file lands in promo/clips/ (or Actions -> "Make clip video"
 # -> Run workflow, with the job file's name). The job file names the product,
@@ -80,6 +82,13 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # The script's words (shorts/clip-script.mjs); without them it uses its template.
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+          VITE_GEMINI_API_KEY_2: ${{ secrets.VITE_GEMINI_API_KEY_2 }}
+          VITE_GEMINI_API_KEY_3: ${{ secrets.VITE_GEMINI_API_KEY_3 }}
+          VITE_GEMINI_API_KEY_4: ${{ secrets.VITE_GEMINI_API_KEY_4 }}
+          VITE_GEMINI_API_KEY_5: ${{ secrets.VITE_GEMINI_API_KEY_5 }}
+          VITE_GEMINI_API_KEY_6: ${{ secrets.VITE_GEMINI_API_KEY_6 }}
           PLAYWRIGHT_PATH: ${{ github.workspace }}/node_modules/playwright
           JOB: ${{ steps.job.outputs.file }}
         run: node shorts/clip.mjs "../$JOB" --out out/video

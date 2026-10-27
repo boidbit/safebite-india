@@ -1,5 +1,5 @@
 // Renders promo frames deterministically: render(t) -> screenshot.
-//   node render.cjs <outDir> <startFrame> <endFrame>          (30 fps)
+//   node render.cjs <outDir> <startFrame> <endFrame>          (30 fps, or RENDER_FPS)
 //   node render.cjs <outDir> --at 1.5,3,7.2                   (preview stills)
 const http = require('http');
 const fs = require('fs');
@@ -8,7 +8,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 
 const ROOT = __dirname + '/..';           // repo root so ../assets/* resolves
 const PAGE = process.env.PAGE || 'promo/index.html';   // e.g. promo/v2/index.html
-const FPS = 30;
+const FPS = Number(process.env.RENDER_FPS) || 30;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.jpg': 'image/jpeg',
   '.woff2': 'font/woff2', '.css': 'text/css' };
 

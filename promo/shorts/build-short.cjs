@@ -2,6 +2,8 @@
 // to promo/out/<name>.mp4: 1080x1920, 30 fps, H.264. A short with a
 // timeline.json gets its synthesized soundtrack (shorts/soundtrack.cjs) muxed
 // in as AAC; one without stays silent (add music in the platform's editor).
+// RENDER_FPS=60 renders twice the frames and blends each pair into one --
+// motion blur on every fast move, still a 30 fps video (the clip shorts).
 //
 //   cd promo && npm install --no-save ffmpeg-static@5.2.0   (once)
 //   node shorts/build-short.cjs label-decoded 25            (name, seconds)
@@ -11,7 +13,7 @@ const path = require('path');
 
 const [name, secondsArg] = process.argv.slice(2);
 if (!name) { console.error('usage: node shorts/build-short.cjs <name> [seconds]'); process.exit(1); }
-const FPS = 30;
+const FPS = Number(process.env.RENDER_FPS) || 30;
 const TOTAL = FPS * Number(secondsArg || 25);
 const JOBS = 4;
 const promo = path.join(__dirname, '..');
@@ -37,7 +39,8 @@ const run = (s, e) => new Promise((resolve, reject) => {
   const wav = path.join(promo, 'out', `${name}.wav`);
   if (hasTimeline) execFileSync(process.execPath, [path.join(__dirname, 'soundtrack.cjs'), name], { stdio: 'inherit' });
   const audio = hasTimeline ? ['-i', wav, '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-shortest'] : [];
-  execFileSync(ffmpeg, ['-y', '-v', 'error', '-framerate', String(FPS), '-i', path.join(frames, 'f_%04d.jpg'), ...audio,
+  const blend = FPS > 30 ? ['-vf', `tmix=frames=${Math.round(FPS / 30)},fps=30`] : [];
+  execFileSync(ffmpeg, ['-y', '-v', 'error', '-framerate', String(FPS), '-i', path.join(frames, 'f_%04d.jpg'), ...audio, ...blend,
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out]);
   fs.rmSync(frames, { recursive: true, force: true });
   console.log(`wrote ${out} (${(fs.statSync(out).size / 1024 / 1024).toFixed(1)} MB)`);

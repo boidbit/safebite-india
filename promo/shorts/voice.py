@@ -5,8 +5,10 @@
 #   pip install "edge-tts>=7,<8"
 #   python3 shorts/voice.py <lines.json> <outDir>
 #
-# lines.json: { "voice": "hi-IN-SwaraNeural", "rate": "+8%", "lines": ["...", ...] }
-# writes <outDir>/v00.mp3, v01.mp3, ... one per line, in order.
+# lines.json: { "voice": "hi-IN-SwaraNeural", "rate": "+15%",
+#               "lines": ["...", { "text": "...", "rate": "+8%", "pitch": "+6Hz" }, ...] }
+# A line is its text, or the text with its own rate/pitch (a question lifts,
+# a number lands a touch slower). Writes <outDir>/v00.mp3, v01.mp3, ... in order.
 import asyncio
 import json
 import os
@@ -19,12 +21,14 @@ async def main(spec_path, out_dir):
     with open(spec_path, encoding='utf-8') as f:
         spec = json.load(f)
     os.makedirs(out_dir, exist_ok=True)
-    for i, text in enumerate(spec['lines']):
+    for i, line in enumerate(spec['lines']):
+        if isinstance(line, str):
+            line = {'text': line}
         out = os.path.join(out_dir, f'v{i:02d}.mp3')
         # The service now and then drops a request; two more tries before giving up.
         for attempt in range(3):
             try:
-                await edge_tts.Communicate(text, spec['voice'], rate=spec.get('rate', '+0%')).save(out)
+                await edge_tts.Communicate(line['text'], spec['voice'], rate=line.get('rate', spec.get('rate', '+0%')), pitch=line.get('pitch', '+0Hz')).save(out)
                 break
             except Exception:
                 if attempt == 2:
