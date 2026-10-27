@@ -10,6 +10,23 @@ import { isJunkIngredient } from '../src/services/typoIngredient.js';
 import { findCategoryForProduct } from '../src/services/productCache.js';
 import { verdictFor } from '../src/services/scoringEngine.js';
 import { FLAG_REASONS } from '../src/services/productFlags.js';
+import { buildNutrientProjections } from '../src/services/nutrientProjection.js';
+
+// The sugar in one serving, for the app's 1-minute film (public/film/sugar-film.html,
+// opened by site/assets/film.js) -- the same projection, serving and all, that the
+// app's "Watch the 1-minute story" button uses (NutrientAddsUp.jsx / SugarFilm.jsx).
+function sugarFilm(p) {
+  if (!p.per100 || p.infant === 'true') return null;
+  const projection = buildNutrientProjections({
+    productName: p.name, foodType: p.foodType, packSize: p.packSize, nutrientsPer100: p.per100,
+    realNutrientsServingGrams: p.servingG ?? null, realNutrientsServingUnit: p.servingUnit || 'g',
+  });
+  const sugar = projection?.items?.find((i) => i.key === 'sugar');
+  if (!sugar || !(sugar.gramsPerServing > 0)) return null;
+  const { grams, unit } = projection.serving;
+  const q = new URLSearchParams({ name: p.name || 'This product', g: String(sugar.gramsPerServing), serving: `${grams} ${unit}`, period: 'year', freq: 'daily' });
+  return { url: `${APP_URL}film/sugar-film.html?${q}`, grams: sugar.gramsPerServing, serving: `${grams} ${unit}` };
+}
 
 const TIER = {
   Excellent: { color: 'var(--t-excellent)', eat: 'Yes' },
@@ -122,12 +139,13 @@ export function productPage(p, { alternatives = [], api = null } = {}) {
   const flaggedNames = [...new Set(flagged.map((i) => i.name.replace(/^[^:]{2,30}:\s*/, '').trim()))].slice(0, 3).join(', ');
   const description = `Is ${nameWithBrand} healthy? Ingredient score ${p.score}/100 (${p.verdict}). ${flagged.length ? `Worth a closer look: ${flaggedNames}${flagged.length > 3 ? ' and more' : ''}.` : 'No ingredient flagged.'} Every ingredient explained.`;
   const nutrition = nutritionTable(p.per100, p.foodType);
+  const film = sugarFilm(p);
   return {
     path: productPath(p),
     title: `${nameWithBrand} — ingredients & score (${p.score}/100)`,
     description,
     ogImage: p.imageUrl || undefined,
-    scripts: api?.url ? ['/assets/report.js'] : [],
+    scripts: [...(api?.url ? ['/assets/report.js'] : []), ...(film ? ['/assets/film.js'] : [])],
     body: `
 <div class="wrap p-wrap">
   <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/products/">Products</a>${p.brand ? ` / <a href="/products/#${esc(slugify(p.brand))}">${esc(p.brand)}</a>` : ''}</nav>
@@ -147,13 +165,18 @@ export function productPage(p, { alternatives = [], api = null } = {}) {
           <div><div class="p-verdict" style="color:${tier.color}">${esc(p.verdict)}</div><div class="p-flagged">${esc(flaggedLine)}</div>
           ${tier.eat ? `<div class="p-eat">How often? <b style="color:${tier.color}">${tier.eat}</b></div>` : ''}</div>
         </div>
-        <div class="p-ctas"><a class="btn btn-primary btn-sm" href="${APP_URL}#/p/${encodeURIComponent(p.id)}">Open in the app</a><a class="btn btn-ghost btn-sm" href="${APP_URL}">Scan your own</a></div>
+        <div class="p-ctas"><a class="btn btn-primary btn-sm" href="${APP_URL}#/p/${encodeURIComponent(p.id)}">Open in the app</a><a class="btn btn-ghost btn-sm" href="${APP_URL}">Check your own</a></div>
       </div>
       ${nutrition ? `<div class="p-side-nutri">${nutrition}</div>` : ''}
     </aside>
 
     <div class="p-main">
       ${p.summary ? `<p class="p-summary">${esc(p.summary)}</p>` : ''}
+
+      ${film ? `<button class="p-film" type="button" data-film="${esc(film.url)}">
+        <span class="p-film-play" aria-hidden="true"></span>
+        <span class="p-film-txt"><b>Where this sugar goes</b><small>A 1-minute film · ${esc(String(film.grams))} g of sugar in one ${esc(film.serving)} serving</small></span>
+      </button>` : ''}
 
       ${flagged.length ? `<section class="p-sec"><h2>Worth a closer look <span class="p-count">${flagged.length}</span></h2>
         <p class="p-note">Allowed in India, but better eaten less often.</p>

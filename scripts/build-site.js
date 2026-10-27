@@ -20,7 +20,10 @@ import rankings, { buildRankings, buildSwaps } from '../site/pages/rankings.js';
 import { verdictFor } from '../src/services/scoringEngine.js';
 import { assignSlugs, productPage, productPath, productsDirectory, alternativesFor } from '../site/products.js';
 
-const OUT = 'dist';
+// SITE_OUT / SITE_CACHE: a local preview can build outside the repo (the
+// project folder is synced to OneDrive).
+const OUT = process.env.SITE_OUT || 'dist';
+const CACHE_DIR = process.env.SITE_CACHE || '.site-cache';
 // Product pages (/product/<slug>/, /products/): off by default until they're
 // signed off. --products=10 builds a small sample locally; --products=all
 // (or SITE_PRODUCT_PAGES=all) builds every live/approved product.
@@ -101,7 +104,7 @@ fs.cpSync('site/assets', path.join(OUT, 'assets'), { recursive: true });
 // deploy only fetches products that are new or changed since the last one --
 // every push deploys, and re-reading all of them each time would eat the
 // Supabase egress allowance.
-const CACHE_FILE = '.site-cache/product-details.json';
+const CACHE_FILE = path.join(CACHE_DIR, 'product-details.json');
 const slimIngredient = (i) => ({ name: i.name, status: i.status, reason: i.reason, whatIsIt: i.whatIsIt, insCode: i.insCode, recognized: i.recognized, penalty: i.penalty });
 
 const productUrls = [];
@@ -115,7 +118,7 @@ if (productsArg) {
   // Every push is a deploy, and each used to re-read every product -- 3 MB at
   // 1,800 products, 14 MB at 8,500 -- which is Supabase egress. A full re-read
   // once a day catches any change that didn't touch updated_at.
-  const CATALOG_CACHE = '.site-cache/catalog.json';
+  const CATALOG_CACHE = path.join(CACHE_DIR, 'catalog.json');
   const SLIM = 'id, lookup_key, product_name, scan_count, updated_at, brand:report->>brand, packSize:report->>packSize, imageUrl:report->>imageUrl, score:report->overallScore, verdict:report->>verdict, infant:report->>isInfantFormula';
   const flagged = await openFlaggedKeys(supabase);
   // The public key has a short statement timeout: small pages, and a page
@@ -184,19 +187,20 @@ if (productsArg) {
 
   let cache = {};
   try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch { /* first build */ }
-  const stale = chosen.filter((p) => cache[p.id]?.updated_at !== p.updated_at);
+  // An entry from before the serving size was kept is fetched again once.
+  const stale = chosen.filter((p) => cache[p.id]?.updated_at !== p.updated_at || !('servingG' in cache[p.id]));
   for (let i = 0; i < stale.length; i += 100) {
     let data, error;
     for (let attempt = 1; attempt <= 4; attempt++) {
       ({ data, error } = await supabase.from('product_reports')
-        .select('id, summary:report->>summary, ingredients:report->ingredients, per100:report->nutrientsPer100, foodType:report->>foodType')
+        .select('id, summary:report->>summary, ingredients:report->ingredients, per100:report->nutrientsPer100, foodType:report->>foodType, servingG:report->realNutrientsServingGrams, servingUnit:report->>realNutrientsServingUnit')
         .in('id', stale.slice(i, i + 100).map((p) => p.id)));
       if (!error) break;
       await new Promise((r) => setTimeout(r, 1500 * attempt));
     }
     if (error) throw new Error(`detail: ${error.message}`);
     const when = new Map(stale.map((p) => [p.id, p.updated_at]));
-    for (const d of data) cache[d.id] = { updated_at: when.get(d.id), summary: d.summary, per100: d.per100, foodType: d.foodType, ingredients: (d.ingredients || []).map(slimIngredient) };
+    for (const d of data) cache[d.id] = { updated_at: when.get(d.id), summary: d.summary, per100: d.per100, foodType: d.foodType, servingG: d.servingG ?? null, servingUnit: d.servingUnit || null, ingredients: (d.ingredients || []).map(slimIngredient) };
   }
   // Keep only products still on the site.
   const keep = new Set(chosen.map((p) => p.id));

@@ -47,11 +47,11 @@ ${GA_TAG}
 <meta property="og:description" content="${esc(description)}" />
 <meta property="og:url" content="${url}" />
 <meta property="og:image" content="${ogImage}" />
-<meta name="theme-color" content="#fbf7ee" />
+<meta name="theme-color" content="#082d1c" />
 <link rel="icon" type="image/png" href="/assets/logo.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/assets/site.css" />
 ${path === '/' ? `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'MobileApplication', name: 'FoodGuard India', operatingSystem: 'ANDROID', applicationCategory: 'HealthApplication', url: PLAY_URL, offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' } })}</script>` : ''}
 </head>
@@ -64,8 +64,8 @@ ${path === '/' ? `<script type="application/ld+json">${JSON.stringify({ '@contex
       <a class="hide-sm" href="/products/">Products</a>
       <a class="hide-sm" href="/how-we-score/">How we score</a>
       <a class="hide-sm" href="/about/">About</a>
-      <a class="btn btn-ghost btn-sm hide-sm" href="${APP_URL}">Web app</a>
-      <a class="btn btn-primary btn-sm" href="${PLAY_URL}" target="_blank" rel="noopener">Get the app</a>
+      <a class="hide-sm" href="${APP_URL}">Web app</a>
+      <a class="nav-cta" href="${PLAY_URL}" target="_blank" rel="noopener">Get the app</a>
     </nav>
   </div>
 </header>
@@ -77,7 +77,7 @@ ${body}
     <div class="cols">
       <div>
         <a class="brand" href="/"><img src="/assets/logo.png" alt="" width="32" height="32" />FoodGuard<small>INDIA</small></a>
-        <p>Scan any packaged food sold in India and see what's really in it — every ingredient explained, in plain language.</p>
+        <p>Check any packaged food sold in India — search it, photograph the label or scan the barcode — and see what's really in it, every ingredient explained in plain language.</p>
       </div>
       <div>
         <h4>Product</h4>
