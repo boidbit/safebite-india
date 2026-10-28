@@ -21,6 +21,9 @@
 //   GH_REPO        -- optional, defaults to boidbit/safebite-india
 // SUPABASE_URL and SUPABASE_ANON_KEY are provided by Supabase itself.
 //
+// Deployed by .github/workflows/deploy-functions.yml whenever this file changes
+// (needs the SUPABASE_ACCESS_TOKEN repository secret).
+//
 // Plain JavaScript in a .ts file, like ai-proxy, so the handler runs under
 // Node in tests.
 
