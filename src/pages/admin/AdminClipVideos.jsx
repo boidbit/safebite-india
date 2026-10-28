@@ -222,7 +222,8 @@ export default function AdminClipVideos() {
         <div className="rounded-[14px] p-4 mb-4 flex flex-wrap items-center gap-3" style={card}>
           <span className="text-[13.5px] flex-1" style={{ color: 'var(--label-2)' }}>It did not work — the reason is above{status?.url ? ', or open the GitHub page for the full log' : ''}.</span>
           {status?.url && <a href={status.url} target="_blank" rel="noreferrer" className="tap-scale px-3 py-1.5 rounded-[8px] text-[13px] font-semibold" style={btn(false)}>See why ↗</a>}
-          <button type="button" onClick={reset} className="tap-scale px-4 py-2 rounded-[10px] text-[13.5px] font-semibold" style={btn(true)}>Try another clip</button>
+          {job?.mode === 'render' && draft && <button type="button" onClick={approve} className="tap-scale px-4 py-2 rounded-[10px] text-[13.5px] font-semibold" style={btn(true)}>Try again with the same script</button>}
+          <button type="button" onClick={reset} className="tap-scale px-4 py-2 rounded-[10px] text-[13.5px] font-semibold" style={btn(!(job?.mode === 'render' && draft))}>Try another clip</button>
         </div>
       )}
     </AdminLayout>

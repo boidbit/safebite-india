@@ -78,7 +78,7 @@ const TEMPLATE = {
     show: '…lagbhag *{sugar_tsp}* chammach chini.', say: '…लगभग {sugar_tsp} चम्मच चीनी।',
   },
   serving: { show: 'Ek serving ({serving_g}) mein {serving_tsp} chammach. {in_whole} *{pack_tsp}*!', say: 'एक सर्विंग ({serving_g}) में {serving_tsp} चम्मच। {in_whole} {pack_tsp}!' },
-  satfat: { show: 'Saturated fat? Din bhar ki limit ka *{sat_pct}*… ek hi {pack_word} mein.', say: 'सैचुरेटेड फैट? दिन भर की लिमिट का {sat_pct}… एक ही {pack_word} में।' },
+  satfat: { show: 'Saturated fat? Din ki limit ka *{sat_pct}*… ek hi {pack_word} mein.', say: 'सैचुरेटेड फैट? दिन भर की लिमिट का {sat_pct}… एक ही {pack_word} में।' },
   sugarpct: { show: 'Chini? Din bhar ki limit ka *{sugar_pct}*… ek hi {pack_word} mein.', say: 'चीनी? दिन भर की लिमिट का {sugar_pct}… एक ही {pack_word} में।' },
   sodium: { show: 'Namak? Din bhar ki limit ka *{sodium_pct}*.', say: 'नमक? दिन भर की लिमिट का {sodium_pct}।' },
   ing: { show: 'Label pe dhyaan dene laayak: {named}.', say: 'लेबल पे ध्यान देने लायक: {named}।' },
@@ -114,7 +114,8 @@ export function checkLine(beat, line, known, hookType) {
   if (line.show.replace(/\{[a-z_]+\}/g, 'x').split(/\s+/).length > 11) bad.push('show is too long (11 words at most)');
   if (!/[ऀ-ॿ]/.test(line.say)) bad.push('say is not in Hindi script');
   if (MUST_SAY_DAY[beat] && !/\b(din|daily|roz)\b/i.test(line.show)) bad.push('show must say it is the DAY limit ("din ki limit")');
-  if ((beat === 'hook' || beat === 'tease') && (!line.sticker || line.sticker.replace(/\{[a-z_]+\}/g, 'xxxx').length > 26)) bad.push('sticker missing or too long');
+  // The "shock" hook is told in big type on screen, so it has no sticker; the older openers do.
+  if ((beat === 'hook' || beat === 'tease') && hookType !== 'shock' && (!line.sticker || line.sticker.replace(/\{[a-z_]+\}/g, 'xxxx').length > 26)) bad.push('sticker missing or too long');
   return bad;
 }
 
