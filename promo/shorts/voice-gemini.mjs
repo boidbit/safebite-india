@@ -17,7 +17,7 @@ import { createHash } from 'crypto';
 import { callGeminiRaw } from '../../src/services/geminiService.js';
 
 export const TTS_MODEL = 'gemini-3.8-flash-tts';
-// Each TTS model has its own free daily quota: when the first is used up (error.quota), the whole video is re-voiced with this one.
+// Each TTS model has its own free daily quota, and the newest one now and then runs on past its words for every try: when the first gives no usable take (error.tryNextModel) the whole video is re-voiced with this one.
 export const TTS_FALLBACK = 'gemini-3.1-flash-tts-preview';
 export const TTS_VOICE = 'Kore';
 const OUT_RATE = 44100;
@@ -28,28 +28,28 @@ const DIRECT = 'Speak in natural spoken Hindi (Hinglish words as an Indian reel 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** One sentence -> mono float samples at OUT_RATE, silence trimmed off both ends. */
-async function speak(text, style, { model, voice, cache }) {
+async function speak(text, style, { model, voice, cache, attempts }) {
   const prompt = `${DIRECT}${style} Brisk pace, not like a news reader. Say: ${text}`;
   // A take already made for exactly this text, direction and voice is reused: the same
   // take in the preview and in the render, and no second use of the free quota.
   const key = createHash('sha1').update([model, voice, prompt].join('\n')).digest('hex').slice(0, 24);
   const cached = await cache?.get(key).catch(() => null);
   if (cached) return Float32Array.from({ length: cached.length >> 1 }, (_, i) => cached.readInt16LE(i * 2) / 32768);
-  const take = await record(text, prompt, { model, voice });
+  const take = await record(text, prompt, { model, voice, attempts });
   const pcm = Buffer.alloc(take.length * 2);
   take.forEach((v, i) => pcm.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(v * 32767))), i * 2));
   await cache?.put(key, pcm).catch(() => {});
   return take;
 }
 
-async function record(text, prompt, { model, voice }) {
+async function record(text, prompt, { model, voice, attempts }) {
   // The model now and then runs on past the sentence (speaks 10 s for 2 words): a take
   // longer than the words can take is thrown away and asked for again.
   const limit = 1.0 + 0.55 * text.split(/\s+/).length;
   let last = 'no audio';
   let shortest = null;
   let quotaHits = 0;
-  for (let attempt = 0; attempt < 7; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       const d = await callGeminiRaw({
         contents: [{ parts: [{ text: prompt }] }],
@@ -69,14 +69,15 @@ async function record(text, prompt, { model, voice }) {
       last = String(e.message || e).split('\n')[0].slice(0, 160);
       // Every key is out of quota: once more after a pause (a per-minute limit passes),
       // then give up on this model -- the free tier's daily cap does not.
-      if (/quota/i.test(last) && ++quotaHits >= 2) throw Object.assign(new Error(last), { quota: true });
+      if (/quota/i.test(last) && ++quotaHits >= 2) throw Object.assign(new Error(last), { tryNextModel: true });
       await wait(/quota/i.test(last) ? 20000 : 3000 + attempt * 2000); // rate-limit blips pass in a few seconds
     }
     await wait(500);
   }
-  // Never a clean take: the shortest one, if it is not wildly long.
-  if (shortest && shortest.length / OUT_RATE <= limit * 1.6) return shortest;
-  throw new Error(`Gemini voice failed: ${last}`);
+  // Never a clean take: the shortest one, cut at its first real pause, if that fits the words.
+  const cut = shortest && cutAtPause(shortest, OUT_RATE, limit);
+  if (cut) return cut;
+  throw Object.assign(new Error(`Gemini voice failed: ${last}`), { tryNextModel: true });
 }
 
 const pcmToFloat = (buf) => Float32Array.from({ length: buf.length >> 1 }, (_, i) => buf.readInt16LE(i * 2) / 32768);
@@ -89,6 +90,31 @@ function resample(x, from, to) {
     out[i] = x[i0] * (1 - f) + (x[Math.min(i0 + 1, x.length - 1)] ?? 0) * f;
   }
   return out;
+}
+
+/** A take that ran on past its words: cut where the first stretch of speech ends in a real pause (0.3 s), if what is left fits. */
+function cutAtPause(x, rate, limit) {
+  const win = Math.round(rate * 0.01);
+  let peak = 0;
+  for (let i = 0; i < x.length; i++) peak = Math.max(peak, Math.abs(x[i]));
+  const thr = Math.max(0.01, peak * 0.04);
+  const quiet = (w) => { for (let i = w * win; i < Math.min(x.length, (w + 1) * win); i++) if (Math.abs(x[i]) > thr) return false; return true; };
+  const n = Math.floor(x.length / win);
+  let spoken = 0;
+  for (let w = 0; w < n; w++) {
+    if (!quiet(w)) { spoken++; continue; }
+    if (spoken < 25) continue;
+    let g = w;
+    while (g < n && quiet(g)) g++;
+    if (g - w >= 30) {
+      const y = x.slice(0, Math.min(x.length, (w + 8) * win));
+      const fade = Math.round(rate * 0.012);
+      for (let i = 0; i < Math.min(fade, y.length); i++) y[y.length - 1 - i] *= i / fade;
+      return y.length / rate <= limit ? y : null;
+    }
+    w = g - 1;
+  }
+  return null;
 }
 
 /** Cut the quiet off both ends (a little room kept), judged against the line's own peak. */
@@ -150,14 +176,14 @@ function wavFile(x, rate) {
  * @param {{ id: string, text: string, style: string | string[] }[]} lines
  * @returns {Promise<{ secs: Record<string, number>, offsets: Record<string, number[]> }>}
  */
-export async function geminiVoice(lines, dir, { model = TTS_MODEL, voice = TTS_VOICE, tempo = TEMPO, cache = null } = {}) {
+export async function geminiVoice(lines, dir, { model = TTS_MODEL, voice = TTS_VOICE, tempo = TEMPO, cache = null, attempts = 6 } = {}) {
   fs.mkdirSync(dir, { recursive: true });
   const secs = {}, offsets = {};
   for (const line of lines) {
     const parts = line.text.split('|').map((s) => s.trim()).filter(Boolean);
     const pieces = [];
     for (const [i, text] of parts.entries()) {
-      pieces.push(stretch(await speak(text, Array.isArray(line.style) ? line.style[i] ?? line.style[line.style.length - 1] : line.style, { model, voice, cache }), tempo, OUT_RATE));
+      pieces.push(stretch(await speak(text, Array.isArray(line.style) ? line.style[i] ?? line.style[line.style.length - 1] : line.style, { model, voice, cache, attempts }), tempo, OUT_RATE));
     }
     const gap = Math.round(OUT_RATE * GAP);
     const all = new Float32Array(pieces.reduce((n, p) => n + p.length, 0) + gap * (pieces.length - 1));

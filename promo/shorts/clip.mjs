@@ -231,9 +231,9 @@ if (!args.includes('--no-voice')) {
     const spoken = beats.map((b) => ({ id: b, text: LINES[b].say.replace(/\*/g, ''), style: STYLE[b] || STYLE.app }));
     let v;
     for (const model of [TTS_MODEL, TTS_FALLBACK]) {
-      try { v = await geminiVoice(spoken, voiceDir, { model, tempo: job.tempo || undefined, cache }); console.log(`voice: ${model}`); break; } catch (e) {
-        if (!e.quota || model === TTS_FALLBACK) throw e;
-        console.log(`::warning title=Voice model::${model} is out of free quota today -- the whole video is voiced with ${TTS_FALLBACK}`);
+      try { v = await geminiVoice(spoken, voiceDir, { model, attempts: model === TTS_MODEL ? 3 : 6, tempo: job.tempo || undefined, cache }); console.log(`voice: ${model}`); break; } catch (e) {
+        if (!e.tryNextModel || model === TTS_FALLBACK) throw e;
+        console.log(`::warning title=Voice model::${model} gave no usable take (${String(e.message).slice(0, 110)}) -- the whole video is voiced with ${TTS_FALLBACK}`);
       }
     }
     Object.assign(secs, v.secs); Object.assign(offsets, v.offsets);
