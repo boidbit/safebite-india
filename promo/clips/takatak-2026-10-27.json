@@ -53,12 +53,12 @@
    "say": "पैक में {lead_g} फैट है, यानी {pack_tsp} चम्मच तेल!"
   },
   "serving": {
-   "show": "Serving size {serving_tsp} chammach, par poora pack {pack_tsp}!",
-   "say": "सर्विंग साइज {serving_tsp} चम्मच, पर पूरा पैक {pack_tsp}!"
+   "show": "Ek serving ({serving_g}) mein {serving_tsp} chammach, par poore {pack_word} mein *{pack_tsp}*!",
+   "say": "एक सर्विंग ({serving_g}) में {serving_tsp} चम्मच, पर पूरे {pack_word} में {pack_tsp}!"
   },
   "satfat": {
-   "show": "Ek pack mein saturated fat ki limit ka {sat_pct}!",
-   "say": "एक पैक में सेच्युरेटेड फैट की लिमिट का {sat_pct}!"
+   "show": "Saturated fat: din bhar ki limit ka *{sat_pct}*, ek hi {pack_word} mein!",
+   "say": "सैचुरेटेड फैट: दिन भर की लिमिट का {sat_pct}, एक ही {pack_word} में!"
   },
   "ing": {
    "show": "Ingredients mein {named} bhi shamil hain.",
@@ -81,5 +81,5 @@
    "say": "अपना पैक FoodGuard India पर फ्री चेक करो।"
   }
  },
- "revision": 3
+ "revision": 4
 }

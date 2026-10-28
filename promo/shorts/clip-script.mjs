@@ -35,12 +35,13 @@ const BEAT_RULES = {
   turn: 'the pack is turned over; 2-5 words that lead into the reveal (ends with "…")',
   fat: 'the reveal: must contain {pack_tsp} -- teaspoons of oil the fat in the whole pack equals ("chammach tel jitna fat")',
   sugar: 'the reveal: must contain {sugar_tsp} -- teaspoons of added sugar in the whole pack',
-  serving: 'one serving vs the whole pack: must contain {serving_tsp} and {pack_tsp}',
-  satfat: 'must contain {sat_pct} -- the share of the daily saturated-fat limit in one pack',
-  sodium: 'must contain {sodium_pct} -- the share of the daily sodium limit in one pack',
+  serving: 'one serving vs the whole pack: must contain {serving_g}, {serving_tsp} and {pack_tsp} -- say which is which ("ek serving ({serving_g}) mein ..., poore {pack_word} mein ...")',
+  satfat: 'must contain {sat_pct} -- the share of the DAY limit of saturated fat in one pack; say "din" (din ki limit) so it is clear it is a daily limit',
+  sodium: 'must contain {sodium_pct} -- the share of the DAY limit of sodium in one pack; say "din" (din ki limit) so it is clear it is a daily limit',
+  sugarpct: 'must contain {sugar_pct} -- the share of the DAY limit of added sugar in one {pack_word}; say "din" (din ki limit) so it is clear it is a daily limit',
   ing: 'the ingredient list: must contain {named} (the ones worth a closer look)',
   scan: 'about to scan the barcode with the app; 3-6 words',
-  score: 'must contain {score}, {verdict} and {advice}; {advice} is the app\'s own answer to "khaayein?" and is used as that answer, e.g. "… Khaayein? {advice}."',
+  score: 'must contain {score}, {verdict}, {ask} and {advice}; {advice} is the app\'s own answer to "{ask}?" and is used as that answer, e.g. "… {ask}? {advice}."',
   app: 'the app on screen: every ingredient explained; short',
   cta: 'end: check your own pack with FoodGuard India, it is free; short',
 };
@@ -49,13 +50,13 @@ const SHOCK_RULES = {
   fat: 'the proof for the hook: the label gives {lead_g} of fat in the whole pack, which is the {pack_tsp} chammach tel -- must contain {lead_g} and {pack_tsp}',
   sugar: 'the proof for the hook: the label gives {lead_g} of added sugar in the whole pack, which is the {sugar_tsp} chammach chini -- must contain {lead_g} and {sugar_tsp}',
 };
-const REQUIRED = { hook: [], tease: [], turn: [], fat: ['pack_tsp'], sugar: ['sugar_tsp'], serving: ['serving_tsp', 'pack_tsp'], satfat: ['sat_pct'], sodium: ['sodium_pct'], ing: ['named'], scan: [], score: ['score', 'verdict', 'advice'], app: [], cta: [] };
+const REQUIRED = { hook: [], tease: [], turn: [], fat: ['pack_tsp'], sugar: ['sugar_tsp'], serving: ['serving_g', 'serving_tsp', 'pack_tsp'], satfat: ['sat_pct'], sodium: ['sodium_pct'], sugarpct: ['sugar_pct'], ing: ['named'], scan: [], score: ['score', 'verdict', 'advice', 'ask'], app: [], cta: [] };
 
 // The template: used when Gemini can't be reached or none of its tries pass.
 const TEMPLATE = {
   hook: {
     // Three sentences, spoken one by one ("|"): the video times its big number to the second.
-    shock: { show: 'Ek packet. *{pack_tsp}* chammach {lead_word}. Aur aap poora kha jaate ho.', say: 'एक पैकेट।|{pack_tsp} चम्मच {lead_word}।|और आप पूरा खा जाते हो।' },
+    shock: { show: 'Ek {pack_word}. *{pack_tsp}* chammach {lead_word}. Aur aap {whole} {eat} jaate ho.', say: 'एक {pack_word}।|{pack_tsp} चम्मच {lead_word}।|और आप {whole} {eat} जाते हो।' },
     serving: { sticker: 'Serving: sirf {serving_g}', show: 'Packet kehta hai: ek serving sirf {serving_g}.', say: 'पैकेट कहता है: एक सर्विंग सिर्फ़ {serving_g}।' },
     guess: { sticker: 'Guess karo!', show: 'Is pack mein kitne chammach {lead_word}?', say: 'इस पैक में कितने चम्मच {lead_word}?' },
     pov: { sticker: 'POV: poora pack khatam', show: 'Movie khatam, pack bhi khatam.', say: 'मूवी ख़त्म, पैक भी ख़त्म।' },
@@ -67,27 +68,31 @@ const TEMPLATE = {
     pov: { sticker: 'Label kya kehta hai?', show: 'Par label ne kya bataya?', say: 'पर लेबल ने क्या बताया?' },
     pass: { sticker: 'Chalo padhte hain', show: 'Chalo, peeche ka label padhte hain.', say: 'चलो, पीछे का लेबल पढ़ते हैं।' },
   },
-  turn: { show: 'Poora pack khao, to…', say: 'पूरा पैक खाओ, तो…' },
+  turn: { show: 'Chalo, label padhte hain…', say: 'चलो, लेबल पढ़ते हैं…' },
   fat: {
-    shock: { show: 'Label dekho: poore pack mein *{lead_g}* fat. Yaani {pack_tsp} chammach tel.', say: 'लेबल देखो: पूरे पैक में {lead_g} फैट। यानी {pack_tsp} चम्मच तेल।' },
+    shock: { show: 'Label dekho: {in_whole} *{lead_g}* fat. Yaani {pack_tsp} chammach tel.', say: 'लेबल देखो: {in_whole} {lead_g} फैट। यानी {pack_tsp} चम्मच तेल।' },
     show: '…lagbhag *{pack_tsp}* chammach tel jitna fat.', say: '…लगभग {pack_tsp} चम्मच तेल जितना फैट।',
   },
   sugar: {
-    shock: { show: 'Label dekho: poore pack mein *{lead_g}* added sugar. Yaani {sugar_tsp} chammach chini.', say: 'लेबल देखो: पूरे पैक में {lead_g} एडेड शुगर। यानी {sugar_tsp} चम्मच चीनी।' },
+    shock: { show: 'Label dekho: {in_whole} *{lead_g}* added sugar. Yaani {sugar_tsp} chammach chini.', say: 'लेबल देखो: {in_whole} {lead_g} एडेड शुगर। यानी {sugar_tsp} चम्मच चीनी।' },
     show: '…lagbhag *{sugar_tsp}* chammach chini.', say: '…लगभग {sugar_tsp} चम्मच चीनी।',
   },
-  serving: { show: 'Ek serving: {serving_tsp} chammach. Poora pack: *{pack_tsp}*.', say: 'एक सर्विंग: {serving_tsp} चम्मच। पूरा पैक: {pack_tsp}।' },
-  satfat: { show: 'Saturated fat? Din bhar ki limit ka *{sat_pct}*… ek hi pack mein.', say: 'सैचुरेटेड फैट? दिन भर की लिमिट का {sat_pct}… एक ही पैक में।' },
+  serving: { show: 'Ek serving ({serving_g}) mein {serving_tsp} chammach. {in_whole} *{pack_tsp}*!', say: 'एक सर्विंग ({serving_g}) में {serving_tsp} चम्मच। {in_whole} {pack_tsp}!' },
+  satfat: { show: 'Saturated fat? Din bhar ki limit ka *{sat_pct}*… ek hi {pack_word} mein.', say: 'सैचुरेटेड फैट? दिन भर की लिमिट का {sat_pct}… एक ही {pack_word} में।' },
+  sugarpct: { show: 'Chini? Din bhar ki limit ka *{sugar_pct}*… ek hi {pack_word} mein.', say: 'चीनी? दिन भर की लिमिट का {sugar_pct}… एक ही {pack_word} में।' },
   sodium: { show: 'Namak? Din bhar ki limit ka *{sodium_pct}*.', say: 'नमक? दिन भर की लिमिट का {sodium_pct}।' },
   ing: { show: 'Label pe dhyaan dene laayak: {named}.', say: 'लेबल पे ध्यान देने लायक: {named}।' },
   scan: { show: 'Ab scan karke dekhte hain.', say: 'अब स्कैन करके देखते हैं।' },
-  score: { show: 'FoodGuard score: *{score}*, {verdict}. Khaayein? {advice}.', say: 'FoodGuard स्कोर: {score}, {verdict}। खाएं? {advice}।' },
+  score: { show: 'FoodGuard score: *{score}*, {verdict}. {ask}? {advice}.', say: 'FoodGuard स्कोर: {score}, {verdict}। {ask}? {advice}।' },
   app: { show: 'Har ingredient ka matlab, ek tap pe.', say: 'हर इंग्रेडिएंट का मतलब, एक टैप पे।' },
-  cta: { show: 'Apna packet khud check karo. FoodGuard India, free hai.', say: 'अपना पैकेट ख़ुद चेक करो। FoodGuard India, फ़्री है।' },
+  cta: { show: 'Apna {pack_word} khud check karo. FoodGuard India, free hai.', say: 'अपना {pack_word} ख़ुद चेक करो। FoodGuard India, फ़्री है।' },
 };
 
 // After the "shock" hook the fat / sugar beat is the proof (the label's grams), not the reveal.
 const requiredFor = (beat, hookType) => (hookType === 'shock' && (beat === 'fat' || beat === 'sugar') ? ['lead_g', beat === 'fat' ? 'pack_tsp' : 'sugar_tsp'] : REQUIRED[beat] || []);
+
+// Lines about a daily limit must say it is a daily one ("limit ka 70%" alone reads as the pack's own limit).
+const MUST_SAY_DAY = { satfat: 1, sodium: 1, sugarpct: 1 };
 
 const placeholders = (s) => [...String(s || '').matchAll(/\{([a-z_]+)\}/g)].map((m) => m[1]);
 
@@ -108,6 +113,7 @@ export function checkLine(beat, line, known, hookType) {
   }
   if (line.show.replace(/\{[a-z_]+\}/g, 'x').split(/\s+/).length > 11) bad.push('show is too long (11 words at most)');
   if (!/[ऀ-ॿ]/.test(line.say)) bad.push('say is not in Hindi script');
+  if (MUST_SAY_DAY[beat] && !/\b(din|daily|roz)\b/i.test(line.show)) bad.push('show must say it is the DAY limit ("din ki limit")');
   if ((beat === 'hook' || beat === 'tease') && (!line.sticker || line.sticker.replace(/\{[a-z_]+\}/g, 'xxxx').length > 26)) bad.push('sticker missing or too long');
   return bad;
 }
@@ -134,7 +140,7 @@ The video: a real phone clip of someone holding "${facts.product}" by ${facts.br
 Write one line for each beat, in this order: ${ask.join(', ')}.
 ${ask.map((b) => `- ${b}: ${ruleOf(b)}`).join('\n')}
 Hook style: ${HOOKS[facts.hookType]}
-${shock ? `The opening, already recorded: "Ek packet. {pack_tsp} chammach ${'{lead_word}'}. Aur aap poora kha jaate ho." Continue from there without repeating it.\n` : ''}
+${shock ? 'The opening, already recorded: "Ek {pack_word}. {pack_tsp} chammach {lead_word}. Aur aap {whole} {eat} jaate ho." Continue from there without repeating it.\n' : ''}${facts.drink ? `This is a DRINK (a ${facts.word}): it is drunk, never eaten -- write "{pack_word}", "pee", "peeyein", never "khana", "packet" or "khaayein".\n` : ''}
 Facts are placeholders -- use them exactly as written, never write a number yourself (no digits at all):
 ${[...known].map((k) => `{${k}} = ${facts.values[k]}`).join('\n')}
 
@@ -142,7 +148,7 @@ Tone: how a friend talks to you in Hinglish -- short, punchy, a little playful, 
 The tone, for a different product (do not reuse these words):
   turn "Chalo, peeche dekhte hain…"
   sugar "Poori bottle mein *{sugar_tsp}* chammach chini!"
-  score "FoodGuard score {score}, {verdict}. Roz peeyein? {advice}."
+  score "FoodGuard score {score}, {verdict}. {ask}? {advice}."
   cta "Apni bottle khud scan karo, FoodGuard free hai."
 Rules: only these facts. Say only what the facts say: the label states amounts (grams, serving size, ingredients); it never "recommends", "allows" or "approves" anything, so do not write that it does. Neutral about the brand -- no insults, no "harmful", "unhealthy", "junk", "avoid", "zeher", "jhooth", "dhokha", no health or disease claims, no emoji.
 Each line: "show" = Hinglish in Roman letters, at most 10 words, you may wrap ONE key word in *stars*; "say" = the very same sentence in Hindi (Devanagari) script for a Hindi text-to-speech voice (English product words like Palmolein may stay in Roman).${ask.some((b) => b === 'hook' || b === 'tease') ? ' hook and tease also get a "sticker": 2-5 words, at most 24 letters, for a big on-screen sticker.' : ''}
@@ -157,7 +163,7 @@ Reply with JSON only: {"lines": {"${ask[0]}": {${ask[0] === 'hook' ? '"sticker":
       try {
         const data = await Promise.race([
           // The stronger model first; the app's lite one if it is busy.
-          callGeminiRaw({ contents: [{ parts: [{ text: prompt + feedback }] }], generationConfig: { temperature: 0.9, responseMimeType: 'application/json' } }, SCRIPT_MODELS[i < 3 ? 0 : 1]),
+          callGeminiRaw({ contents: [{ parts: [{ text: prompt + feedback }] }], generationConfig: { temperature: 0.9, responseMimeType: 'application/json' } }, SCRIPT_MODELS[i % 2]),
           new Promise((_, no) => setTimeout(() => no(new Error('Gemini took over 60 s')), 60000)),
         ]);
         const text = (data.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought && p.text).map((p) => p.text).join('');
@@ -188,5 +194,7 @@ Reply with JSON only: {"lines": {"${ask[0]}": {${ask[0] === 'hook' ? '"sticker":
 export function fill(line, values, valuesSay) {
   // (The model now and then wraps a placeholder in `backticks`: not for the screen or the voice.)
   const put = (s, v) => String(s || '').replace(/`/g, '').replace(/\{([a-z_]+)\}/g, (_, k) => v[k] ?? '');
-  return { show: put(line.show, values), say: put(line.say, valuesSay), sticker: line.sticker ? put(line.sticker, values) : undefined };
+  // A placeholder can open a sentence ("{in_whole} 8!"): a capital letter after . ! ? and at the start.
+  const capital = (s) => s.replace(/(^|[.!?]\s+)([a-z])/g, (_, a, b) => a + b.toUpperCase());
+  return { show: capital(put(line.show, values)), say: put(line.say, valuesSay), sticker: line.sticker ? put(line.sticker, values) : undefined };
 }

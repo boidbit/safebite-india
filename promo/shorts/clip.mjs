@@ -1,33 +1,41 @@
 // promo/shorts/clip.mjs -- a short cut from a real phone clip of the pack:
 // the footage plays underneath, the facts land on top of it, a voice reads
 // them out, the pack's barcode is scanned and the real app opens on a phone.
+// A packet is told as "poora kha jaate ho", a bottle or can as "poori pee
+// jaate ho"; a sugar-led drink gets its share of the day's sugar as the
+// second fact.
 //
 //   node shorts/clip.mjs ../promo/clips/<job>.json --out out/video     (GitHub: make-clip-video.yml)
+//   node shorts/clip.mjs bucket:jobs/<id>.json [--draft]               (the admin panel's jobs: the job is in the bucket;
+//                                       --draft = only the words and what was found in the clip, saved to out/<id>-draft.json)
 //   node shorts/clip.mjs <job> --work <dir> --preview [--no-voice] [--no-app] [--no-ai]
 //                                       (timeline + inputs for preview stills, no video)
 //
-// The job file (promo/clips/*.json) names the clip -- its path in the
-// private promo-clips Storage bucket, never a link (the repo is public) --
-// and says where in it things are, in seconds and in the clip's own
-// 1080x1920 pixels:
+// The job file (promo/clips/*.json, or jobs/<id>.json in the bucket) names the
+// clip -- its path in the private promo-clips Storage bucket, never a link
+// (the repo is public):
 //   clip   "clips/<name>.mp4"
+// and may say where in it things are, in seconds and in the clip's own
+// 1080x1920 pixels. Anything it leaves out is found by looking at the clip
+// (clip-detect.mjs):
 //   front  [from, to]   the pack's front, held still
 //   flip   [from, to]   turning it over (played fast)
 //   label  { at, rows } the clearest look at the nutrition table, frozen
 //                       there, and boxes round its numbers:
 //                       rows: { totalFatG, saturatedFatG, sodiumMg, addedSugarG, serving: [x, y, w, h, deg?] }
 // Optional: product (an id, instead of the barcode), barcode ({ code, at,
-// box } instead of reading it), hook (serving | guess | pov | pass),
-// script (lines to use instead of Gemini's), voice, rate.
+// box } instead of reading it), hook (shock | serving | guess | pov | pass),
+// script (lines to use instead of Gemini's; with check: true they are held to
+// the same rules as Gemini's), tempo (the voice's speed).
 //
 // The product is the one the pack's barcode opens in the app: ZXing reads
 // it off the frames (clip-barcode.mjs), and no approved product for that
 // barcode means no video. The words are Gemini's, held to the product's
-// saved facts (clip-script.mjs); the voice is a free Microsoft neural voice
-// (voice.py); the app scene is the real report page, recorded frame by
-// frame (app-record.mjs). The finished video, caption, script and timeline
-// also go to promo-clips/out/. Reading and writing that bucket takes
-// SUPABASE_SERVICE_ROLE_KEY (a repo secret on GitHub).
+// saved facts (clip-script.mjs); the voice is Gemini's text-to-speech told
+// how to say each line (voice-gemini.mjs); the app scene is the real report
+// page, recorded frame by frame (app-record.mjs). The finished video, caption,
+// script and timeline also go to promo-clips/out/. Reading and writing that
+// bucket takes SUPABASE_SERVICE_ROLE_KEY (a repo secret on GitHub).
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
@@ -41,7 +49,8 @@ import { GRAMS_FAT_PER_TEASPOON_OIL } from '../../src/services/nutrientProjectio
 import { GRAMS_PER_TEASPOON } from '../../src/services/sugarProjection.js';
 import { geminiVoice, TTS_MODEL, TTS_FALLBACK } from './voice-gemini.mjs';
 import { findBarcode } from './clip-barcode.mjs';
-import { writeScript, fill } from './clip-script.mjs';
+import { detectClip } from './clip-detect.mjs';
+import { writeScript, fill, checkLine } from './clip-script.mjs';
 import { recordAppScreen } from './app-record.mjs';
 import { captureAppScreen } from './app-screen.mjs';
 
@@ -54,18 +63,31 @@ const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i === -1 ? null : args[i + 1]; };
 const OUT = path.resolve(opt('--out') || path.join(HERE, '..', 'out'));
 const PREVIEW = args.includes('--preview');
-const fail = (msg) => {
+// A job started from the admin panel (bucket:jobs/<id>.json) has its failure reason saved next to it, for the panel to show.
+const fromBucket = String(args[0] || '').startsWith('bucket:');
+const fail = async (msg) => {
   console.error(`NOT MADE: ${msg}`);
   if (process.env.GITHUB_ACTIONS) {
     console.log(`::error title=Video not made::${msg}`);
     if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Video not made\n\n${msg}\n`);
   }
+  if (fromBucket) await supabase.storage.from(BUCKET).upload(`out/${path.basename(args[0], '.json')}-error.json`, JSON.stringify({ error: msg }), { contentType: 'application/json', upsert: true }).catch(() => {});
   process.exit(2);
 };
-if (!args[0]) fail('give a job file (promo/clips/*.json)');
-const jobFile = path.resolve(args[0]);
-const job = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
+if (!args[0]) await fail('give a job file (promo/clips/*.json)');
+let job, jobFile;
+if (fromBucket) {
+  // bucket:jobs/<id>.json -- written by the video-maker Edge Function for the admin panel.
+  const { data: blob, error } = await supabase.storage.from(BUCKET).download(args[0].slice('bucket:'.length));
+  if (error) await fail(`couldn't read the job ${args[0]} (${error.message || error.name})`);
+  job = JSON.parse(await blob.text());
+  jobFile = path.resolve(args[0].slice('bucket:'.length));
+} else {
+  jobFile = path.resolve(args[0]);
+  job = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
+}
 const jobName = path.basename(jobFile, '.json');
+const DRAFT = args.includes('--draft');
 const round1 = (v) => Math.round(v * 10) / 10;
 const r2 = (v) => Math.round(v * 100) / 100;
 const num = (v) => String(v >= 100 ? Math.round(v) : round1(v));
@@ -78,9 +100,9 @@ const srcDir = path.join(work, 'src');
 fs.mkdirSync(srcDir, { recursive: true });
 const ffmpeg = () => require('ffmpeg-static');
 if (!fs.existsSync(path.join(srcDir, 's_0000.jpg'))) {
-  if (!job.clip) fail('the job file has no clip (its path in the promo-clips bucket)');
+  if (!job.clip) await fail('the job file has no clip (its path in the promo-clips bucket)');
   const { data: blob, error } = await supabase.storage.from(BUCKET).download(job.clip);
-  if (error) fail(`couldn't fetch the clip ${job.clip} (${error.message || error.name})${process.env.SUPABASE_SERVICE_ROLE_KEY ? '' : ' -- SUPABASE_SERVICE_ROLE_KEY is not set (Settings -> Secrets and variables -> Actions)'}`);
+  if (error) await fail(`couldn't fetch the clip ${job.clip} (${error.message || error.name})${process.env.SUPABASE_SERVICE_ROLE_KEY ? '' : ' -- SUPABASE_SERVICE_ROLE_KEY is not set (Settings -> Secrets and variables -> Actions)'}`);
   const clip = path.join(work, 'clip.mp4');
   fs.writeFileSync(clip, Buffer.from(await blob.arrayBuffer()));
   // Every frame at 30 fps, filling 1080x1920 (a phone's own rotation applied).
@@ -93,7 +115,7 @@ const clipSeconds = frames / 30;
 
 // ---- 2. the barcode, and the product it opens ----
 const barcode = job.barcode || await findBarcode(srcDir, { from: job.label?.at || 0 });
-if (!barcode && !job.product) fail('no barcode could be read in the clip -- hold the barcode up to the camera for a second at the end');
+if (!barcode && !job.product) await fail('no barcode could be read in the clip -- hold the barcode up to the camera for a second at the end');
 const COLS = 'id, product_name, review_status, report, lookup_key';
 let row = null;
 if (job.product) {
@@ -106,14 +128,14 @@ if (job.product) {
     if (link) ({ data: row } = await supabase.from('product_reports').select(COLS).eq('lookup_key', link.lookup_key).eq('review_status', 'approved').maybeSingle());
   }
 }
-if (!row) fail(job.product ? `no product ${job.product}` : `barcode ${barcode.code} doesn't open an approved product in the app -- link it first (Admin > Barcode matches)`);
+if (!row) await fail(job.product ? `no product ${job.product}` : `barcode ${barcode.code} doesn't open an approved product in the app -- link it first (Admin > Barcode matches)`);
 const r = row.report || {};
 const name = row.product_name;
-if (row.review_status !== 'approved') fail(`"${name}" is ${row.review_status}, not approved`);
-if (r.isInfantFormula) fail('infant formula gets no public video');
-if (typeof r.overallScore !== 'number') fail('no score');
+if (row.review_status !== 'approved') await fail(`"${name}" is ${row.review_status}, not approved`);
+if (r.isInfantFormula) await fail('infant formula gets no public video');
+if (typeof r.overallScore !== 'number') await fail('no score');
 const ings = (r.ingredients || []).filter((i) => i?.name && !isJunkIngredient(i));
-if (ings.length < 4) fail(`only ${ings.length} readable ingredients`);
+if (ings.length < 4) await fail(`only ${ings.length} readable ingredients`);
 const score = r.overallScore;
 const verdict = verdictFor(score);
 const brand = r.brand || '';
@@ -126,24 +148,43 @@ console.log(`${name} (${row.id})${barcode ? `, barcode ${barcode.code} read on $
 const LIMIT = Object.fromEntries(NUTRIENT_LIMITS.map((n) => [n.key, n.limit]));
 const per100 = r.nutrientsPer100 || {};
 const pack = String(r.packSize || '').replace(/\s+/g, ' ').trim();
-const packM = pack.match(/(\d+(?:\.\d+)?)\s*(ml|g)\b/i);
-const packAmount = packM ? Number(packM[1]) : null;
-const unit = packM ? packM[2].toLowerCase() : 'g';
+// "320 ml", "300ml", "2.25 ltr", "Net Weight: 150g", "1 kg": always read as g or ml.
+const packM = pack.match(/(\d+(?:\.\d+)?)\s*(ml|ltrs?|litres?|liters?|l|kg|g)\b/i);
+const packUnit = packM ? packM[2].toLowerCase() : 'g';
+const packAmount = packM ? Math.round(Number(packM[1]) * (/^(l|lit|ltr)/.test(packUnit) || packUnit === 'kg' ? 1000 : 1)) : null;
+const unit = /^(ml|l|lit|ltr)/.test(packUnit) ? 'ml' : 'g';
 // "The whole pack" only for a pack one person gets through; a 1 kg bag is told per 100 g.
-if (!packAmount || packAmount > 400) fail('this format needs a pack one person finishes (a pack size up to 400 g/ml)');
+// Drinks are sold by volume: up to 750 ml is one person's bottle.
+const drink = unit === 'ml';
+if (!packAmount || packAmount > (drink ? 750 : 400)) await fail(`this format needs a pack one person finishes (a pack size up to ${drink ? '750 ml' : '400 g'}) -- this one is ${pack || 'of unknown size'}`);
 const servingG = Number(r.realNutrientsServingGrams) || null;
+
+// Where things are in the clip: from the job file when it says, else found by looking at the clip
+// (clip-detect.mjs). Pieces the job file gives win; the rest are filled in.
+let detected = null;
+if (!job.front || !job.flip || !job.label?.at) {
+  detected = await detectClip(srcDir, { per100, servingG, toT: barcode?.at ?? null });
+  if (!detected) await fail("couldn't find the nutrition table in the clip -- hold the back of the pack, table facing the camera, still for 2-3 seconds");
+  const at = job.label?.at ?? detected.label.at;
+  job.label = { at, rows: job.label?.rows || (job.label?.at ? {} : detected.label.rows) };
+  job.front = job.front || detected.front;
+  job.flip = job.flip || (job.label?.at && detected.label.at !== at ? [job.front[1], at] : detected.flip);
+  console.log(`found in the clip: front ${job.front.join('-')} s, turn ${job.flip.join('-')} s, label at ${at} s, boxes on ${Object.keys(job.label.rows).join(', ') || 'nothing'}${detected.notes.length ? `\n  (${detected.notes.join('; ')})` : ''}`);
+}
 const perPack = (k) => (per100[k] * packAmount) / 100;
 const half = (v) => Math.round(v * 2) / 2;
 const oilTsp = per100.totalFatG > 0 ? Math.round(perPack('totalFatG') / GRAMS_FAT_PER_TEASPOON_OIL) : 0;
 const sugarTsp = per100.addedSugarG > 0 ? half(perPack('addedSugarG') / GRAMS_PER_TEASPOON) : 0;
 const leadKind = sugarTsp >= 2 ? 'sugar' : oilTsp >= 3 ? 'fat' : null;
-if (!leadKind) fail('nothing on the nutrition panel stands out (no teaspoons of oil or sugar worth showing) -- use make.mjs for this product');
+if (!leadKind) await fail('nothing on the nutrition panel stands out (no teaspoons of oil or sugar worth showing) -- use make.mjs for this product');
 const leadKey = leadKind === 'sugar' ? 'addedSugarG' : 'totalFatG';
 const packTsp = leadKind === 'sugar' ? sugarTsp : oilTsp;
 const servingTsp = servingG && servingG < packAmount ? half((per100[leadKey] * servingG) / 100 / (leadKind === 'sugar' ? GRAMS_PER_TEASPOON : GRAMS_FAT_PER_TEASPOON_OIL)) : null;
 const satPct = per100.saturatedFatG > 0 ? Math.round((perPack('saturatedFatG') / LIMIT.saturatedFatG) * 100) : 0;
 const sodiumPct = per100.sodiumMg > 0 ? Math.round((perPack('sodiumMg') / LIMIT.sodiumMg) * 100) : 0;
-const second = satPct >= 30 ? 'satfat' : sodiumPct >= 40 ? 'sodium' : null;
+const sugarPct = per100.addedSugarG > 0 ? Math.round((perPack('addedSugarG') / LIMIT.addedSugarG) * 100) : 0;
+// The second fact: a sugar-led product (a cold drink) -> its share of the day's sugar; the rest -> saturated fat, then salt.
+const second = leadKind === 'sugar' && sugarPct >= 30 ? 'sugarpct' : satPct >= 30 ? 'satfat' : sodiumPct >= 40 ? 'sodium' : null;
 // The ingredients to name: the oils among those worth a look first (they are the fat), then the rest.
 const OIL = /palm|olein|cotton|vanaspati|hydrogenat|shortening|\boil\b/i;
 const flagNames = [...new Set(flagged.map((i) => i.name.replace(/\s*\(.*\)$/, '').trim()))];
@@ -154,6 +195,14 @@ const pickBy = (xs, salt) => xs[[...`${row.id}${salt}`].reduce((h, c) => (h * 31
 const hookType = job.hook || (score >= 85 ? 'pass' : 'shock');
 const beats = ['hook', ...(hookType === 'shock' ? [] : ['tease']), 'turn', leadKind, ...(servingTsp != null ? ['serving'] : []), ...(second ? [second] : []), ...(named.length ? ['ing'] : []), ...(barcode ? ['scan'] : []), 'score', 'app', 'cta'];
 
+// The words for what is being held: a packet is eaten (poora kha jaate ho, Khaayein?), a bottle or
+// can is drunk (poori pee jaate ho, Peeyein?). Bottle is feminine, can and packet masculine.
+const canLike = /\bcan\b|\btin\b/i.test(`${name} ${pack} ${r.foodType || ''}`);
+const W = !drink
+  ? { word: 'packet', say: 'पैकेट', whole: 'poora', wholeSay: 'पूरा', eat: 'kha', eatSay: 'खा', ask: 'Khaayein', askSay: 'खाएं', inWhole: 'poore pack mein', inWholeSay: 'पूरे पैक में', tag: 'POORA PACK', up: { one: 'EK PACKET', whole: 'POORA', act: 'KHA JAATE HO' } }
+  : canLike
+    ? { word: 'can', say: 'कैन', whole: 'poora', wholeSay: 'पूरा', eat: 'pee', eatSay: 'पी', ask: 'Peeyein', askSay: 'पिएं', inWhole: 'poore can mein', inWholeSay: 'पूरे कैन में', tag: 'POORA CAN', up: { one: 'EK CAN', whole: 'POORA', act: 'PEE JAATE HO' } }
+    : { word: 'bottle', say: 'बोतल', whole: 'poori', wholeSay: 'पूरी', eat: 'pee', eatSay: 'पी', ask: 'Peeyein', askSay: 'पिएं', inWhole: 'poori bottle mein', inWholeSay: 'पूरी बोतल में', tag: 'POORI BOTTLE', up: { one: 'EK BOTTLE', whole: 'POORI', act: 'PEE JAATE HO' } };
 const ADVICE = { Excellent: ['Haan', 'हां'], Good: ['Zyaadatar haan', 'ज़्यादातर हां'], Moderate: ['Kabhi-kabhi', 'कभी-कभी'], Poor: ['Bahut kam', 'बहुत कम'], 'Very Poor': ['Bahut hi kam', 'बहुत ही कम'] }[verdict];
 const halfShow = (v) => (v === 0.5 ? '½' : String(v).replace('.5', '½'));
 const halfSay = (v) => ({ 0.5: 'आधा', 1.5: 'डेढ़', 2.5: 'ढाई' }[v] || (v % 1 ? `साढ़े ${Math.floor(v)}` : String(v)));
@@ -161,27 +210,49 @@ const unitSay = unit === 'ml' ? 'मिलीलीटर' : 'ग्राम';
 const values = {
   product: name, pack_g: `${packAmount} ${unit}`, pack_tsp: halfShow(packTsp), lead_word: leadKind === 'sugar' ? 'chini' : 'tel',
   score: String(score), verdict, advice: ADVICE[0], named: list(named, 'aur'), lead_g: `${num(perPack(leadKey))} g`,
+  pack_word: W.word, whole: W.whole, eat: W.eat, ask: W.ask, in_whole: W.inWhole,
   ...(servingG ? { serving_g: `${servingG} ${unit}` } : {}),
   ...(servingTsp != null ? { serving_tsp: halfShow(servingTsp) } : {}),
-  ...(second === 'satfat' ? { sat_pct: `${satPct}%` } : {}), ...(second === 'sodium' ? { sodium_pct: `${sodiumPct}%` } : {}),
+  ...(second === 'satfat' ? { sat_pct: `${satPct}%` } : {}), ...(second === 'sodium' ? { sodium_pct: `${sodiumPct}%` } : {}), ...(second === 'sugarpct' ? { sugar_pct: `${sugarPct}%` } : {}),
   ...(leadKind === 'sugar' ? { sugar_tsp: halfShow(packTsp) } : {}),
 };
 const valuesSay = {
   ...values, pack_g: `${packAmount} ${unitSay}`, pack_tsp: halfSay(packTsp), lead_word: leadKind === 'sugar' ? 'चीनी' : 'तेल', advice: ADVICE[1], named: list(named, 'और'), lead_g: `${num(perPack(leadKey))} ग्राम`,
+  pack_word: W.say, whole: W.wholeSay, eat: W.eatSay, ask: W.askSay, in_whole: W.inWholeSay,
   ...(servingG ? { serving_g: `${servingG} ${unitSay}` } : {}),
   ...(servingTsp != null ? { serving_tsp: halfSay(servingTsp) } : {}),
-  ...(second === 'satfat' ? { sat_pct: `${satPct} प्रतिशत` } : {}), ...(second === 'sodium' ? { sodium_pct: `${sodiumPct} प्रतिशत` } : {}),
+  ...(second === 'satfat' ? { sat_pct: `${satPct} प्रतिशत` } : {}), ...(second === 'sodium' ? { sodium_pct: `${sodiumPct} प्रतिशत` } : {}), ...(second === 'sugarpct' ? { sugar_pct: `${sugarPct} प्रतिशत` } : {}),
   ...(leadKind === 'sugar' ? { sugar_tsp: halfSay(packTsp) } : {}),
 };
 
 // ---- 4. the words ----
 const script = job.script
   ? { lines: job.script, source: 'job file', tries: [] }
-  : await writeScript({ product: name, brand, pack, foodType: r.foodType || 'packaged food', hookType, beats, values }, { useAi: !args.includes('--no-ai') });
+  : await writeScript({ product: name, brand, pack, foodType: r.foodType || 'packaged food', drink, word: W.word, hookType, beats, values }, { useAi: !args.includes('--no-ai') });
 const missing = beats.filter((b) => !script.lines[b]);
-if (missing.length) fail(`the script has no ${missing.join(', ')} line`);
+if (missing.length) await fail(`the script has no ${missing.join(', ')} line`);
 const LINES = Object.fromEntries(beats.map((b) => [b, fill(script.lines[b], values, valuesSay)]));
 console.log(`script (${script.source}${script.tries.length ? `, ${script.tries.length} rejected tries` : ''}):\n${beats.map((b) => `  ${b.padEnd(8)} ${LINES[b].sticker ? `[${LINES[b].sticker}] ` : ''}${LINES[b].show}`).join('\n')}`);
+
+// A script handed in by the admin panel (job.check) is held to the same rules as Gemini's own.
+if (job.script && job.check) {
+  const known = new Set(Object.keys(values));
+  const bad = beats.flatMap((b) => checkLine(b, script.lines[b], known, hookType).map((p) => `${b}: ${p}`));
+  if (bad.length) await fail(`the script breaks the rules: ${bad.join('; ')}`);
+}
+// --draft: the words and what was found in the clip, for the admin panel to show -- nothing is voiced or rendered.
+if (DRAFT) {
+  const draft = {
+    product: { id: row.id, name, brand, pack, score, verdict }, hookType, beats, source: script.source, rejectedTries: script.tries.length,
+    lines: script.lines, shown: Object.fromEntries(beats.map((b) => [b, LINES[b].show.replace(/\*/g, '')])),
+    found: detected ? { front: job.front, flip: job.flip, labelAt: job.label.at, boxes: Object.keys(job.label.rows), notes: detected.notes } : null,
+    facts: { lead: leadKind, packTsp, servingTsp, second, drink },
+  };
+  await supabase.storage.from(BUCKET).upload(`out/${jobName}-draft.json`, JSON.stringify(draft, null, 1), { contentType: 'application/json', upsert: true });
+  console.log(`DRAFT: saved ${BUCKET}/out/${jobName}-draft.json`);
+  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Script draft — ${name}\n\n${beats.map((b) => `- **${b}** ${LINES[b].show}`).join('\n')}\n`);
+  process.exit(0);
+}
 
 // ---- 5. the voice: one file per line, silence trimmed off both ends ----
 // Without it (no Python locally, or the service down) the timing is
@@ -199,6 +270,7 @@ const STYLE = {
   sugar: 'stunned and amused, stressing the numbers, a little laugh in the voice.',
   serving: 'matter-of-fact at first, then surprised at the second number.',
   satfat: 'serious and building up, stressing the percentage.',
+  sugarpct: 'serious and building up, stressing the percentage.',
   sodium: 'serious and building up, stressing the percentage.',
   ing: 'curious and pointing things out, slightly slower on the names.',
   scan: 'quick and upbeat, like pressing a button.',
@@ -318,7 +390,7 @@ if (hookType === 'shock') {
   const p2Len = secs.hook - (offsets.hook[2] ?? 0);
   hero = {
     parts: tP, n: halfShow(packTsp), fill: leadKind === 'sugar' ? 'sugar' : 'oil', word: leadKind === 'sugar' ? 'CHAMMACH CHINI' : 'CHAMMACH TEL', ticks,
-    lines: [{ text: 'AUR AAP', t: tP[2] }, { text: 'POORA', t: r2(tP[2] + p2Len * 0.3) }, { text: 'KHA JAATE HO', t: r2(tP[2] + p2Len * 0.52) }], end: hookEnd,
+    one: W.up.one, lines: [{ text: 'AUR AAP', t: tP[2] }, { text: W.up.whole, t: r2(tP[2] + p2Len * 0.3) }, { text: W.up.act, t: r2(tP[2] + p2Len * 0.52) }], end: hookEnd,
   };
   ticks.forEach((x) => spoons.push(x));
   shakes.push(r2(tP[1] + 0.02), r2(hero.lines[1].t));
@@ -386,7 +458,7 @@ if (leadKind && hero) {
   const t3 = r2(start + 0.1 + secs[leadKind] * share);
   const perTsp = leadKind === 'sugar' ? GRAMS_PER_TEASPOON : GRAMS_FAT_PER_TEASPOON_OIL;
   factBeat(leadKind, leadKey, {
-    kind: 'proof', tag: `${leadKind === 'sugar' ? 'ADDED SUGAR' : 'FAT'} · POORA PACK · ${pack}`, g: num(perPack(leadKey)), gWord: leadKind === 'sugar' ? 'added sugar' : 'fat',
+    kind: 'proof', tag: `${leadKind === 'sugar' ? 'ADDED SUGAR' : 'FAT'} · ${W.tag} · ${pack}`, g: num(perPack(leadKey)), gWord: leadKind === 'sugar' ? 'added sugar' : 'fat', whole: `${W.whole} ${W.word}`,
     per: `÷ ${perTsp} g = 1 chammach ${leadKind === 'sugar' ? 'chini' : 'tel'}`, n: halfShow(packTsp), unitWord: leadKind === 'sugar' ? 'chammach chini' : 'chammach tel', t3, fill: hero.fill,
     mark: leadKind === 'sugar' ? 'Added sugar' : 'Total fat',
   });
@@ -394,7 +466,7 @@ if (leadKind && hero) {
   shakes.push(t3);
   hero.proofAt = t3;
 } else if (leadKind) {
-  const unitTag = `POORA PACK · ${pack}`;
+  const unitTag = `${W.tag} · ${pack}`;
   const ticks = [];
   for (let i = 0; i < Math.ceil(packTsp); i++) ticks.push(r2(t + 0.6 + i * Math.min(0.22, (slot(leadKind, 2.2, 0.35) - 1.1) / Math.ceil(packTsp))));
   ticks.forEach((x) => spoons.push(x));
@@ -407,18 +479,23 @@ if (servingTsp != null) {
   const dur = slot('serving', 2.2, 0.35);
   if (box) { const [cx, cy] = centre(box); camKey(t, cx + 60, cy - 40, 2.4, { punch: 1 }); camKey(t + dur - 0.2, cx + 60, cy - 40, 2.5); marks.push({ t0: r2(t + 0.1), t1: r2(t + dur), box, label: 'Serving size' }); }
   say('serving', t + 0.1);
-  cards.push({ kind: 'vs', fill: leadKind === 'sugar' ? 'sugar' : 'oil', t0: r2(t + 0.2), t1: r2(t + dur), a: { k: `1 serving · ${servingG} ${unit}`, n: servingTsp }, b: { k: `Poora pack · ${pack}`, n: packTsp }, unitWord: 'chammach' });
+  cards.push({ kind: 'vs', fill: leadKind === 'sugar' ? 'sugar' : 'oil', t0: r2(t + 0.2), t1: r2(t + dur), a: { k: `1 serving · ${servingG} ${unit}`, n: servingTsp }, b: { k: `${W.whole[0].toUpperCase()}${W.whole.slice(1)} ${W.word} · ${pack}`, n: packTsp }, unitWord: 'chammach', title: `Serving vs ${W.whole} ${W.word}` });
   sfx.push({ t: t + 0.2, kind: 'pop' }, { t: t + 0.9, kind: 'pop' });
   t += dur;
 }
-if (second === 'satfat') {
+if (second === 'sugarpct') {
   const start = t;
-  factBeat('satfat', 'saturatedFatG', { kind: 'bar', tag: `SATURATED FAT · POORA PACK · ${pack}`, v: `${num(perPack('saturatedFatG'))} g`, d: `WHO limit 22 g/din ka ~${satPct}%`, pct: satPct, foot: '2000 kcal reference diet', mark: 'Saturated fat' });
+  factBeat('sugarpct', 'addedSugarG', { kind: 'bar', tag: `ADDED SUGAR · ${W.tag} · ${pack}`, v: `${num(perPack('addedSugarG'))} g`, d: `WHO limit 50 g/din ka ~${sugarPct}%`, pct: sugarPct, foot: '2000 kcal reference diet', mark: 'Added sugar' });
+  sfx.push({ t: start + 0.55, kind: 'riser', t1: start + 1.45 }, { t: start + 1.45, kind: 'hit' });
+  shakes.push(r2(start + 1.45));
+} else if (second === 'satfat') {
+  const start = t;
+  factBeat('satfat', 'saturatedFatG', { kind: 'bar', tag: `SATURATED FAT · ${W.tag} · ${pack}`, v: `${num(perPack('saturatedFatG'))} g`, d: `WHO limit 22 g/din ka ~${satPct}%`, pct: satPct, foot: '2000 kcal reference diet', mark: 'Saturated fat' });
   sfx.push({ t: start + 0.55, kind: 'riser', t1: start + 1.45 }, { t: start + 1.45, kind: 'hit' });
   shakes.push(r2(start + 1.45));
 } else if (second === 'sodium') {
   const start = t;
-  factBeat('sodium', 'sodiumMg', { kind: 'bar', tag: `SODIUM · POORA PACK · ${pack}`, v: `${num(perPack('sodiumMg'))} mg`, d: `WHO limit 2000 mg/din ka ${sodiumPct}%`, pct: sodiumPct, mark: 'Sodium' });
+  factBeat('sodium', 'sodiumMg', { kind: 'bar', tag: `SODIUM · ${W.tag} · ${pack}`, v: `${num(perPack('sodiumMg'))} mg`, d: `WHO limit 2000 mg/din ka ${sodiumPct}%`, pct: sodiumPct, mark: 'Sodium' });
   sfx.push({ t: start + 0.55, kind: 'riser', t1: start + 1.45 }, { t: start + 1.45, kind: 'hit' });
   shakes.push(r2(start + 1.45));
 }
@@ -499,7 +576,7 @@ const TL = {
   scenes, transitions, firstToken: scenes.label[0], tokenStep: 0, tokens: [], sfx, spoons,
   frames, clip, cam, freezeAt, marks, cards, chips, scan, shakes, captions, voice,
   hook: { type: hookType, stickers: [LINES.hook.sticker || '', LINES.tease?.sticker || ''], at: [0.05, hookEnd + 0.22], hero },
-  score, verdict, advice: ADVICE[0],
+  score, verdict, advice: ADVICE[0], ask: W.ask,
   phone: { t0: phoneStart, scoreAt: phoneStart + 1.9 },
   app: app ? { frames: app.frames, fps: app.fps, width: app.width, height: app.height } : null,
   still: still || null,
@@ -514,19 +591,20 @@ console.log(`timeline: ${duration} s${voiced ? ', voiced' : ', no voice'}${app ?
 if (PREVIEW) process.exit(0);
 
 // ---- 7. render, caption, hand over ----
-if (path.dirname(work) !== HERE) fail('a video is rendered from promo/shorts/<name>/ (leave out --work)');
+if (path.dirname(work) !== HERE) await fail('a video is rendered from promo/shorts/<name>/ (leave out --work)');
 execFileSync(process.execPath, [path.join(HERE, 'build-short.cjs'), slug, String(duration)], { cwd: path.join(HERE, '..'), stdio: 'inherit', env: { ...process.env, RENDER_FPS: String(FPS) } });
 const brandTag = brand.replace(/[^A-Za-z]/g, '');
 const caption = `${LINES.hook.show.replace(/\*/g, '')} ${LINES.tease ? LINES.tease.show.replace(/\*/g, '') : ''}
 
 ${brand && !name.toLowerCase().startsWith(brand.toLowerCase()) ? `${brand} ` : ''}${name} (${pack}), label padha:
-${leadKind === 'sugar' ? `🥄 Poora pack = lagbhag ${halfShow(packTsp)} chammach chini (${num(perPack('addedSugarG'))} g added sugar)` : `🛢️ Poora pack = lagbhag ${packTsp} chammach tel jitna fat (${num(perPack('totalFatG'))} g)`}
-${servingTsp != null ? `🍽️ 1 serving (${servingG} ${unit}) = ${halfShow(servingTsp)} chammach\n` : ''}${second === 'satfat' ? `⚠️ Saturated fat: ${num(perPack('saturatedFatG'))} g — din bhar ki limit ka ~${satPct}%\n` : second === 'sodium' ? `🧂 Sodium: ${num(perPack('sodiumMg'))} mg — din bhar ki limit ka ${sodiumPct}%\n` : ''}${named.length ? `🟠 Dhyaan dene laayak: ${named.join(', ')}\n` : ''}
-FoodGuard score: ${score}/100 · ${verdict} — khaayein? ${ADVICE[0]}.
+${leadKind === 'sugar' ? `🥄 ${W.whole[0].toUpperCase()}${W.whole.slice(1)} ${W.word} = lagbhag ${halfShow(packTsp)} chammach chini (${num(perPack('addedSugarG'))} g added sugar)` : `🛢️ ${W.whole[0].toUpperCase()}${W.whole.slice(1)} ${W.word} = lagbhag ${packTsp} chammach tel jitna fat (${num(perPack('totalFatG'))} g)`}
+${servingTsp != null ? `🍽️ 1 serving (${servingG} ${unit}) = ${halfShow(servingTsp)} chammach\n` : ''}${second === 'sugarpct' ? `⚠️ Added sugar: ${num(perPack('addedSugarG'))} g — din bhar ki limit ka ~${sugarPct}%
+` : second === 'satfat' ? `⚠️ Saturated fat: ${num(perPack('saturatedFatG'))} g — din bhar ki limit ka ~${satPct}%\n` : second === 'sodium' ? `🧂 Sodium: ${num(perPack('sodiumMg'))} mg — din bhar ki limit ka ${sodiumPct}%\n` : ''}${named.length ? `🟠 Dhyaan dene laayak: ${named.join(', ')}\n` : ''}
+FoodGuard score: ${score}/100 · ${verdict} — ${W.ask.toLowerCase()}? ${ADVICE[0]}.
 
-Aapke ghar mein kaunsa packet hai? Comment karo, agla video usi ka 👇
+Aapke ghar mein kaunsa ${W.word} hai? Comment karo, agla video usi ka 👇
 
-📲 Apna packet khud check karo — FoodGuard India (free):
+📲 Apna ${W.word} khud check karo — FoodGuard India (free):
 ${PLAY_URL}
 
 Pack ke nutrition label aur ingredient list se. WHO daily limits (2000 kcal diet). General information, not medical advice.

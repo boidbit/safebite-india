@@ -38,6 +38,7 @@ const SECTIONS = [
     id: 'tools', label: 'Tools', to: '/admin/scrape-progress',
     tabs: [
       { to: '/admin/scrape-progress', label: 'Scrape progress' },
+      { to: '/admin/clip-videos', label: 'Clip videos' },
       { to: '/admin/import', label: 'Import' },
       { to: '/admin/activity', label: 'Activity log' },
     ],

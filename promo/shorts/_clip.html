@@ -217,7 +217,7 @@
   $('scoreSt').querySelector('b').innerHTML = `${TL.score}<small>/100</small>`;
   $('scoreSt').querySelector('span').textContent = TL.verdict;
   $('scoreSt').querySelector('span').style.color = TIER;
-  $('scoreSt').querySelector('i').textContent = `Khaayein? ${TL.advice}`;
+  $('scoreSt').querySelector('i').textContent = `${TL.ask || 'Khaayein'}? ${TL.advice}`;
 
   // A bowl that fills: oil (gold) or sugar (white), with a drop falling in on each teaspoon.
   const bowlSvg = (fill) => `<svg class="bowl" viewBox="0 0 300 205"><defs><clipPath id="bc${fill}"><path d="M14 58 Q150 270 286 58 Z" /></clipPath>
@@ -241,6 +241,8 @@
   // The shock hook's pieces: the number, what it counts, the bowl that fills with it.
   const HERO = TL.hook.hero;
   if (HERO) {
+    $('hOne').textContent = HERO.one;
+    $('hL1').textContent = HERO.lines[0].text; $('hL2').textContent = HERO.lines[1].text; $('hL3').textContent = HERO.lines[2].text;
     $('hNum').textContent = HERO.n;
     $('hNum').style.fontSize = `${String(HERO.n).length > 1 ? 400 : 560}px`;
     $('hWord').textContent = HERO.word;
@@ -368,12 +370,12 @@
       if (cardOn !== ki) {
         cardOn = ki;
         if (cd.kind === 'bowl') card.innerHTML = `<div class="k mono"></div><div class="bowlRow">${bowlSvg(cd.fill)}<div class="cnt"><b class="serif">0</b><span></span><small></small></div></div>`;
-        else if (cd.kind === 'vs') card.innerHTML = `<div class="k mono">Serving vs poora pack</div><div class="vs"><div class="side">${bowlSvg(cd.fill)}<div class="n serif"></div><div class="lab"></div></div><div class="mid serif">vs</div><div class="side">${bowlSvg(cd.fill)}<div class="n serif"></div><div class="lab"></div></div></div>`;
+        else if (cd.kind === 'vs') card.innerHTML = `<div class="k mono">${cd.title || 'Serving vs poora pack'}</div><div class="vs"><div class="side">${bowlSvg(cd.fill)}<div class="n serif"></div><div class="lab"></div></div><div class="mid serif">vs</div><div class="side">${bowlSvg(cd.fill)}<div class="n serif"></div><div class="lab"></div></div></div>`;
         else if (cd.kind === 'proof') card.innerHTML = '<div class="k mono"></div><div class="proof"><div class="eq1 serif"></div><div class="eq2 mono"></div><div class="eq3 serif"></div></div>';
         else card.innerHTML = '<div class="k mono"></div><div class="bigV serif"></div><div class="d"></div><div class="bar"><i></i><u>Din ki limit →</u><b>0%</b></div><div class="f"></div>';
         if (cd.kind === 'proof') {
           card.querySelector('.k').textContent = cd.tag;
-          card.querySelector('.eq1').innerHTML = `${cd.g} g<small>${cd.gWord} · poora pack</small>`;
+          card.querySelector('.eq1').innerHTML = `${cd.g} g<small>${cd.gWord} · ${cd.whole || 'poora pack'}</small>`;
           card.querySelector('.eq2').textContent = cd.per;
           card.querySelector('.eq3').innerHTML = `${cd.n}<small>${cd.unitWord}</small>`;
         }

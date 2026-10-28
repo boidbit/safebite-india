@@ -55,6 +55,7 @@ import AdminProductHistory from './pages/admin/AdminProductHistory';
 import AdminBarcodeCheck from './pages/admin/AdminBarcodeCheck';
 import AdminSubmissionsList from './pages/admin/AdminSubmissionsList';
 import AdminHomeFeatures from './pages/admin/AdminHomeFeatures';
+import AdminClipVideos from './pages/admin/AdminClipVideos';
 import SubmitProduct from './pages/SubmitProduct';
 
 // The Android app's hardware/gesture back button doesn't do anything by
@@ -273,6 +274,7 @@ function AppShell() {
           <Route path="/admin/import" element={<AdminGuard><AdminImport /></AdminGuard>} />
           <Route path="/admin/activity" element={<AdminGuard><AdminActivityLog /></AdminGuard>} />
           <Route path="/admin/home-features" element={<AdminGuard><AdminHomeFeatures /></AdminGuard>} />
+          <Route path="/admin/clip-videos" element={<AdminGuard><AdminClipVideos /></AdminGuard>} />
         </Routes>
       </main>
       {!isAdmin && <BottomTabBar />}

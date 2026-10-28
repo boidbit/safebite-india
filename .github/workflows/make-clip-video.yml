@@ -2,18 +2,25 @@
 # the footage underneath, the label's numbers boxed, captions, a Hindi
 # voiceover, the barcode scanned, the real app on a phone and the Play Store
 # QR at the end. The product is the one the barcode in the clip opens; the
-# words are written by Gemini and checked against the product's facts.
+# words are written by Gemini and checked against the product's facts; where
+# the front, the turn and the label's numbers are in the clip is found by
+# looking at it (promo/shorts/clip-detect.mjs) unless the job file says.
 #
-# Runs when a job file lands in promo/clips/ (or Actions -> "Make clip video"
-# -> Run workflow, with the job file's name). The job file names the product,
-# the clip's path in the private promo-clips Storage bucket, and where in the
-# clip the front, the turn, the label and the ingredient list are -- see
-# promo/shorts/clip.mjs. About 5 minutes later the run's page has a "video"
-# download (the MP4 and its caption text); both are also saved to
-# promo-clips/out/.
+# Three ways to start it:
+#  - the admin panel (Clip videos): uploads the clip to the private
+#    promo-clips bucket, starts a "draft" (the words and what was found, about
+#    2 minutes), then -- once the admin approves the words -- a "render" (the
+#    finished MP4, about 6 minutes). Both are started through the video-maker
+#    Edge Function; the results are read back from the bucket.
+#  - a job file pushed to promo/clips/ (the clip's path in the bucket, and
+#    optional hints -- see promo/shorts/clip.mjs);
+#  - Actions -> "Make clip video" -> Run workflow, with a job file's name.
+#
+# The finished MP4 and caption are saved to promo-clips/out/ and are also the
+# run's "video" download.
 #
 # Everything heavy happens here, on GitHub's machine: the clip's frames
-# (ffmpeg), the voice (edge-tts, a free Microsoft voice) and the render.
+# (ffmpeg), the voice (Gemini) and the render.
 #
 # Needs the repo secret SUPABASE_SERVICE_ROLE_KEY (Settings -> Secrets and
 # variables -> Actions) to read the clip from that private bucket.
@@ -27,9 +34,23 @@ on:
     inputs:
       job:
         description: 'Job file in promo/clips/ (e.g. takatak-2026-10-27.json)'
-        required: true
+        required: false
+        default: ''
+      bucket_job:
+        description: 'Job in the bucket, jobs/<id>.json (filled in by the admin panel; leave empty)'
+        required: false
+        default: ''
+      mode:
+        description: 'render = the finished video; draft = only the words and what was found in the clip'
+        type: choice
+        options: [render, draft]
+        default: render
+      job_id:
+        description: 'Admin panel job id (filled in by the admin panel; leave empty)'
+        required: false
+        default: ''
 
-run-name: "Clip video: ${{ inputs.job || github.event.head_commit.message }}"
+run-name: "Clip video (${{ inputs.mode || 'render' }}): ${{ inputs.bucket_job || inputs.job || github.event.head_commit.message }}${{ inputs.job_id && format(' [{0}]', inputs.job_id) || '' }}"
 
 permissions:
   contents: read
@@ -43,15 +64,21 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Which job file
+      - name: Which job
         id: job
         env:
           INPUT_JOB: ${{ inputs.job }}
+          INPUT_BUCKET: ${{ inputs.bucket_job }}
         run: |
-          if [ -n "$INPUT_JOB" ]; then f="promo/clips/$(basename "$INPUT_JOB")"
-          else f=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD -- 'promo/clips/*.json' | tail -1); fi
-          if [ ! -f "$f" ]; then echo "::error::no job file ($f)"; exit 1; fi
-          echo "file=$f" >> "$GITHUB_OUTPUT"
+          if [ -n "$INPUT_BUCKET" ]; then
+            if ! [[ "$INPUT_BUCKET" =~ ^jobs/[0-9a-f]{8}\.json$ ]]; then echo "::error::not a job in the bucket ($INPUT_BUCKET)"; exit 1; fi
+            echo "arg=bucket:$INPUT_BUCKET" >> "$GITHUB_OUTPUT"
+          else
+            if [ -n "$INPUT_JOB" ]; then f="promo/clips/$(basename "$INPUT_JOB")"
+            else f=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD -- 'promo/clips/*.json' | tail -1); fi
+            if [ ! -f "$f" ]; then echo "::error::no job file ($f)"; exit 1; fi
+            echo "arg=../$f" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/setup-node@v4
         with:
@@ -60,7 +87,9 @@ jobs:
 
       - run: npm ci
 
+      # Only a render draws frames: a draft is just ffmpeg, the barcode, Gemini.
       - name: Chromium for rendering
+        if: ${{ inputs.mode != 'draft' }}
         run: npx playwright install --with-deps chromium
 
       - name: Promo tools (fonts, ffmpeg)
@@ -70,10 +99,13 @@ jobs:
           npm install --no-save ffmpeg-static@5.2.0
 
       - uses: actions/setup-python@v5
+        if: ${{ inputs.mode != 'draft' }}
         with:
           python-version: '3.12'
 
-      - name: Voice (edge-tts)
+      # The flat voice only if both Gemini voices fail (shorts/voice.py).
+      - name: Fallback voice (edge-tts)
+        if: ${{ inputs.mode != 'draft' }}
         run: pip install "edge-tts>=7,<8"
 
       - name: Make the video
@@ -82,7 +114,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # The script's words (shorts/clip-script.mjs); without them it uses its template.
+          # The script's words and the voice (shorts/clip-script.mjs, voice-gemini.mjs); without them it uses its template.
           VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
           VITE_GEMINI_API_KEY_2: ${{ secrets.VITE_GEMINI_API_KEY_2 }}
           VITE_GEMINI_API_KEY_3: ${{ secrets.VITE_GEMINI_API_KEY_3 }}
@@ -90,10 +122,14 @@ jobs:
           VITE_GEMINI_API_KEY_5: ${{ secrets.VITE_GEMINI_API_KEY_5 }}
           VITE_GEMINI_API_KEY_6: ${{ secrets.VITE_GEMINI_API_KEY_6 }}
           PLAYWRIGHT_PATH: ${{ github.workspace }}/node_modules/playwright
-          JOB: ${{ steps.job.outputs.file }}
-        run: node shorts/clip.mjs "../$JOB" --out out/video
+          ARG: ${{ steps.job.outputs.arg }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          if [ "$MODE" = "draft" ]; then node shorts/clip.mjs "$ARG" --draft
+          else node shorts/clip.mjs "$ARG" --out out/video; fi
 
       - uses: actions/upload-artifact@v4
+        if: ${{ inputs.mode != 'draft' }}
         with:
           name: video
           path: promo/out/video
