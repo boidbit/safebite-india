@@ -39,6 +39,7 @@ import { verdictFor } from '../../src/services/scoringEngine.js';
 import { NUTRIENT_LIMITS } from '../../src/services/dailyHabitCheck.js';
 import { GRAMS_FAT_PER_TEASPOON_OIL } from '../../src/services/nutrientProjection.js';
 import { GRAMS_PER_TEASPOON } from '../../src/services/sugarProjection.js';
+import { geminiVoice, TTS_MODEL, TTS_FALLBACK } from './voice-gemini.mjs';
 import { findBarcode } from './clip-barcode.mjs';
 import { writeScript, fill } from './clip-script.mjs';
 import { recordAppScreen } from './app-record.mjs';
@@ -147,10 +148,11 @@ const second = satPct >= 30 ? 'satfat' : sodiumPct >= 40 ? 'sodium' : null;
 const OIL = /palm|olein|cotton|vanaspati|hydrogenat|shortening|\boil\b/i;
 const flagNames = [...new Set(flagged.map((i) => i.name.replace(/\s*\(.*\)$/, '').trim()))];
 const named = [...flagNames.filter((n) => OIL.test(n)), ...flagNames.filter((n) => !OIL.test(n))].slice(0, leadKind === 'fat' && flagNames.some((n) => OIL.test(n)) ? Math.min(2, flagNames.filter((n) => OIL.test(n)).length) : 3);
-const hasServingBox = Boolean(job.label?.rows?.serving);
 const pickBy = (xs, salt) => xs[[...`${row.id}${salt}`].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % xs.length];
-const hookType = job.hook || (score >= 85 ? 'pass' : servingG && packAmount / servingG >= 2.5 && hasServingBox ? 'serving' : pickBy(['guess', 'pov'], 'hook'));
-const beats = ['hook', 'tease', 'turn', leadKind, ...(servingTsp != null ? ['serving'] : []), ...(second ? [second] : []), ...(named.length ? ['ing'] : []), ...(barcode ? ['scan'] : []), 'score', 'app', 'cta'];
+// "shock": the pack's own number up front ("Ek packet. 7 chammach tel. Aur aap poora kha jaate ho.");
+// serving | guess | pov | pass are the older openers (job.hook).
+const hookType = job.hook || (score >= 85 ? 'pass' : 'shock');
+const beats = ['hook', ...(hookType === 'shock' ? [] : ['tease']), 'turn', leadKind, ...(servingTsp != null ? ['serving'] : []), ...(second ? [second] : []), ...(named.length ? ['ing'] : []), ...(barcode ? ['scan'] : []), 'score', 'app', 'cta'];
 
 const ADVICE = { Excellent: ['Haan', 'हां'], Good: ['Zyaadatar haan', 'ज़्यादातर हां'], Moderate: ['Kabhi-kabhi', 'कभी-कभी'], Poor: ['Bahut kam', 'बहुत कम'], 'Very Poor': ['Bahut hi kam', 'बहुत ही कम'] }[verdict];
 const halfShow = (v) => (v === 0.5 ? '½' : String(v).replace('.5', '½'));
@@ -158,14 +160,14 @@ const halfSay = (v) => ({ 0.5: 'आधा', 1.5: 'डेढ़', 2.5: 'ढाई
 const unitSay = unit === 'ml' ? 'मिलीलीटर' : 'ग्राम';
 const values = {
   product: name, pack_g: `${packAmount} ${unit}`, pack_tsp: halfShow(packTsp), lead_word: leadKind === 'sugar' ? 'chini' : 'tel',
-  score: String(score), verdict, advice: ADVICE[0], named: list(named, 'aur'),
+  score: String(score), verdict, advice: ADVICE[0], named: list(named, 'aur'), lead_g: `${num(perPack(leadKey))} g`,
   ...(servingG ? { serving_g: `${servingG} ${unit}` } : {}),
   ...(servingTsp != null ? { serving_tsp: halfShow(servingTsp) } : {}),
   ...(second === 'satfat' ? { sat_pct: `${satPct}%` } : {}), ...(second === 'sodium' ? { sodium_pct: `${sodiumPct}%` } : {}),
   ...(leadKind === 'sugar' ? { sugar_tsp: halfShow(packTsp) } : {}),
 };
 const valuesSay = {
-  ...values, pack_g: `${packAmount} ${unitSay}`, pack_tsp: halfSay(packTsp), lead_word: leadKind === 'sugar' ? 'चीनी' : 'तेल', advice: ADVICE[1], named: list(named, 'और'),
+  ...values, pack_g: `${packAmount} ${unitSay}`, pack_tsp: halfSay(packTsp), lead_word: leadKind === 'sugar' ? 'चीनी' : 'तेल', advice: ADVICE[1], named: list(named, 'और'), lead_g: `${num(perPack(leadKey))} ग्राम`,
   ...(servingG ? { serving_g: `${servingG} ${unitSay}` } : {}),
   ...(servingTsp != null ? { serving_tsp: halfSay(servingTsp) } : {}),
   ...(second === 'satfat' ? { sat_pct: `${satPct} प्रतिशत` } : {}), ...(second === 'sodium' ? { sodium_pct: `${sodiumPct} प्रतिशत` } : {}),
@@ -186,28 +188,69 @@ console.log(`script (${script.source}${script.tries.length ? `, ${script.tries.l
 // estimated and the short is captions-only.
 const voiceDir = path.join(work, 'voice');
 const secs = {};
+const offsets = {}; // beat -> where each of its sentences ("|" in the line) starts, in seconds into the line
 let voiced = false;
+// How each line is said: Gemini's voice takes the direction in words.
+const STYLE = {
+  hook: ['amused and a little teasing, setting the scene, a short pause after.', 'stunned and wide-eyed, hitting the number hard.', 'cheeky, the voice rising at the end as if saying "really?".'],
+  tease: 'playful and curious, a smile in the voice.',
+  turn: 'lowering her voice, intrigued, as if about to reveal a secret.',
+  fat: 'stunned and amused, stressing the numbers, a little laugh in the voice.',
+  sugar: 'stunned and amused, stressing the numbers, a little laugh in the voice.',
+  serving: 'matter-of-fact at first, then surprised at the second number.',
+  satfat: 'serious and building up, stressing the percentage.',
+  sodium: 'serious and building up, stressing the percentage.',
+  ing: 'curious and pointing things out, slightly slower on the names.',
+  scan: 'quick and upbeat, like pressing a button.',
+  score: 'calm, confident, announcing the verdict.',
+  app: 'friendly and upbeat.',
+  cta: 'warm and smiling, inviting the viewer.',
+};
+// The old flat voice (a free Microsoft neural voice through edge-tts), if Gemini's can't be had.
+const edgeVoice = () => {
+  const spec = path.join(voiceDir, 'lines.json');
+  // Questions lift a little; the reveals (the numbers) come a touch slower.
+  const prosody = (b) => (/\?\s*$/.test(LINES[b].say) ? { pitch: '+6Hz' } : ['fat', 'sugar', 'satfat', 'sodium', 'score'].includes(b) ? { rate: '+8%' } : {});
+  fs.writeFileSync(spec, JSON.stringify({ voice: 'hi-IN-SwaraNeural', rate: job.rate || '+15%', lines: beats.map((b) => ({ text: LINES[b].say.replace(/\*/g, '').replace(/\|/g, ' '), ...prosody(b) })) }, null, 1));
+  execFileSync(process.env.PYTHON || 'python3', [path.join(HERE, 'voice.py'), spec, voiceDir], { stdio: 'inherit' });
+  const trim = 'silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse';
+  beats.forEach((b, i) => {
+    const wav = path.join(voiceDir, `${b}.wav`);
+    execFileSync(ffmpeg(), ['-y', '-v', 'error', '-i', path.join(voiceDir, `v${String(i).padStart(2, '0')}.mp3`), '-af', trim, '-ar', '44100', '-ac', '1', '-c:a', 'pcm_s16le', wav]);
+    secs[b] = wavSeconds(fs.readFileSync(wav));
+  });
+};
 if (!args.includes('--no-voice')) {
+  fs.mkdirSync(voiceDir, { recursive: true });
   try {
-    fs.mkdirSync(voiceDir, { recursive: true });
-    const spec = path.join(voiceDir, 'lines.json');
-    const base = job.rate || '+15%';
-    // Questions lift a little; the reveals (the numbers) come a touch slower.
-    const prosody = (b) => (/\?\s*$/.test(LINES[b].say) ? { pitch: '+6Hz' } : ['fat', 'sugar', 'satfat', 'sodium', 'score'].includes(b) ? { rate: '+8%' } : {});
-    fs.writeFileSync(spec, JSON.stringify({ voice: job.voice || 'hi-IN-SwaraNeural', rate: base, lines: beats.map((b) => ({ text: LINES[b].say.replace(/\*/g, ''), ...prosody(b) })) }, null, 1));
-    execFileSync(process.env.PYTHON || 'python3', [path.join(HERE, 'voice.py'), spec, voiceDir], { stdio: 'inherit' });
-    const trim = 'silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse';
-    beats.forEach((b, i) => {
-      const wav = path.join(voiceDir, `${b}.wav`);
-      execFileSync(ffmpeg(), ['-y', '-v', 'error', '-i', path.join(voiceDir, `v${String(i).padStart(2, '0')}.mp3`), '-af', trim, '-ar', '44100', '-ac', '1', '-c:a', 'pcm_s16le', wav]);
-      secs[b] = wavSeconds(fs.readFileSync(wav));
-    });
+    // Takes are kept in the bucket: a re-run (or the render after a local preview) speaks the same words the same way.
+    const cache = {
+      get: async (key) => { const { data } = await supabase.storage.from(BUCKET).download(`voice-cache/${key}.pcm`); return data ? Buffer.from(await data.arrayBuffer()) : null; },
+      put: (key, pcm) => supabase.storage.from(BUCKET).upload(`voice-cache/${key}.pcm`, pcm, { contentType: 'application/octet-stream', upsert: true }),
+    };
+    const spoken = beats.map((b) => ({ id: b, text: LINES[b].say.replace(/\*/g, ''), style: STYLE[b] || STYLE.app }));
+    let v;
+    for (const model of [TTS_MODEL, TTS_FALLBACK]) {
+      try { v = await geminiVoice(spoken, voiceDir, { model, tempo: job.tempo || undefined, cache }); console.log(`voice: ${model}`); break; } catch (e) {
+        if (!e.quota || model === TTS_FALLBACK) throw e;
+        console.log(`::warning title=Voice model::${model} is out of free quota today -- the whole video is voiced with ${TTS_FALLBACK}`);
+      }
+    }
+    Object.assign(secs, v.secs); Object.assign(offsets, v.offsets);
     voiced = true;
   } catch (e) {
-    console.log(`::warning title=No voice::the voiceover wasn't made (${String(e.message).split('\n')[0]}) -- captions only`);
+    console.log(`::warning title=Gemini voice::${String(e.message).split('\n')[0]} -- using the flat voice`);
+    try { edgeVoice(); voiced = true; } catch (e2) {
+      console.log(`::warning title=No voice::the voiceover wasn't made (${String(e2.message).split('\n')[0]}) -- captions only`);
+    }
   }
 }
-for (const b of beats) if (!voiced) secs[b] = 0.2 + 0.32 * LINES[b].show.split(/\s+/).length;
+// Without the voice (or its sentence times) the timing is estimated from the words.
+for (const b of beats) {
+  const parts = LINES[b].say.split('|');
+  if (!voiced) { let at = 0; offsets[b] = parts.map((p) => { const o = r2(at); at += 0.2 + 0.32 * p.trim().split(/\s+/).length + 0.2; return o; }); secs[b] = at - 0.2; }
+  else if (!offsets[b]) { const total = parts.reduce((n, p) => n + p.length, 0); let at = 0; offsets[b] = parts.map((p) => { const o = r2((at / total) * secs[b]); at += p.length; return o; }); }
+}
 function wavSeconds(buf) {
   for (let o = 12; o + 8 <= buf.length;) {
     const id = buf.toString('ascii', o, o + 4), size = buf.readUInt32LE(o + 4);
@@ -234,8 +277,9 @@ const play = (t0, t1, s0, s1, { min = 0.75, max = 3, ease = false } = {}) => {
 };
 const hold = (t0, t1, s) => clip.push({ t0, t1, s0: s, s1: s });
 const camKey = (t, x, y, z, more = {}) => cam.push({ t: r2(t), x, y, z, ...more });
-const say = (b, t) => {
+const say = (b, t, caps = true) => {
   voice.push({ id: b, t: r2(t), file: voiced ? `voice/${b}.wav` : null });
+  if (!caps) return; // the hook's own big type says it
   // Each word lights up as it is said, timed by its share of the line's
   // letters. A unit or a dash stays with the word before it ("70%", "fat —");
   // a starred word, or one with a number in it, is the line's key word.
@@ -245,7 +289,7 @@ const say = (b, t) => {
   let at = t, chunk = [];
   const push = () => { if (chunk.length) captions.push({ words: chunk, end: r2(t + secs[b] + 0.25) }); chunk = []; };
   for (const w of words) {
-    if (chunk.length >= 3 || chunk.reduce((n, [x]) => n + x.length + 1, 0) + w.length > 17) push();
+    if (chunk.length >= 3 || chunk.reduce((n, [x]) => n + x.length + 1, 0) + w.length > 14) push();
     const emph = /\*/.test(w) || /\d/.test(w);
     chunk.push([w.replace(/\*/g, ''), r2(at), emph ? 1 : 0]);
     at += (secs[b] * (w.length + 1)) / total;
@@ -261,8 +305,27 @@ const scenes = {};
 
 // 6a. Hook. "Serving" opens on the label's serving line; the others on the pack's front.
 const [fr0, fr1] = job.front;
-const hookEnd = r2(slot('hook', 1.7));
-if (hookType === 'serving') {
+const hookEnd = r2(hookType === 'shock' ? 0.08 + secs.hook + 0.55 : slot('hook', 1.7));
+let hero = null;
+if (hookType === 'shock') {
+  // Three sentences, each spoken on its own, so the big number lands on its word:
+  // EK PACKET / the number, the bowl filling teaspoon by teaspoon / AUR AAP POORA KHA JAATE HO.
+  const tP = offsets.hook.map((x) => r2(0.08 + x));
+  const n = Math.ceil(packTsp);
+  const p1Len = (offsets.hook[2] ?? secs.hook) - offsets.hook[1] - 0.2;
+  const step = Math.min(0.17, Math.max(0.07, (p1Len - 0.15) / n));
+  const ticks = Array.from({ length: n }, (_, i) => r2(tP[1] + 0.1 + i * step));
+  const p2Len = secs.hook - (offsets.hook[2] ?? 0);
+  hero = {
+    parts: tP, n: halfShow(packTsp), fill: leadKind === 'sugar' ? 'sugar' : 'oil', word: leadKind === 'sugar' ? 'CHAMMACH CHINI' : 'CHAMMACH TEL', ticks,
+    lines: [{ text: 'AUR AAP', t: tP[2] }, { text: 'POORA', t: r2(tP[2] + p2Len * 0.3) }, { text: 'KHA JAATE HO', t: r2(tP[2] + p2Len * 0.52) }], end: hookEnd,
+  };
+  ticks.forEach((x) => spoons.push(x));
+  shakes.push(r2(tP[1] + 0.02), r2(hero.lines[1].t));
+  sfx.push({ t: 0.05, kind: 'pop' }, { t: tP[1] + 0.02, kind: 'hit' }, { t: tP[2], kind: 'pop' }, { t: hero.lines[1].t, kind: 'hit' }, { t: hero.lines[2].t, kind: 'pop' });
+  play(0, hookEnd, fr0, fr1);
+  camKey(0, 540, 960, 1.04); camKey(tP[1], 540, 960, 1.08); camKey(tP[1] + 0.15, 540, 960, 1.2); camKey(tP[2], 540, 960, 1.22); camKey(hookEnd, 540, 960, 1.34, { whip: 30 });
+} else if (hookType === 'serving') {
   hold(0, hookEnd, L);
   const [sx, sy] = centre(rows.serving);
   camKey(0, sx + 60, sy - 40, 2.5); camKey(hookEnd, sx + 60, sy - 40, 2.75);
@@ -272,17 +335,19 @@ if (hookType === 'serving') {
   play(0, hookEnd, fr0, fr0 + (fr1 - fr0) * 0.5);
   camKey(0, 540, 960, 1.04); camKey(hookEnd, 540, 960, 1.14);
 }
-say('hook', 0.08);
-sfx.push({ t: 0.05, kind: 'pop' });
+say('hook', 0.08, !hero);
+if (!hero) sfx.push({ t: 0.05, kind: 'pop' });
 t = hookEnd;
 
-// 6b. Tease: a whip to the pack's front.
-const teaseEnd = r2(t + slot('tease', 1.6));
-play(t, teaseEnd, hookType === 'serving' ? fr0 : fr0 + (fr1 - fr0) * 0.5, fr1);
-camKey(t, 540, 960, 1.2, { whip: 60 }); camKey(t + 0.22, 540, 960, 1.06); camKey(teaseEnd, 540, 960, 1.12);
-sfx.push({ t, kind: 'whoosh' }, { t: t + 0.25, kind: 'pop' });
-say('tease', t + 0.12);
-t = teaseEnd;
+// 6b. Tease: a whip to the pack's front (the older openers; the shock hook has none).
+if (!hero) {
+  const teaseEnd = r2(t + slot('tease', 1.6));
+  play(t, teaseEnd, hookType === 'serving' ? fr0 : fr0 + (fr1 - fr0) * 0.5, fr1);
+  camKey(t, 540, 960, 1.2, { whip: 60 }); camKey(t + 0.22, 540, 960, 1.06); camKey(teaseEnd, 540, 960, 1.12);
+  sfx.push({ t, kind: 'whoosh' }, { t: t + 0.25, kind: 'pop' });
+  say('tease', t + 0.12);
+  t = teaseEnd;
+}
 scenes.hook = [0, t];
 
 // 6c. The turn, fast, with a speed ramp and a shake, into the frozen label.
@@ -313,7 +378,22 @@ const factBeat = (b, key, card) => {
   cards.push({ ...card, t0: r2(t + 0.25), t1: r2(t + dur) });
   t += dur;
 };
-if (leadKind) {
+if (leadKind && hero) {
+  // The proof for the hook: the label's grams, divided by the grams in a teaspoon, make the number.
+  const start = t;
+  const sentences = LINES[leadKind].say.split(/[।?!]/).filter((s) => s.trim());
+  const share = sentences.length > 1 ? 1 - sentences[sentences.length - 1].length / sentences.join('').length : 0.5;
+  const t3 = r2(start + 0.1 + secs[leadKind] * share);
+  const perTsp = leadKind === 'sugar' ? GRAMS_PER_TEASPOON : GRAMS_FAT_PER_TEASPOON_OIL;
+  factBeat(leadKind, leadKey, {
+    kind: 'proof', tag: `${leadKind === 'sugar' ? 'ADDED SUGAR' : 'FAT'} · POORA PACK · ${pack}`, g: num(perPack(leadKey)), gWord: leadKind === 'sugar' ? 'added sugar' : 'fat',
+    per: `÷ ${perTsp} g = 1 chammach ${leadKind === 'sugar' ? 'chini' : 'tel'}`, n: halfShow(packTsp), unitWord: leadKind === 'sugar' ? 'chammach chini' : 'chammach tel', t3, fill: hero.fill,
+    mark: leadKind === 'sugar' ? 'Added sugar' : 'Total fat',
+  });
+  sfx.push({ t: start + 0.3, kind: 'pop' }, { t: start + 0.75, kind: 'pop' }, { t: t3, kind: 'hit' });
+  shakes.push(t3);
+  hero.proofAt = t3;
+} else if (leadKind) {
   const unitTag = `POORA PACK · ${pack}`;
   const ticks = [];
   for (let i = 0; i < Math.ceil(packTsp); i++) ticks.push(r2(t + 0.6 + i * Math.min(0.22, (slot(leadKind, 2.2, 0.35) - 1.1) / Math.ceil(packTsp))));
@@ -348,7 +428,9 @@ scenes.label[1] = r2(t);
 // 6e. Down the ingredient list to the barcode, the ones worth a look named as they're said.
 const scanAt = barcode ? Math.min(barcode.at, clipSeconds - 0.04) : clipSeconds - 0.04;
 let chips = [];
+let ingAt = null;
 if (named.length) {
+  ingAt = t;
   const end = r2(t + slot('ing', 2.0, 0.3));
   // Too far to cover in the time: start later down the list.
   const from = Math.max(L, scanAt - (end - t) * 2.2);
@@ -408,14 +490,15 @@ camKey(duration, 540, 960, 1.2, { blur: 24 });
 cam.sort((a, b) => a.t - b.t);
 clip.sort((a, b) => a.t0 - b.t0);
 clip[clip.length - 1].t1 = duration;
-const transitions = [{ t: hookEnd, kind: 'push' }, { t: phoneStart, kind: 'burst' }, { t: ctaStart, kind: 'wipe' }];
+// A coloured band sweeps across (the cut happens under it); the soundtrack whooshes on each.
+const transitions = [{ t: hookEnd, kind: hero ? 'swipe' : 'push' }, ...(ingAt != null ? [{ t: ingAt, kind: 'swipe' }] : []), { t: phoneStart, kind: 'burst' }, { t: ctaStart, kind: 'wipe' }];
 
 const TL = {
   _: `Made by shorts/clip.mjs from ${path.basename(jobFile)} and product ${row.id} (${name}). Facts from the pack's nutrition panel and ingredient list as saved in FoodGuard; words: ${script.source}.`,
   duration, fps: FPS, music: pickBy(['warm', 'bright', 'chill', 'pulse', 'lofi'], 'music'), musicGain: voiced ? 0.4 : 1,
   scenes, transitions, firstToken: scenes.label[0], tokenStep: 0, tokens: [], sfx, spoons,
   frames, clip, cam, freezeAt, marks, cards, chips, scan, shakes, captions, voice,
-  hook: { type: hookType, stickers: [LINES.hook.sticker, LINES.tease.sticker], at: [0.05, hookEnd + 0.22] },
+  hook: { type: hookType, stickers: [LINES.hook.sticker || '', LINES.tease?.sticker || ''], at: [0.05, hookEnd + 0.22], hero },
   score, verdict, advice: ADVICE[0],
   phone: { t0: phoneStart, scoreAt: phoneStart + 1.9 },
   app: app ? { frames: app.frames, fps: app.fps, width: app.width, height: app.height } : null,
@@ -434,7 +517,7 @@ if (PREVIEW) process.exit(0);
 if (path.dirname(work) !== HERE) fail('a video is rendered from promo/shorts/<name>/ (leave out --work)');
 execFileSync(process.execPath, [path.join(HERE, 'build-short.cjs'), slug, String(duration)], { cwd: path.join(HERE, '..'), stdio: 'inherit', env: { ...process.env, RENDER_FPS: String(FPS) } });
 const brandTag = brand.replace(/[^A-Za-z]/g, '');
-const caption = `${LINES.hook.show.replace(/\*/g, '')} ${LINES.tease.show.replace(/\*/g, '')}
+const caption = `${LINES.hook.show.replace(/\*/g, '')} ${LINES.tease ? LINES.tease.show.replace(/\*/g, '') : ''}
 
 ${brand && !name.toLowerCase().startsWith(brand.toLowerCase()) ? `${brand} ` : ''}${name} (${pack}), label padha:
 ${leadKind === 'sugar' ? `🥄 Poora pack = lagbhag ${halfShow(packTsp)} chammach chini (${num(perPack('addedSugarG'))} g added sugar)` : `🛢️ Poora pack = lagbhag ${packTsp} chammach tel jitna fat (${num(perPack('totalFatG'))} g)`}

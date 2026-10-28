@@ -13,12 +13,16 @@
 // Each line comes back as { show, say, sticker? }: show is Hinglish in
 // Roman letters (the captions; *one word* may be starred for emphasis), say
 // is the same sentence in Hindi script for the voice.
-import { callGemini } from '../../src/services/geminiService.js';
+import { callGeminiRaw } from '../../src/services/geminiService.js';
+
+// The script is written once per video, so a stronger model than the app's lite one.
+const SCRIPT_MODELS = ['gemini-3.5-flash', 'gemini-3.1-flash-lite'];
 
 // What a line may never say -- English, Hinglish and Hindi script.
 const BANNED = /\b(harm(ful)?|toxic|poison|cancer|deadly|danger(ous)?|unhealthy|junk|avoid|never eat|kill(er|s)?|disease|heart attack|diabetes|obes(e|ity)|cheat(ing)?|scam|fraud|lie|lying|liar|fake|zeher|zahar|khatarnak|bimari|beemari|maut|dhokha|jhoo?th|loot|mat khao|band karo|bekaar|ganda)\b|ज़?हर|ख़?तरनाक|बीमारी|कैंसर|मौत|धोखा|झूठ|लूट|मत खाओ|जानलेवा|बेकार|गंदा/i;
 
 const HOOKS = {
+  shock: 'The hook is already written (fixed, not yours): the whole pack holds {pack_tsp} chammach of {lead_word}, "and you finish the whole pack". Do not write hook or tease.',
   serving: 'The label says one serving is {serving_g}. Hook: point that out; tease: ask who really stops at {serving_g} (people eat the whole pack). Do not reveal the teaspoons yet.',
   guess: 'Hook: ask the viewer to guess how many teaspoons of {lead_word} one pack holds. Tease: offer a couple of guesses as words ("ek? do?"), no answer yet.',
   pov: 'Hook: a POV opener -- finishing the whole pack in one sitting (with a movie, after school, at the office). Tease: "but what did the label say?"',
@@ -40,11 +44,18 @@ const BEAT_RULES = {
   app: 'the app on screen: every ingredient explained; short',
   cta: 'end: check your own pack with FoodGuard India, it is free; short',
 };
+const SHOCK_RULES = {
+  turn: 'right after the hook: turn the pack to the label to check it; 3-6 words, ends with "…"',
+  fat: 'the proof for the hook: the label gives {lead_g} of fat in the whole pack, which is the {pack_tsp} chammach tel -- must contain {lead_g} and {pack_tsp}',
+  sugar: 'the proof for the hook: the label gives {lead_g} of added sugar in the whole pack, which is the {sugar_tsp} chammach chini -- must contain {lead_g} and {sugar_tsp}',
+};
 const REQUIRED = { hook: [], tease: [], turn: [], fat: ['pack_tsp'], sugar: ['sugar_tsp'], serving: ['serving_tsp', 'pack_tsp'], satfat: ['sat_pct'], sodium: ['sodium_pct'], ing: ['named'], scan: [], score: ['score', 'verdict', 'advice'], app: [], cta: [] };
 
 // The template: used when Gemini can't be reached or none of its tries pass.
 const TEMPLATE = {
   hook: {
+    // Three sentences, spoken one by one ("|"): the video times its big number to the second.
+    shock: { show: 'Ek packet. *{pack_tsp}* chammach {lead_word}. Aur aap poora kha jaate ho.', say: 'एक पैकेट।|{pack_tsp} चम्मच {lead_word}।|और आप पूरा खा जाते हो।' },
     serving: { sticker: 'Serving: sirf {serving_g}', show: 'Packet kehta hai: ek serving sirf {serving_g}.', say: 'पैकेट कहता है: एक सर्विंग सिर्फ़ {serving_g}।' },
     guess: { sticker: 'Guess karo!', show: 'Is pack mein kitne chammach {lead_word}?', say: 'इस पैक में कितने चम्मच {lead_word}?' },
     pov: { sticker: 'POV: poora pack khatam', show: 'Movie khatam, pack bhi khatam.', say: 'मूवी ख़त्म, पैक भी ख़त्म।' },
@@ -57,8 +68,14 @@ const TEMPLATE = {
     pass: { sticker: 'Chalo padhte hain', show: 'Chalo, peeche ka label padhte hain.', say: 'चलो, पीछे का लेबल पढ़ते हैं।' },
   },
   turn: { show: 'Poora pack khao, to…', say: 'पूरा पैक खाओ, तो…' },
-  fat: { show: '…lagbhag *{pack_tsp}* chammach tel jitna fat.', say: '…लगभग {pack_tsp} चम्मच तेल जितना फैट।' },
-  sugar: { show: '…lagbhag *{sugar_tsp}* chammach chini.', say: '…लगभग {sugar_tsp} चम्मच चीनी।' },
+  fat: {
+    shock: { show: 'Label dekho: poore pack mein *{lead_g}* fat. Yaani {pack_tsp} chammach tel.', say: 'लेबल देखो: पूरे पैक में {lead_g} फैट। यानी {pack_tsp} चम्मच तेल।' },
+    show: '…lagbhag *{pack_tsp}* chammach tel jitna fat.', say: '…लगभग {pack_tsp} चम्मच तेल जितना फैट।',
+  },
+  sugar: {
+    shock: { show: 'Label dekho: poore pack mein *{lead_g}* added sugar. Yaani {sugar_tsp} chammach chini.', say: 'लेबल देखो: पूरे पैक में {lead_g} एडेड शुगर। यानी {sugar_tsp} चम्मच चीनी।' },
+    show: '…lagbhag *{sugar_tsp}* chammach chini.', say: '…लगभग {sugar_tsp} चम्मच चीनी।',
+  },
   serving: { show: 'Ek serving: {serving_tsp} chammach. Poora pack: *{pack_tsp}*.', say: 'एक सर्विंग: {serving_tsp} चम्मच। पूरा पैक: {pack_tsp}।' },
   satfat: { show: 'Saturated fat? Din bhar ki limit ka *{sat_pct}*… ek hi pack mein.', say: 'सैचुरेटेड फैट? दिन भर की लिमिट का {sat_pct}… एक ही पैक में।' },
   sodium: { show: 'Namak? Din bhar ki limit ka *{sodium_pct}*.', say: 'नमक? दिन भर की लिमिट का {sodium_pct}।' },
@@ -69,10 +86,13 @@ const TEMPLATE = {
   cta: { show: 'Apna packet khud check karo. FoodGuard India, free hai.', say: 'अपना पैकेट ख़ुद चेक करो। FoodGuard India, फ़्री है।' },
 };
 
+// After the "shock" hook the fat / sugar beat is the proof (the label's grams), not the reveal.
+const requiredFor = (beat, hookType) => (hookType === 'shock' && (beat === 'fat' || beat === 'sugar') ? ['lead_g', beat === 'fat' ? 'pack_tsp' : 'sugar_tsp'] : REQUIRED[beat] || []);
+
 const placeholders = (s) => [...String(s || '').matchAll(/\{([a-z_]+)\}/g)].map((m) => m[1]);
 
 /** Problems with one line, [] when it passes. */
-export function checkLine(beat, line, known) {
+export function checkLine(beat, line, known, hookType) {
   const bad = [];
   if (!line || typeof line.show !== 'string' || typeof line.say !== 'string') return ['missing show/say'];
   for (const k of ['show', 'say', 'sticker']) {
@@ -82,11 +102,11 @@ export function checkLine(beat, line, known) {
     if (BANNED.test(s)) bad.push(`${k} uses a banned word`);
     for (const p of placeholders(s)) if (!known.has(p)) bad.push(`${k} uses unknown {${p}}`);
   }
-  for (const p of REQUIRED[beat] || []) {
+  for (const p of requiredFor(beat, hookType)) {
     if (!placeholders(line.show).includes(p)) bad.push(`show lacks {${p}}`);
     if (!placeholders(line.say).includes(p)) bad.push(`say lacks {${p}}`);
   }
-  if (line.show.replace(/\{[a-z_]+\}/g, 'x').split(/\s+/).length > 13) bad.push('show is too long');
+  if (line.show.replace(/\{[a-z_]+\}/g, 'x').split(/\s+/).length > 11) bad.push('show is too long (11 words at most)');
   if (!/[ऀ-ॿ]/.test(line.say)) bad.push('say is not in Hindi script');
   if ((beat === 'hook' || beat === 'tease') && (!line.sticker || line.sticker.replace(/\{[a-z_]+\}/g, 'xxxx').length > 26)) bad.push('sticker missing or too long');
   return bad;
@@ -100,31 +120,34 @@ export function checkLine(beat, line, known) {
  */
 export async function writeScript(facts, { useAi = true } = {}) {
   const known = new Set(Object.keys(facts.values));
+  const shock = facts.hookType === 'shock';
   const template = () => Object.fromEntries(facts.beats.map((b) => [b, TEMPLATE[b][facts.hookType] || TEMPLATE[b]]));
+  // The "shock" hook is fixed, not Gemini's: the strongest opener we have, with the pack's own number.
+  const fixed = shock ? { hook: TEMPLATE.hook.shock } : {};
+  const ask = facts.beats.filter((b) => !fixed[b]);
+  const ruleOf = (b) => (shock && SHOCK_RULES[b]) || BEAT_RULES[b];
   const tries = [];
   if (useAi) {
-    const prompt = `You write the voiceover for a 25-second YouTube Short / Instagram Reel for FoodGuard India, an app that reads Indian food labels.
+    const prompt = `You write the voiceover for a 35-second YouTube Short / Instagram Reel for FoodGuard India, an app that reads Indian food labels.
 The video: a real phone clip of someone holding "${facts.product}" by ${facts.brand} (${facts.pack}, ${facts.foodType}), turning it over to the label, then scanning its barcode in the app.
 
-Write one line for each beat, in this order: ${facts.beats.join(', ')}.
-${facts.beats.map((b) => `- ${b}: ${BEAT_RULES[b]}`).join('\n')}
+Write one line for each beat, in this order: ${ask.join(', ')}.
+${ask.map((b) => `- ${b}: ${ruleOf(b)}`).join('\n')}
 Hook style: ${HOOKS[facts.hookType]}
-
+${shock ? `The opening, already recorded: "Ek packet. {pack_tsp} chammach ${'{lead_word}'}. Aur aap poora kha jaate ho." Continue from there without repeating it.\n` : ''}
 Facts are placeholders -- use them exactly as written, never write a number yourself (no digits at all):
 ${[...known].map((k) => `{${k}} = ${facts.values[k]}`).join('\n')}
 
-Tone: how a friend talks to you in Hinglish -- short, punchy, a little playful, a question now and then, "aap"/"tum" allowed. Not a news reader, not a lecture. Natural grammar ("label kehta hai", "pack mein").
-The tone, for a different product with a "guess" hook (do not reuse these words):
-  hook [Kitni chini? Guess karo] "Is chhoti si bottle mein kitni chini?"
-  tease [Ek? Do? Teen?] "Ek chammach? Do? Ya usse bhi zyada?"
+Tone: how a friend talks to you in Hinglish -- short, punchy, a little playful, a question now and then, "aap"/"tum" allowed. Not a news reader, not a lecture. Natural grammar ("label kehta hai", "pack mein"). Keep every line to 10 words or fewer: it is spoken in a few seconds.
+The tone, for a different product (do not reuse these words):
   turn "Chalo, peeche dekhte hain…"
   sugar "Poori bottle mein *{sugar_tsp}* chammach chini!"
   score "FoodGuard score {score}, {verdict}. Roz peeyein? {advice}."
   cta "Apni bottle khud scan karo, FoodGuard free hai."
-Rules: only these facts; neutral about the brand -- no insults, no "harmful", "unhealthy", "junk", "avoid", "zeher", "jhooth", "dhokha", no health or disease claims, no emoji.
-Each line: "show" = Hinglish in Roman letters, at most 12 words, you may wrap ONE key word in *stars*; "say" = the very same sentence in Hindi (Devanagari) script for a Hindi text-to-speech voice (English product words like Palmolein may stay in Roman). hook and tease also get a "sticker": 2-5 words, at most 24 letters, for a big on-screen sticker.
+Rules: only these facts. Say only what the facts say: the label states amounts (grams, serving size, ingredients); it never "recommends", "allows" or "approves" anything, so do not write that it does. Neutral about the brand -- no insults, no "harmful", "unhealthy", "junk", "avoid", "zeher", "jhooth", "dhokha", no health or disease claims, no emoji.
+Each line: "show" = Hinglish in Roman letters, at most 10 words, you may wrap ONE key word in *stars*; "say" = the very same sentence in Hindi (Devanagari) script for a Hindi text-to-speech voice (English product words like Palmolein may stay in Roman).${ask.some((b) => b === 'hook' || b === 'tease') ? ' hook and tease also get a "sticker": 2-5 words, at most 24 letters, for a big on-screen sticker.' : ''}
 
-Reply with JSON only: {"lines": {"${facts.beats[0]}": {"sticker": "...", "show": "...", "say": "..."}, ...}}`;
+Reply with JSON only: {"lines": {"${ask[0]}": {${ask[0] === 'hook' ? '"sticker": "...", ' : ''}"show": "...", "say": "..."}, ...}}`;
     // Each retry is told what was wrong with the last answer. The best answer
     // seen is kept: if no try passes whole, its passing lines are used and
     // only the failing ones come from the template.
@@ -132,17 +155,20 @@ Reply with JSON only: {"lines": {"${facts.beats[0]}": {"sticker": "...", "show":
     let best = null;
     for (let i = 0; i < 4; i++) {
       try {
-        const { text } = await Promise.race([
-          callGemini({ contents: [{ parts: [{ text: prompt + feedback }] }], generationConfig: { temperature: 0.9, responseMimeType: 'application/json' } }),
-          new Promise((_, no) => setTimeout(() => no(new Error('Gemini took over 45 s')), 45000)),
+        const data = await Promise.race([
+          // The stronger model first; the app's lite one if it is busy.
+          callGeminiRaw({ contents: [{ parts: [{ text: prompt + feedback }] }], generationConfig: { temperature: 0.9, responseMimeType: 'application/json' } }, SCRIPT_MODELS[i < 3 ? 0 : 1]),
+          new Promise((_, no) => setTimeout(() => no(new Error('Gemini took over 60 s')), 60000)),
         ]);
-        const lines = JSON.parse(String(text).replace(/^```(json)?|```$/g, '').trim()).lines || {};
-        const problems = facts.beats.flatMap((b) => checkLine(b, lines[b], known).map((p) => `${b}: ${p}`));
-        if (!problems.length) return { lines: Object.fromEntries(facts.beats.map((b) => [b, lines[b]])), source: 'gemini', tries };
+        const text = (data.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought && p.text).map((p) => p.text).join('');
+        const got = JSON.parse(String(text).replace(/^```(json)?|```$/g, '').trim()).lines || {};
+        const lines = { ...got, ...fixed };
+        const problems = ask.flatMap((b) => checkLine(b, lines[b], known, facts.hookType).map((p) => `${b}: ${p}`));
+        if (!problems.length) return { lines: Object.fromEntries(facts.beats.map((b) => [b, lines[b]])), source: shock ? 'gemini (the hook is fixed)' : 'gemini', tries };
         tries.push(problems.slice(0, 4).join('; '));
-        const passing = facts.beats.filter((b) => !checkLine(b, lines[b], known).length);
+        const passing = facts.beats.filter((b) => fixed[b] || !checkLine(b, lines[b], known, facts.hookType).length);
         if (!best || passing.length > best.passing.length) best = { lines, passing };
-        feedback = `\n\nYour last answer was rejected: ${problems.join('; ')}.\nFix exactly these. Remember: not a single digit outside the {placeholders} (write {serving_g}, never the number), and every "say" in Devanagari script.`;
+        feedback = `\n\nYour last answer was rejected: ${problems.join('; ')}.\nFix exactly these. Remember: not a single digit outside the {placeholders} (write {serving_g}, never the number), at most 10 words per line, and every "say" in Devanagari script.`;
       } catch (e) {
         tries.push(String(e.message || e).split('\n')[0].slice(0, 120));
         // "high demand" and quota blips pass in a few seconds.
@@ -160,6 +186,7 @@ Reply with JSON only: {"lines": {"${facts.beats[0]}": {"sticker": "...", "show":
 
 /** A line with its placeholders filled: show for the captions, say for the voice. */
 export function fill(line, values, valuesSay) {
-  const put = (s, v) => String(s || '').replace(/\{([a-z_]+)\}/g, (_, k) => v[k] ?? '');
+  // (The model now and then wraps a placeholder in `backticks`: not for the screen or the voice.)
+  const put = (s, v) => String(s || '').replace(/`/g, '').replace(/\{([a-z_]+)\}/g, (_, k) => v[k] ?? '');
   return { show: put(line.show, values), say: put(line.say, valuesSay), sticker: line.sticker ? put(line.sticker, values) : undefined };
 }

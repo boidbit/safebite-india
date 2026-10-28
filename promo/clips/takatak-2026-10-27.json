@@ -1,42 +1,84 @@
 {
-  "_": "Haldiram's TakaTak Chatpata Masala, 90 g family pack -- the clip sent on 27 Oct 2026. The product comes from the barcode read off the clip. Seconds, and boxes in the clip's 1080x1920 pixels (serving: x, y, w, h, tilt).",
-  "clip": "clips/takatak-2026-10-27-a.mp4",
-  "front": [
-    0,
-    2.5
-  ],
-  "flip": [
-    2.5,
-    5.13
-  ],
-  "label": {
-    "at": 5.13,
-    "rows": {
-      "totalFatG": [
-        232,
-        792,
-        116,
-        40
-      ],
-      "saturatedFatG": [
-        232,
-        828,
-        116,
-        40
-      ],
-      "sodiumMg": [
-        222,
-        896,
-        126,
-        40
-      ],
-      "serving": [
-        38,
-        994,
-        118,
-        46,
-        -9
-      ]
-    }
+ "_": "Haldiram's TakaTak Chatpata Masala, 90 g family pack -- the clip sent on 27 Oct 2026. The product comes from the barcode read off the clip. Seconds, and boxes in the clip's 1080x1920 pixels (serving: x, y, w, h, tilt). The words are pinned below (written by Gemini for the v4 preview and checked against the product facts), so a re-run speaks the same takes; delete \"script\" to have Gemini write it again.",
+ "clip": "clips/takatak-2026-10-27-a.mp4",
+ "front": [
+  0,
+  2.5
+ ],
+ "flip": [
+  2.5,
+  5.13
+ ],
+ "label": {
+  "at": 5.13,
+  "rows": {
+   "totalFatG": [
+    232,
+    792,
+    116,
+    40
+   ],
+   "saturatedFatG": [
+    232,
+    828,
+    116,
+    40
+   ],
+   "sodiumMg": [
+    222,
+    896,
+    126,
+    40
+   ],
+   "serving": [
+    38,
+    994,
+    118,
+    46,
+    -9
+   ]
   }
+ },
+ "script": {
+  "hook": {
+   "show": "Ek packet. *{pack_tsp}* chammach {lead_word}. Aur aap poora kha jaate ho.",
+   "say": "एक पैकेट।|{pack_tsp} चम्मच {lead_word}।|और आप पूरा खा जाते हो।"
+  },
+  "turn": {
+   "show": "Peeche ghuma ke *label* dekhte hain…",
+   "say": "पीछे घुमा के लेबल देखते हैं…"
+  },
+  "fat": {
+   "show": "Pack mein {lead_g} fat hai, yaani {pack_tsp} chammach tel!",
+   "say": "पैक में {lead_g} फैट है, यानी {pack_tsp} चम्मच तेल!"
+  },
+  "serving": {
+   "show": "Serving size {serving_tsp} chammach, par poora pack {pack_tsp}!",
+   "say": "सर्विंग साइज {serving_tsp} चम्मच, पर पूरा पैक {pack_tsp}!"
+  },
+  "satfat": {
+   "show": "Ek pack mein saturated fat ki limit ka {sat_pct}!",
+   "say": "एक पैक में सेच्युरेटेड फैट की लिमिट का {sat_pct}!"
+  },
+  "ing": {
+   "show": "Ingredients mein {named} bhi shamil hain.",
+   "say": "इंग्रीडिएंट्स में {named} भी शामिल हैं।"
+  },
+  "scan": {
+   "show": "Aao app se *scan* karein…",
+   "say": "आओ ऐप से स्कैन करें…"
+  },
+  "score": {
+   "show": "FoodGuard score {score}, {verdict}. Toh khaayein? {advice}.",
+   "say": "FoodGuard स्कोर {score}, {verdict}। तो खाएं? {advice}।"
+  },
+  "app": {
+   "show": "App har ingredient ko clear *explain* karta hai.",
+   "say": "ऐप हर इंग्रीडिएंट को क्लियर एक्सप्लेन करता है।"
+  },
+  "cta": {
+   "show": "Apna pack FoodGuard India par free check karo.",
+   "say": "अपना पैक FoodGuard India पर फ्री चेक करो।"
+  }
+ }
 }

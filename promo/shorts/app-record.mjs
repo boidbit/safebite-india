@@ -72,7 +72,7 @@ export async function recordAppScreen(reportId, productName, dir, { seconds = 6,
     // Where to be on screen when: the score and its reasons first, then
     // Nutrition, then Ingredients, each eased in -- stopping short of the
     // alternatives (other brands' products have no place in this one's short).
-    const maxY = Math.max(0, Math.min(marks.height, marks.alternatives ?? Infinity) - HEIGHT + 30);
+    const maxY = Math.max(0, Math.min(marks.height, marks.alternatives ?? Infinity) - HEIGHT - 90);
     const to = (m) => Math.min(maxY, Math.max(0, m - 70));
     const stops = [];
     if (marks.nutrition != null) stops.push({ at: seconds * 0.42, y: to(marks.nutrition) });

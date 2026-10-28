@@ -32,6 +32,34 @@
   .brand small { font-family: 'JetBrains Mono', monospace; font-size: 17px; color: #e8a33d; letter-spacing: .16em; }
   #fine { position: absolute; left: 60px; right: 60px; bottom: 36px; z-index: 30; text-align: center; font-size: 20px; line-height: 1.35; color: rgba(255,255,255,.82); text-shadow: 0 2px 6px rgba(0,0,0,.9); }
 
+  /* the shock hook: EK PACKET / the number / the bowl / AUR AAP POORA KHA JAATE HO -- all big, all slammed in */
+  #hook { z-index: 13; }
+  #hShade { background: radial-gradient(circle at 50% 45%, rgba(8,20,14,.34), rgba(5,12,8,.72) 80%); opacity: 0; }
+  .hb { position: absolute; left: 0; right: 0; text-align: center; opacity: 0; font-family: Fraunces, Georgia, serif; font-weight: 800; letter-spacing: -0.02em; color: #fff;
+        -webkit-text-stroke: 18px #14110c; paint-order: stroke fill; text-shadow: 0 10px 0 rgba(0,0,0,.35); will-change: transform; }
+  #hOne { top: 178px; font-size: 156px; line-height: 1; }
+  #hNum { top: 300px; font-size: 560px; line-height: .86; color: #ffc24d; -webkit-text-stroke: 26px #14110c; }
+  #hWord { top: 760px; font-size: 104px; line-height: 1; letter-spacing: .01em; }
+  #hBowl { position: absolute; left: 50%; top: 880px; width: 470px; margin-left: -235px; opacity: 0; }
+  #hBowl .bowl { width: 470px; height: 321px; }
+  #hL1 { top: 1270px; font-size: 126px; line-height: 1; }
+  #hL2 { top: 1356px; font-size: 250px; line-height: 1; color: #ffc24d; -webkit-text-stroke: 24px #14110c; }
+  #hL3 { top: 1600px; font-size: 126px; line-height: 1; }
+
+  /* the proof card: grams -> teaspoons */
+  .proof { text-align: center; }
+  .proof .eq1 { font-size: 200px; line-height: .95; margin-top: 8px; color: #1b1a17; }
+  .proof .eq1 small { display: block; font-family: Inter, sans-serif; font-weight: 800; font-size: 46px; letter-spacing: 0; color: #6b665d; margin-top: 4px; }
+  .proof .eq2 { display: inline-block; margin-top: 18px; padding: 12px 26px; border-radius: 16px; background: #1b1a17; color: #ffc24d; font-size: 34px; }
+  .proof .eq3 { margin: 22px -14px 0; padding: 16px 20px 22px; border-radius: 30px; background: #ffc24d; border: 7px solid #1b1a17; font-size: 200px; line-height: .95; color: #14110c; }
+  .proof .eq3 small { font-family: Inter, sans-serif; font-weight: 900; font-size: 56px; letter-spacing: 0; margin-left: 10px; }
+
+  /* the coloured band that covers a cut */
+  .sw { position: absolute; top: -200px; width: 1800px; height: 2320px; transform: skewX(-14deg); z-index: 40; opacity: 0; }
+  #sw1 { background: #ffc24d; } #sw2 { background: #0f5132; }
+  #rays { background: repeating-conic-gradient(from 0deg at 50% 38%, rgba(255,255,255,.085) 0 7deg, rgba(255,255,255,0) 7deg 18deg); opacity: 0; }
+  #shade { background: rgba(4,12,8,.5); opacity: 0; }
+
   /* hook stickers */
   .sticker { position: absolute; left: 0; right: 0; text-align: center; z-index: 12; opacity: 0; }
   .sticker span { display: inline-block; max-width: 960px; padding: 22px 44px 28px; border-radius: 30px; border: 7px solid #1b1a17; box-shadow: 14px 14px 0 #1b1a17; font-size: 88px; line-height: 1.02; }
@@ -46,30 +74,30 @@
   .card { position: absolute; left: 50px; right: 50px; top: 150px; padding: 28px 38px 30px; border-radius: 38px; background: #fffdf8; color: #1b1a17; border: 7px solid #1b1a17; box-shadow: 16px 16px 0 rgba(0,0,0,.5); opacity: 0; z-index: 14; }
   .card .k { font-size: 24px; color: #807a6f; }
   .bowlRow { display: flex; align-items: center; gap: 34px; margin-top: 10px; }
-  .bowl { width: 300px; height: 205px; flex-shrink: 0; overflow: visible; }
-  .cnt b { display: block; font-size: 170px; line-height: .9; color: #8a3b0a; }
-  .cnt span { display: block; font-size: 44px; font-weight: 800; color: #1b1a17; margin-top: 8px; }
-  .cnt small { display: block; font-size: 30px; color: #6b665d; margin-top: 6px; font-weight: 600; }
+  .bowl { width: 380px; height: 260px; flex-shrink: 0; overflow: visible; }
+  .cnt b { display: block; font-size: 250px; line-height: .9; color: #8a3b0a; }
+  .cnt span { display: block; font-size: 50px; font-weight: 800; color: #1b1a17; margin-top: 8px; }
+  .cnt small { display: block; font-size: 32px; color: #6b665d; margin-top: 6px; font-weight: 600; }
   .vs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 10px; margin-top: 12px; text-align: center; }
-  .vs .bowl { width: 250px; height: 170px; margin: 0 auto; }
-  .vs .lab { font-size: 28px; font-weight: 700; color: #6b665d; margin-top: 6px; }
-  .vs .n { font-size: 86px; line-height: 1; color: #8a3b0a; }
-  .vs .n small { font-size: 34px; color: #1b1a17; font-family: Inter, sans-serif; font-weight: 800; margin-left: 6px; }
-  .vs .mid { font-size: 52px; color: #807a6f; padding-bottom: 80px; }
+  .vs .bowl { width: 300px; height: 205px; margin: 0 auto; }
+  .vs .lab { font-size: 30px; font-weight: 700; color: #6b665d; margin-top: 6px; }
+  .vs .n { font-size: 150px; line-height: 1; color: #8a3b0a; }
+  .vs .n small { font-size: 40px; color: #1b1a17; font-family: Inter, sans-serif; font-weight: 800; margin-left: 6px; }
+  .vs .mid { font-size: 64px; color: #807a6f; padding-bottom: 90px; }
   .vs .side { opacity: 0; }
-  .bigV { font-size: 120px; line-height: 1; margin-top: 4px; color: #8a3b0a; }
-  .card .d { font-size: 40px; font-weight: 800; color: #1b1a17; margin-top: 6px; }
+  .bigV { font-size: 210px; line-height: 1; margin-top: 4px; color: #8a3b0a; }
+  .card .d { font-size: 48px; font-weight: 800; color: #1b1a17; margin-top: 6px; }
   .card .f { font-size: 22px; color: #807a6f; margin-top: 10px; }
-  .bar { position: relative; height: 62px; margin-top: 20px; border-radius: 999px; background: #efe7d6; border: 5px solid #1b1a17; overflow: hidden; }
+  .bar { position: relative; height: 96px; margin-top: 24px; border-radius: 999px; background: #efe7d6; border: 6px solid #1b1a17; overflow: hidden; }
   .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #ffc24d, #e8710a 70%, #d9480f); }
-  .bar b { position: absolute; right: 22px; top: 6px; font-size: 38px; color: #1b1a17; font-family: Fraunces, serif; }
-  .bar u { position: absolute; left: 22px; top: 12px; font-size: 24px; color: #1b1a17; text-decoration: none; font-weight: 800; }
+  .bar b { position: absolute; right: 26px; top: 8px; font-size: 62px; color: #1b1a17; font-family: Fraunces, serif; }
+  .bar u { position: absolute; left: 26px; top: 28px; font-size: 28px; color: #1b1a17; text-decoration: none; font-weight: 800; }
 
   /* the ingredients worth a look */
   #ichips { position: absolute; left: 50px; right: 50px; top: 160px; opacity: 0; z-index: 14; }
-  #ichips .head { display: inline-block; padding: 12px 22px; border-radius: 14px; background: #1b1a17; color: #ffc24d; font-size: 26px; }
-  #ichips .list { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; margin-top: 18px; }
-  #ichips .list span { padding: 16px 34px; border-radius: 999px; background: #fde3c4; color: #8a3b0a; font-size: 54px; font-weight: 900; border: 5px solid #1b1a17; box-shadow: 10px 10px 0 rgba(0,0,0,.45); opacity: 0; }
+  #ichips .head { display: inline-block; padding: 14px 26px; border-radius: 14px; background: #1b1a17; color: #ffc24d; font-size: 34px; }
+  #ichips .list { display: flex; flex-direction: column; align-items: flex-start; gap: 24px; margin-top: 26px; }
+  #ichips .list span { padding: 20px 46px 24px; border-radius: 999px; background: #fde3c4; color: #8a3b0a; font-size: 92px; line-height: 1.05; font-weight: 900; border: 7px solid #1b1a17; box-shadow: 14px 14px 0 rgba(0,0,0,.5); opacity: 0; }
 
   /* the barcode scan */
   #scanBox { position: absolute; border-radius: 16px; box-shadow: 0 0 0 9999px rgba(0,0,0,.5); opacity: 0; }
@@ -79,7 +107,7 @@
   #c2 { border-bottom-width: 12px; border-left-width: 12px; border-bottom-left-radius: 22px; }
   #c3 { border-bottom-width: 12px; border-right-width: 12px; border-bottom-right-radius: 22px; }
   #laser { position: absolute; height: 8px; border-radius: 4px; background: #ff3b30; box-shadow: 0 0 18px 6px rgba(255,59,48,.75); opacity: 0; }
-  #digits { position: absolute; left: 0; right: 0; text-align: center; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 60px; letter-spacing: .12em; color: #fff; text-shadow: 0 3px 10px rgba(0,0,0,.9); opacity: 0; }
+  #digits { position: absolute; left: 0; right: 0; text-align: center; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 84px; letter-spacing: .1em; color: #fff; -webkit-text-stroke: 10px rgba(0,0,0,.85); paint-order: stroke fill; opacity: 0; }
   #check { position: absolute; width: 120px; height: 120px; border-radius: 50%; background: #2fbf5f; border: 7px solid #fff; display: grid; place-items: center; font-size: 72px; font-weight: 900; color: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.5); opacity: 0; }
 
   /* the phone with the real app */
@@ -88,22 +116,22 @@
   #screen { position: relative; width: 560px; border-radius: 70px; overflow: hidden; background: #f2f2f7; }
   #screen img { position: absolute; left: 0; top: 0; width: 560px; }
   #notch { position: absolute; top: 20px; left: 50%; width: 160px; height: 44px; margin-left: -80px; border-radius: 999px; background: #121212; z-index: 3; }
-  #scoreSt { position: absolute; left: 640px; top: 300px; z-index: 18; padding: 22px 30px 26px; border-radius: 30px; background: #fffdf8; color: #1b1a17; border: 7px solid #1b1a17; box-shadow: 12px 12px 0 rgba(0,0,0,.45); text-align: center; opacity: 0; }
-  #scoreSt b { display: block; font-size: 110px; line-height: .95; }
-  #scoreSt b small { font-size: 40px; color: #807a6f; }
-  #scoreSt span { display: block; font-size: 40px; font-weight: 900; margin-top: 4px; }
-  #scoreSt i { display: block; font-style: normal; font-size: 26px; font-weight: 700; color: #6b665d; margin-top: 8px; }
+  #scoreSt { position: absolute; left: 592px; top: 470px; z-index: 18; padding: 26px 36px 30px; border-radius: 36px; background: #fffdf8; color: #1b1a17; border: 8px solid #1b1a17; box-shadow: 16px 16px 0 rgba(0,0,0,.5); text-align: center; opacity: 0; }
+  #scoreSt b { display: block; font-size: 190px; line-height: .92; }
+  #scoreSt b small { font-size: 56px; color: #807a6f; }
+  #scoreSt span { display: block; font-size: 62px; font-weight: 900; margin-top: 4px; }
+  #scoreSt i { display: block; font-style: normal; font-size: 34px; font-weight: 800; color: #6b665d; margin-top: 10px; }
 
   /* captions, word by word, the key words in saffron */
-  #cc { position: absolute; left: 34px; right: 34px; top: 1540px; z-index: 25; text-align: center; font-size: 76px; font-weight: 900; line-height: 1.12; color: #fff; -webkit-text-stroke: 14px rgba(0,0,0,.92); paint-order: stroke fill; letter-spacing: -0.01em; }
-  #cc span { display: inline-block; margin: 0 .13em; visibility: hidden; }
+  #cc { position: absolute; left: 24px; right: 24px; top: 1540px; z-index: 25; text-align: center; font-size: 100px; font-weight: 900; line-height: 1.08; color: #fff; -webkit-text-stroke: 20px rgba(0,0,0,.94); paint-order: stroke fill; letter-spacing: -0.01em; text-transform: uppercase; text-shadow: 0 8px 0 rgba(0,0,0,.3); }
+  #cc span { display: inline-block; margin: 0 .12em; visibility: hidden; }
   #cc span.now { color: #ffc24d; }
-  #cc span.em { color: #ffc24d; font-size: 1.14em; }
+  #cc span.em { color: #ffc24d; font-size: 1.28em; }
 
   /* the end card: the Play Store, with a QR code to scan straight off the screen */
   #cta { opacity: 0; z-index: 28; }
   #wipe { position: absolute; left: 0; right: 0; height: 2400px; background: linear-gradient(#e8a33d 0 90px, #0f5132 90px); }
-  #ctaHead { position: absolute; left: 70px; right: 70px; top: 230px; text-align: center; font-size: 104px; line-height: 1.04; }
+  #ctaHead { position: absolute; left: 50px; right: 50px; top: 200px; text-align: center; font-size: 132px; line-height: 1.02; }
   #ctaHead em { color: #e8a33d; }
   #qrCard { position: absolute; left: 50%; top: 600px; width: 560px; margin-left: -280px; padding: 40px 40px 30px; border-radius: 48px; background: #fffdf8; border: 6px solid #1b1a17; box-shadow: 18px 18px 0 #082d1c; text-align: center; color: #1b1a17; }
   #qrCard img { width: 468px; height: 468px; display: block; margin: 0 auto; image-rendering: pixelated; }
@@ -121,9 +149,22 @@
   <div id="cam"><img id="src" alt="" /></div>
   <div id="vignette" class="layer"></div>
   <div id="dim" class="layer"></div>
+  <div id="rays" class="layer"></div>
+  <div id="shade" class="layer"></div>
   <div id="mark"></div>
   <div id="markTag" class="mono"></div>
   <div class="brand"><img src="/site/assets/logo.png" alt="" />FoodGuard<small>INDIA</small></div>
+
+  <div id="hook" class="layer">
+    <div id="hShade" class="layer"></div>
+    <div id="hOne" class="hb">EK PACKET</div>
+    <div id="hNum" class="hb"></div>
+    <div id="hWord" class="hb"></div>
+    <div id="hBowl"></div>
+    <div id="hL1" class="hb">AUR AAP</div>
+    <div id="hL2" class="hb">POORA</div>
+    <div id="hL3" class="hb">KHA JAATE HO</div>
+  </div>
 
   <div id="st1" class="sticker"><span class="serif"></span></div>
   <div id="st2" class="sticker"><span class="serif"></span></div>
@@ -140,6 +181,7 @@
   <div id="phoneWrap"><div id="phone"><div id="screen"><div id="notch"></div><img id="appImg" alt="" /></div></div></div>
   <div id="scoreSt"><b class="serif"></b><span></span><i></i></div>
 
+  <div id="sw1" class="sw"></div><div id="sw2" class="sw"></div>
   <div id="flash" class="layer"></div>
 
   <div id="cta" class="layer">
@@ -196,6 +238,23 @@
     if (dropAt != null && t >= dropAt && t < dropAt + 0.35) { const q = (t - dropAt) / 0.35; r.setAttribute('cy', y); r.setAttribute('rx', 10 + q * 90); r.setAttribute('ry', 4 + q * 10); r.setAttribute('opacity', 1 - q); } else r.setAttribute('opacity', 0);
   };
 
+  // The shock hook's pieces: the number, what it counts, the bowl that fills with it.
+  const HERO = TL.hook.hero;
+  if (HERO) {
+    $('hNum').textContent = HERO.n;
+    $('hNum').style.fontSize = `${String(HERO.n).length > 1 ? 400 : 560}px`;
+    $('hWord').textContent = HERO.word;
+    $('hBowl').innerHTML = bowlSvg(HERO.fill);
+  } else $('hook').style.display = 'none';
+  // Something slammed down onto the screen at t0: big, then settling with a little wobble.
+  const slam = (t, t0, from = 2.2) => {
+    const q = clamp((t - t0) / 0.2), a = t - t0;
+    return { o: t < t0 ? 0 : clamp(a / 0.05), s: 1 + (from - 1) * Math.pow(1 - q, 2) + (a > 0 ? 0.05 * Math.sin(a * 32) * Math.exp(-a / 0.14) : 0) };
+  };
+  const place = (el, t, t0, from, deg, dy = 0) => { const k = slam(t, t0, from); el.style.opacity = k.o; el.style.transform = `translateY(${dy}px) scale(${k.s}) rotate(${deg}deg)`; };
+  // A knock on the whole picture at each impact.
+  const knock = (t) => { let x = 0, y = 0; for (const s of TL.shakes) if (t >= s && t < s + 0.4) { const a = 16 * Math.exp(-(t - s) / 0.09); x += Math.sin((t - s) * 90) * a; y += Math.cos((t - s) * 77) * a; } return [x, y]; };
+
   // Output time -> clip time (a speed ramp where asked), and the camera between its keyframes.
   const segAt = (t) => TL.clip.find((s) => t >= s.t0 && t < s.t1) || TL.clip[TL.clip.length - 1];
   const srcAt = (t) => { const s = segAt(t); const u = clamp((t - s.t0) / ((s.t1 - s.t0) || 1)); return s.s0 + (s.s1 - s.s0) * (s.ease ? easeIO(u) : u); };
@@ -250,11 +309,42 @@
     const [a1, a2] = TL.hook.at;
     const st = (el, t0, t1) => {
       const inn = back((t - t0 + 0.05) / 0.32);
-      el.style.opacity = within(t, t0 - 0.05, t1, 0.06, 0.12);
+      el.style.opacity = el.querySelector('span').textContent ? within(t, t0 - 0.05, t1, 0.06, 0.12) : 0;
       el.style.transform = `scale(${0.55 + 0.45 * inn}) rotate(${(el.id === 'st1' ? -2.5 : 2) + Math.sin(t * 6) * 0.6}deg) translateY(${(1 - inn) * 40}px)`;
     };
     st($('st1'), a1, a2 - 0.22);
     st($('st2'), a2, S.hook[1]);
+
+    // ---- the shock hook: EK PACKET / 7 / CHAMMACH TEL / the bowl / AUR AAP POORA KHA JAATE HO ----
+    const [kx, ky] = knock(t);
+    if (HERO && t < HERO.end + 0.1) {
+      const [p0, p1] = HERO.parts;
+      $('hook').style.opacity = 1 - clamp((t - (HERO.end - 0.1)) / 0.1);
+      $('hook').style.transform = `translate(${kx}px, ${ky}px)`;
+      $('hShade').style.opacity = clamp(t / 0.12);
+      place($('hOne'), t, 0.02, 2.6, -3);
+      place($('hNum'), t, p1, 2.6, -4, Math.sin(t * 4) * 5);
+      place($('hWord'), t, p1 + 0.1, 1.9, 2);
+      const bi = back((t - p1 - 0.05) / 0.35);
+      $('hBowl').style.opacity = clamp((t - p1 - 0.05) / 0.08);
+      $('hBowl').style.transform = `scale(${0.5 + 0.5 * bi}) translateY(${(1 - bi) * 60}px)`;
+      const nxt = HERO.ticks.find((x) => t < x + 0.35);
+      setBowl($('hBowl').querySelector('svg'), HERO.ticks.reduce((s, x) => s + ease((t - x) / 0.2), 0) / HERO.ticks.length * 0.95, nxt, t);
+      place($('hL1'), t, HERO.lines[0].t, 1.9, -2);
+      place($('hL2'), t, HERO.lines[1].t, 3.2, 2.5);
+      place($('hL3'), t, HERO.lines[2].t, 1.9, -1.5);
+    } else if (HERO) $('hook').style.opacity = 0;
+
+    // ---- the swipes that hide a cut: a saffron band, a green one behind it ----
+    let sw = 0;
+    for (const tr of TL.transitions) {
+      if (tr.kind !== 'swipe') continue;
+      const u = (t - tr.t + 0.26) / 0.52;
+      if (u > 0 && u < 1) { sw = 1; $('sw1').style.left = `${-2200 + 3300 * easeIO(u)}px`; $('sw2').style.left = `${-2200 + 3300 * easeIO(u - 0.1)}px`; }
+    }
+    $('sw1').style.opacity = sw; $('sw2').style.opacity = sw;
+    $('rays').style.opacity = $('dim').style.opacity;
+    $('rays').style.transform = `scale(1.8) rotate(${t * 7}deg)`;
 
     // ---- the box round a number on the frozen label ----
     const m = TL.marks.find((mm) => t >= mm.t0 - 0.05 && t < mm.t1 + 0.05);
@@ -279,7 +369,14 @@
         cardOn = ki;
         if (cd.kind === 'bowl') card.innerHTML = `<div class="k mono"></div><div class="bowlRow">${bowlSvg(cd.fill)}<div class="cnt"><b class="serif">0</b><span></span><small></small></div></div>`;
         else if (cd.kind === 'vs') card.innerHTML = `<div class="k mono">Serving vs poora pack</div><div class="vs"><div class="side">${bowlSvg(cd.fill)}<div class="n serif"></div><div class="lab"></div></div><div class="mid serif">vs</div><div class="side">${bowlSvg(cd.fill)}<div class="n serif"></div><div class="lab"></div></div></div>`;
+        else if (cd.kind === 'proof') card.innerHTML = '<div class="k mono"></div><div class="proof"><div class="eq1 serif"></div><div class="eq2 mono"></div><div class="eq3 serif"></div></div>';
         else card.innerHTML = '<div class="k mono"></div><div class="bigV serif"></div><div class="d"></div><div class="bar"><i></i><u>Din ki limit →</u><b>0%</b></div><div class="f"></div>';
+        if (cd.kind === 'proof') {
+          card.querySelector('.k').textContent = cd.tag;
+          card.querySelector('.eq1').innerHTML = `${cd.g} g<small>${cd.gWord} · poora pack</small>`;
+          card.querySelector('.eq2').textContent = cd.per;
+          card.querySelector('.eq3').innerHTML = `${cd.n}<small>${cd.unitWord}</small>`;
+        }
         if (cd.kind === 'bowl') { card.querySelector('.k').textContent = cd.tag; card.querySelector('.cnt span').textContent = cd.unitWord; card.querySelector('.cnt small').textContent = cd.sub; }
         if (cd.kind === 'vs') {
           const sides = card.querySelectorAll('.side');
@@ -289,7 +386,15 @@
       }
       const inn = back((t - cd.t0) / 0.38);
       card.style.opacity = within(t, cd.t0, cd.t1, 0.12, 0.18);
-      card.style.transform = `translateY(${(1 - inn) * -80}px) rotate(${(1 - inn) * -3}deg) scale(${0.92 + 0.08 * inn})`;
+      card.style.transform = `translate(${kx}px, ${ky + (1 - inn) * -80}px) rotate(${(1 - inn) * -3}deg) scale(${0.92 + 0.08 * inn})`;
+      if (cd.kind === 'proof') {
+        place(card.querySelector('.eq1'), t, cd.t0 + 0.1, 1.7, 0);
+        const e2 = ease((t - cd.t0 - 0.55) / 0.3);
+        card.querySelector('.eq2').style.opacity = e2; card.querySelector('.eq2').style.transform = `translateY(${(1 - e2) * 30}px)`;
+        // The answer waits as a blurred ghost until its word is spoken, then lands.
+        const e3 = card.querySelector('.eq3');
+        if (t < cd.t3) { e3.style.opacity = 0.22; e3.style.transform = 'none'; e3.style.filter = 'blur(9px)'; } else { place(e3, t, cd.t3, 1.5, -1.5); e3.style.filter = 'none'; }
+      }
       if (cd.kind === 'bowl') {
         const done = cd.ticks.filter((x) => t >= x).length;
         const next = cd.ticks.find((x) => t < x + 0.35);
@@ -325,6 +430,7 @@
     // ---- the ingredients worth a look, each as it is said ----
     const [f0, f1] = S.facts;
     $('ichips').style.opacity = TL.chips.length ? within(t, f0 + 0.05, f1, 0.15, 0.2) : 0;
+    $('shade').style.opacity = TL.chips.length ? 0.9 * within(t, f0 + 0.05, f1 - 0.05, 0.25, 0.2) : 0;
     [...$('ichips').querySelector('.list').children].forEach((el, i) => {
       const at = TL.chips[i].t;
       el.style.opacity = clamp((t - at) / 0.08);
@@ -364,7 +470,10 @@
     if (u > -0.1 && t < S.cta[0] + 0.6) {
       const inn = back(u / 0.55);
       $('phoneWrap').style.opacity = clamp(u / 0.08);
-      $('phoneWrap').style.transform = `scale(${0.12 + 0.88 * inn}) rotate(${(1 - inn) * -10}deg) translateY(${Math.sin(u * 1.2) * 6}px)`;
+      // It spins out of the barcode and then floats, tilting a little in 3D.
+      // When the score lands the phone slides left to make room for it.
+      const slide = -200 * easeIO((t - TL.phone.scoreAt) / 0.5);
+      $('phoneWrap').style.transform = `perspective(1700px) translate(${kx + slide}px, ${ky + Math.sin(u * 1.2) * 8}px) scale(${0.12 + 0.88 * inn}) rotateY(${(1 - inn) * -75 + Math.sin(u * 0.9) * 7}deg) rotateX(${(1 - inn) * 18 + 3 + Math.cos(u * 0.7) * 3}deg) rotateZ(${(1 - inn) * -10}deg)`;
       const A = TL.app || TL.still;
       if (A) {
         const k = 560 / A.width;
@@ -394,8 +503,8 @@
         const at = cap.words[i][1];
         if (at <= t) wi = i;
         el.style.visibility = at <= t + 0.02 ? 'visible' : 'hidden';
-        const q = back((t - at) / 0.22);
-        el.style.transform = `scale(${0.6 + 0.4 * q}) translateY(${(1 - q) * 24}px)`;
+        const q = back((t - at) / 0.2);
+        el.style.transform = `scale(${0.5 + 0.5 * q}) translateY(${(1 - q) * 34}px) rotate(${(1 - q) * (i % 2 ? 5 : -5)}deg)`;
       });
       [...$('cc').children].forEach((el, i) => el.classList.toggle('now', i === wi && !cap.words[i][2]));
       $('cc').style.opacity = 1;
