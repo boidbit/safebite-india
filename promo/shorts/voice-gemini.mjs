@@ -162,6 +162,15 @@ function stretch(x, speed, rate) {
   return y.slice(0, (k - 1) * Hs + N);
 }
 
+/** Every line to the same loudness, so a quiet take (a whisper) can't vanish under the music. */
+function levelled(x, target = 0.17, ceiling = 0.92) {
+  let e = 0, peak = 0;
+  for (let i = 0; i < x.length; i++) { e += x[i] * x[i]; peak = Math.max(peak, Math.abs(x[i])); }
+  const rms = Math.sqrt(e / (x.length || 1));
+  const g = Math.min(target / (rms || 1), ceiling / (peak || 1));
+  return x.map((v) => v * g);
+}
+
 function wavFile(x, rate) {
   const data = Buffer.alloc(x.length * 2);
   for (let i = 0; i < x.length; i++) data.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(x[i] * 32767))), i * 2);
@@ -183,7 +192,7 @@ export async function geminiVoice(lines, dir, { model = TTS_MODEL, voice = TTS_V
     const parts = line.text.split('|').map((s) => s.trim()).filter(Boolean);
     const pieces = [];
     for (const [i, text] of parts.entries()) {
-      pieces.push(stretch(await speak(text, Array.isArray(line.style) ? line.style[i] ?? line.style[line.style.length - 1] : line.style, { model, voice, cache, attempts }), tempo, OUT_RATE));
+      pieces.push(levelled(stretch(await speak(text, Array.isArray(line.style) ? line.style[i] ?? line.style[line.style.length - 1] : line.style, { model, voice, cache, attempts }), tempo, OUT_RATE)));
     }
     const gap = Math.round(OUT_RATE * GAP);
     const all = new Float32Array(pieces.reduce((n, p) => n + p.length, 0) + gap * (pieces.length - 1));

@@ -194,7 +194,7 @@ let voiced = false;
 const STYLE = {
   hook: ['amused and a little teasing, setting the scene, a short pause after.', 'stunned and wide-eyed, hitting the number hard.', 'cheeky, the voice rising at the end as if saying "really?".'],
   tease: 'playful and curious, a smile in the voice.',
-  turn: 'lowering her voice, intrigued, as if about to reveal a secret.',
+  turn: 'intrigued and curious, a little slower, clearly spoken -- not a whisper.',
   fat: 'stunned and amused, stressing the numbers, a little laugh in the voice.',
   sugar: 'stunned and amused, stressing the numbers, a little laugh in the voice.',
   serving: 'matter-of-fact at first, then surprised at the second number.',
